@@ -8,15 +8,16 @@ This application is called ‘Strings’. It allows users to define text strings
 
 - Users can create projects.
 - For a single project, users can define three separate types of data: Strings, variables, and traits. For each project, these should be stored and will be called in the UI in various places. Strings, variables, and traits can be created, read, updated and deleted.
-    - Strings. When users create a string, which is actually a text string but can also include variables. An example string may be, “The [animal] is [color]”.
+    - Strings. When users create a string, which is actually a text string but can also include variables. An example string may be, “The {{animal}} is {{color}}”.
     - Traits. Users can define traits. Example traits are “Good” and “Evil”.
         - Strings (and particularly their variables) get presented differently, depending on which trait the user has selected at any point.
         - When the user creates or edits a trait, the user should be able to create/edit the name, and the value of each variable with respect to the trait.
-    - Variables. Users can also define variables which can be used in a string. Variables can be defined independently, or as part of a string when the string is created or edited. Example variables may be, [animal], [color] or [eye-shape].
+    - Variables. Users can also define variables which can be used in a string. Variables can be defined independently, or as part of a string when the string is created or edited. Example variables may be, {{animal}}, {{color}} or {{eye-shape}}.
         - When the user creates or edits a variable, the user should be able to create/edit the name, and the value of the variable with respect to each trait.
         - Each variable has an array of values; a value for each trait.
-    - As an example, if the project has string, “The [animal] is [color]” and variables “Good” and “Evil”, and let’s say when “Good” is selected, [animal] is “gerbil” and [color] is “blue”, and when “Evil” is selected, [animal] is “snake” and [color] is “red”. When Good is selected, the string will present as “The gerbil is blue” and when Evil is selected, the string will present as “The snake is red”.
+    - As an example, if the project has string, “The {{animal}} is {{color}}” and variables “Good” and “Evil”, and let’s say when “Good” is selected, {{animal}} is “gerbil” and {{color}} is “blue”, and when “Evil” is selected, {{animal}} is “snake” and {{color}} is “red”. When Good is selected, the string will present as “The gerbil is blue” and when Evil is selected, the string will present as “The snake is red”.
     - By using Django, users have standard functions for creating an account, logging in, logging out, etc.
+    -Also in a project, present a 'Download' button. When clicked, the user should be able to download a CSV file of all the strings they created, represented for each trait. So each row is a string and then each column is a trait. each cell in the column has the string adjusted to show variable values for the trait of that column. The first row of this file can be the header row with the traits listed out. Reserve the first column for "Blank". While not really a trait, the "Blank" column can list out the strings where the variables show not as their variable value's but as their actual variable names represented in double brackets (Ex. {{animal}}).
     
     **UX specifications**
     

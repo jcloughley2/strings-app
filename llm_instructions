@@ -15,7 +15,7 @@ This application is called ‘Strings’. It allows users to define text strings
     - Variables. Users can also define variables which can be used in a string. Variables can be defined independently, or as part of a string when the string is created or edited. Example variables may be, {{animal}}, {{color}} or {{eye-shape}}.
         - When the user creates or edits a variable, the user should be able to create/edit the name, and the value of the variable with respect to each trait.
         - Each variable has an array of values; a value for each trait.
-    - As an example, if the project has string, “The {{animal}} is {{color}}” and variables “Good” and “Evil”, and let’s say when “Good” is selected, {{animal}} is “gerbil” and {{color}} is “blue”, and when “Evil” is selected, {{animal}} is “snake” and {{color}} is “red”. When Good is selected, the string will present as “The gerbil is blue” and when Evil is selected, the string will present as “The snake is red”.
+    - As an example, if the project has string, “The {{animal}} is {{color}}” and variables “Good” and “Evil”, and let's say when "Good" is selected, {{animal}} is "gerbil" and {{color}} is "blue", and when "Evil" is selected, {{animal}} is "snake" and {{color}} is "red". When Good is selected, the string will present as "The gerbil is blue" and when Evil is selected, the string will present as "The snake is red".
     - By using Django, users have standard functions for creating an account, logging in, logging out, etc.
     -Also in a project, present a 'Download' button. When clicked, the user should be able to download a CSV file of all the strings they created, represented for each trait. So each row is a string and then each column is a trait. each cell in the column has the string adjusted to show variable values for the trait of that column. The first row of this file can be the header row with the traits listed out. Reserve the first column for "Blank". While not really a trait, the "Blank" column can list out the strings where the variables show not as their variable value's but as their actual variable names represented in double brackets (Ex. {{animal}}).
     
@@ -37,3 +37,41 @@ This application is called ‘Strings’. It allows users to define text strings
     **Instructions for the LLM**
     
     - Please ask before you install and start using any new technology, unless it is a required dependency of a technology/resource you have already been given permission to use.
+
+## Recent Functionality & UX Enhancements
+
+### Project Management & UI
+- Project Tiles (Homepage):
+  - Entire tile (including padding) is now clickable to open the project, except for the overflow menu.
+  - Overflow menu button uses ShadCN's rectangular Button with variant="secondary" and size="icon" for a modern, consistent look.
+  - Overflow menu appears on hover or when open, and remains visible while interacting.
+  - Overflow menu options: Edit Project, Download CSV, Delete Project (Duplicate Project is present but disabled).
+  - Edit and Delete actions open dialogs; Download CSV triggers an immediate download for that project.
+- Project Detail Page:
+  - The same overflow menu (with the same options and style) is present next to the "Add String" button.
+  - The standalone Download CSV button has been removed; it's now in the overflow menu.
+  - Edit and Delete dialogs are reused here for consistency.
+
+### Dialogs & Actions
+- Edit Project:  
+  - Opens a modal with the same fields as the create project form, pre-filled for editing.
+  - Updates the project name/description via a PATCH request.
+- Delete Project:  
+  - Opens a confirmation dialog.
+  - Deletes the project and removes it from the UI (redirects to homepage if on the project page).
+- Download CSV:  
+  - Uses the latest CSV logic, including all trait/conditional combinations.
+
+### CSV Export
+- CSV export now includes a column for every combination of trait and conditional(s), with headers indicating the trait and which conditionals are enabled.
+
+### Conditional Logic
+- Strings support [[conditional]] ... [[/]] blocks.
+- Conditional blocks can include variables.
+- The UI for toggling conditionals is reactive—changes are reflected instantly in the main canvas.
+- Conditional logic is respected in both badge and plaintext rendering modes.
+
+### General UI/UX
+- All dialogs and menus are implemented as reusable components.
+- Overflow menu trigger buttons are visually consistent and accessible.
+- All new features are implemented with reusability and future extensibility in mind.

@@ -8,6 +8,7 @@ router.register(r'strings', views.StringViewSet, basename='string')
 router.register(r'traits', views.TraitViewSet, basename='trait')
 router.register(r'variables', views.VariableViewSet, basename='variable')
 router.register(r'variable-values', views.VariableValueViewSet, basename='variable-value')
+router.register(r'conditionals', views.ConditionalViewSet, basename='conditional')
 
 urlpatterns = [
     path('', include(router.urls)),

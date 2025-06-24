@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Project, String, Trait, Variable, VariableValue
+from .models import Project, String, Trait, Variable, VariableValue, Conditional
 
 class VariableValueSerializer(serializers.ModelSerializer):
     class Meta:
@@ -38,11 +38,20 @@ class StringSerializer(serializers.ModelSerializer):
             string.variables.set(variables)
         return string
 
+class ConditionalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Conditional
+        fields = ['id', 'name', 'default_value', 'project', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'project': {'write_only': True}
+        }
+
 class ProjectSerializer(serializers.ModelSerializer):
     strings = StringSerializer(many=True, read_only=True)
     traits = TraitSerializer(many=True, read_only=True)
     variables = VariableSerializer(many=True, read_only=True)
+    conditionals = ConditionalSerializer(many=True, read_only=True)
     
     class Meta:
         model = Project
-        fields = ['id', 'name', 'description', 'strings', 'traits', 'variables', 'created_at', 'updated_at'] 
+        fields = ['id', 'name', 'description', 'strings', 'traits', 'variables', 'conditionals', 'created_at', 'updated_at'] 

@@ -11,13 +11,14 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.template.loader import render_to_string
 from django.views.decorators.csrf import ensure_csrf_cookie
-from .models import Project, String, Trait, Variable, VariableValue
+from .models import Project, String, Trait, Variable, VariableValue, Conditional
 from .serializers import (
     ProjectSerializer,
     StringSerializer,
     TraitSerializer,
     VariableSerializer,
-    VariableValueSerializer
+    VariableValueSerializer,
+    ConditionalSerializer
 )
 from rest_framework import serializers
 import logging
@@ -216,3 +217,17 @@ class VariableValueViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return VariableValue.objects.filter(variable__project__user=self.request.user)
+
+class ConditionalViewSet(viewsets.ModelViewSet):
+    serializer_class = ConditionalSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Conditional.objects.filter(project__user=self.request.user)
+
+    def perform_create(self, serializer):
+        project_id = self.request.data.get('project')
+        project = Project.objects.filter(id=project_id, user=self.request.user).first()
+        if not project:
+            raise serializers.ValidationError({'project': 'Project not found or you do not have permission to add conditionals to it.'})
+        serializer.save(project=project)

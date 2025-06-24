@@ -51,3 +51,13 @@ class String(models.Model):
 
     def __str__(self):
         return f"{self.content[:50]}... ({self.project.name})"
+
+class Conditional(models.Model):
+    name = models.CharField(max_length=100)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='conditionals')
+    default_value = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.project.name})"

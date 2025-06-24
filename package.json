@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@radix-ui/react-switch": "^1.2.5",
     "@uiw/react-md-editor": "^4.0.5",
     "rehype-sanitize": "^6.0.0"
   }

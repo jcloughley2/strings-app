@@ -30,10 +30,19 @@ logger = logging.getLogger(__name__)
 @permission_classes([permissions.AllowAny])
 def login(request):
     username = request.data.get('username')
+    email = request.data.get('email')
     password = request.data.get('password')
-    
+
+    # If email is provided, look up the username
+    if email and not username:
+        try:
+            user_obj = User.objects.get(email=email)
+            username = user_obj.username
+        except User.DoesNotExist:
+            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
     user = authenticate(username=username, password=password)
-    
+
     if user:
         auth_login(request, user)  # This creates the session
         csrf_token = get_token(request)  # Get CSRF token
@@ -49,7 +58,6 @@ def login(request):
         response.set_cookie(
             'sessionid',
             request.session.session_key,
-            domain='localhost',
             samesite='Lax',
             secure=False,  # Set to True in production
             httponly=True
@@ -68,10 +76,10 @@ def logout(request):
     response = Response({"detail": "Successfully logged out."})
     
     # Clear session cookie
-    response.delete_cookie('sessionid', domain='localhost')
+    response.delete_cookie('sessionid')
     
     # Clear CSRF cookie
-    response.delete_cookie('csrftoken', domain='localhost')
+    response.delete_cookie('csrftoken')
     
     return response
 
@@ -152,6 +160,16 @@ def reset_password(request):
     user.save()
     
     return Response({'message': 'Password reset successful'})
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def me(request):
+    user = request.user
+    return Response({
+        'id': user.id,
+        'username': user.username,
+        'email': user.email,
+    })
 
 # Create your views here.
 

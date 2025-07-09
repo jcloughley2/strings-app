@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Edit2, Trash2 } from "lucide-react";
+import { Edit2, Trash2, Highlighter } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
@@ -25,7 +25,7 @@ export default function ProjectDetailPage() {
   const [sidebarTab, setSidebarTab] = useState("Variables");
   const [traitId, setTraitId] = useState<string | null>("blank");
   const [selectedConditionalVariables, setSelectedConditionalVariables] = useState<string[]>([]);
-  const [isPlaintext, setIsPlaintext] = useState(false);
+  const [isHighlighterMode, setIsHighlighterMode] = useState(false);
   const [showStringVariables, setShowStringVariables] = useState(false);
   const [createDialog, setCreateDialog] = useState<null | "Variable" | "Trait" | "Conditional" | "String" | "Dimension">(null);
   const [editingString, setEditingString] = useState<any>(null);
@@ -990,8 +990,8 @@ export default function ProjectDetailPage() {
     // First process conditionals
     let processedContent = processConditionalVariables(content);
     
-    if (isPlaintext) {
-      // In plaintext mode, behavior depends on showStringVariables toggle and trait selection
+    if (!isHighlighterMode) {
+      // In plaintext mode (default), behavior depends on showStringVariables toggle and trait selection
       if (traitId === "blank" && showStringVariables) {
         // When blank is selected and showStringVariables is ON, show variables as {{variable}} format
         return processedContent;
@@ -1018,7 +1018,7 @@ export default function ProjectDetailPage() {
         return result;
       }
       
-      // Replace variables with their trait-specific values (plaintext)
+      // Replace variables with their trait-specific values (plaintext mode)
       const selectedTrait = project.traits.find((t: any) => t.id.toString() === traitId);
       
       if (selectedTrait) {
@@ -1078,7 +1078,7 @@ export default function ProjectDetailPage() {
       return processedContent;
     }
     
-    // In styled mode, return JSX with badges
+    // In highlighter mode, return JSX with badges
     return null; // We'll handle this in the JSX
   };
 
@@ -1286,9 +1286,6 @@ export default function ProjectDetailPage() {
       <main className="flex-1 flex flex-col items-stretch min-w-0">
         <div className="flex items-center gap-4 border-b px-8 py-4 bg-background">
           <h1 className="text-2xl font-bold flex-1 truncate">{project.name}</h1>
-          <Button onClick={openCreateString} size="sm">
-            + New String
-          </Button>
           {/* Trait Selector, Conditionals Selector, and Plaintext Switch */}
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
@@ -1330,16 +1327,20 @@ export default function ProjectDetailPage() {
               </Label>
             </div>
             <div className="flex items-center gap-2">
-              <Switch
-                id="plaintext-mode"
-                checked={isPlaintext}
-                onCheckedChange={setIsPlaintext}
-              />
-              <Label htmlFor="plaintext-mode" className="text-sm text-muted-foreground">
-                Plaintext
-              </Label>
+              <Button
+                variant={isHighlighterMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsHighlighterMode(!isHighlighterMode)}
+                className="flex items-center gap-2"
+              >
+                <Highlighter className="h-4 w-4" />
+                Highlighter
+              </Button>
             </div>
           </div>
+          <Button onClick={openCreateString} size="sm">
+            + New String
+          </Button>
         </div>
         {/* Strings List */}
         <div className="flex-1 overflow-y-auto p-8">
@@ -1350,8 +1351,8 @@ export default function ProjectDetailPage() {
               {project.strings.map((str: any) => (
                 <Card key={str.id} className="p-4 flex flex-col gap-3 group">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="font-medium text-base flex-1">
-                      {isPlaintext 
+                    <div className={`font-medium text-base flex-1 ${!isHighlighterMode ? 'leading-normal' : 'leading-loose'}`}>
+                      {!isHighlighterMode 
                         ? processStringContent(str.content, str.variables || [])
                         : renderStyledContent(str.content, str.variables || [], str.id)
                       }

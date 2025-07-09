@@ -35,6 +35,9 @@ class Variable(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        unique_together = ['name', 'project']
+
     def __str__(self):
         return f"{self.name} ({self.project.name})"
 
@@ -70,3 +73,38 @@ class Conditional(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.project.name})"
+
+class Dimension(models.Model):
+    name = models.CharField(max_length=100)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='dimensions')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['name', 'project']
+
+    def __str__(self):
+        return f"{self.name} ({self.project.name})"
+
+class DimensionValue(models.Model):
+    dimension = models.ForeignKey(Dimension, on_delete=models.CASCADE, related_name='values')
+    value = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['dimension', 'value']
+
+    def __str__(self):
+        return f"{self.dimension.name}: {self.value}"
+
+class StringDimensionValue(models.Model):
+    string = models.ForeignKey(String, on_delete=models.CASCADE, related_name='dimension_values')
+    dimension_value = models.ForeignKey(DimensionValue, on_delete=models.CASCADE, related_name='string_assignments')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['string', 'dimension_value']
+
+    def __str__(self):
+        return f"{self.string.content[:30]}... -> {self.dimension_value}"

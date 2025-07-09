@@ -15,7 +15,7 @@ import { Edit2, Trash2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
-const SIDEBAR_TABS = ["Variables", "Traits"];
+const SIDEBAR_TABS = ["Variables", "Traits", "Dimensions"];
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
@@ -27,7 +27,7 @@ export default function ProjectDetailPage() {
   const [selectedConditionalVariables, setSelectedConditionalVariables] = useState<string[]>([]);
   const [isPlaintext, setIsPlaintext] = useState(false);
   const [showStringVariables, setShowStringVariables] = useState(false);
-  const [createDialog, setCreateDialog] = useState<null | "Variable" | "Trait" | "Conditional" | "String">(null);
+  const [createDialog, setCreateDialog] = useState<null | "Variable" | "Trait" | "Conditional" | "String" | "Dimension">(null);
   const [editingString, setEditingString] = useState<any>(null);
   
   // String form state
@@ -40,6 +40,9 @@ export default function ProjectDetailPage() {
   // String variable creation state
   const [createStringVariable, setCreateStringVariable] = useState(false);
   const [stringVariableName, setStringVariableName] = useState("");
+
+  // String dimension values state
+  const [stringDimensionValues, setStringDimensionValues] = useState<{[dimensionId: number]: string}>({});
   
   // Variable form state
   const [variableName, setVariableName] = useState("");
@@ -60,6 +63,12 @@ export default function ProjectDetailPage() {
 
   // String deletion state
   const [deleteStringDialog, setDeleteStringDialog] = useState<any>(null);
+
+  // Dimension form state
+  const [dimensionName, setDimensionName] = useState("");
+  const [dimensionValues, setDimensionValues] = useState<string[]>([]);
+  const [newDimensionValue, setNewDimensionValue] = useState("");
+  const [editingDimension, setEditingDimension] = useState<any>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -105,6 +114,15 @@ export default function ProjectDetailPage() {
   const openEditString = (str: any) => {
     setStringContent(str.content);
     setEditingString(str);
+    
+    // Populate dimension values
+    const dimensionValues: {[dimensionId: number]: string} = {};
+    if (str.dimension_values) {
+      str.dimension_values.forEach((dv: any) => {
+        dimensionValues[dv.dimension_value.dimension] = dv.dimension_value.value;
+      });
+    }
+    setStringDimensionValues(dimensionValues);
   };
 
   const closeStringDialog = async () => {
@@ -164,6 +182,7 @@ export default function ProjectDetailPage() {
     setSelectionEnd(0);
     setCreateStringVariable(false);
     setStringVariableName("");
+    setStringDimensionValues({});
   };
 
   // Handle text selection in textarea
@@ -394,8 +413,91 @@ export default function ProjectDetailPage() {
      setTraitVariableValues({});
    };
 
+   // Dimension dialog handlers
+   const openCreateDimension = () => {
+     setDimensionName("");
+     setDimensionValues([]);
+     setNewDimensionValue("");
+     setCreateDialog("Dimension");
+   };
+
+   const openEditDimension = (dimension: any) => {
+     setDimensionName(dimension.name);
+     setDimensionValues(dimension.values ? dimension.values.map((dv: any) => dv.value) : []);
+     setNewDimensionValue("");
+     setEditingDimension(dimension);
+     setCreateDialog("Dimension");
+   };
+
+   const closeDimensionDialog = () => {
+     setCreateDialog(null);
+     setEditingDimension(null);
+     setDimensionName("");
+     setDimensionValues([]);
+     setNewDimensionValue("");
+   };
+
+   // Dimension value management functions
+   const addDimensionValue = () => {
+     const trimmedValue = newDimensionValue.trim();
+     if (!trimmedValue) {
+       toast.error('Dimension value cannot be empty');
+       return;
+     }
+     
+     // Check for duplicates (case-insensitive)
+     if (dimensionValues.some(value => value.toLowerCase() === trimmedValue.toLowerCase())) {
+       toast.error(`Dimension value "${trimmedValue}" already exists`);
+       return;
+     }
+     
+     setDimensionValues(prev => [...prev, trimmedValue]);
+     setNewDimensionValue("");
+   };
+
+   const removeDimensionValue = (valueToRemove: string) => {
+     setDimensionValues(prev => prev.filter(value => value !== valueToRemove));
+   };
+
+   const updateDimensionValue = (oldValue: string, newValue: string) => {
+     const trimmedValue = newValue.trim();
+     if (!trimmedValue) {
+       toast.error('Dimension value cannot be empty');
+       return;
+     }
+     
+     // Check for duplicates (case-insensitive), excluding the current value being edited
+     if (dimensionValues.some(value => value !== oldValue && value.toLowerCase() === trimmedValue.toLowerCase())) {
+       toast.error(`Dimension value "${trimmedValue}" already exists`);
+       return;
+     }
+     
+     setDimensionValues(prev => prev.map(value => value === oldValue ? trimmedValue : value));
+   };
+
    const handleVariableSubmit = async (e: React.FormEvent) => {
      e.preventDefault();
+     
+     // Frontend validation for duplicate variable names
+     if (!editingVariable) {
+       // For new variables, check if name already exists
+       const existingVariable = project.variables.find(
+         (v: any) => v.name.toLowerCase() === variableName.toLowerCase()
+       );
+       if (existingVariable) {
+         toast.error(`A variable with the name "${variableName}" already exists in this project.`);
+         return;
+       }
+     } else {
+       // For editing variables, check if name conflicts with other variables
+       const existingVariable = project.variables.find(
+         (v: any) => v.name.toLowerCase() === variableName.toLowerCase() && v.id !== editingVariable.id
+       );
+       if (existingVariable) {
+         toast.error(`A variable with the name "${variableName}" already exists in this project.`);
+         return;
+       }
+     }
      
      try {
        let variableId: number;
@@ -557,10 +659,16 @@ export default function ProjectDetailPage() {
        toast.success(`Variable "${variableName}" ${action} successfully!`);
        
        closeVariableDialog();
-     } catch (err) {
+     } catch (err: any) {
        console.error('Failed to save variable:', err);
        const action = editingVariable ? 'update' : 'create';
-       toast.error(`Failed to ${action} variable. Please try again.`);
+       
+       // Check if it's a validation error about duplicate names
+       if (err.message && err.message.includes('already exists')) {
+         toast.error(err.message);
+       } else {
+         toast.error(`Failed to ${action} variable. Please try again.`);
+       }
      }
    };
 
@@ -660,6 +768,102 @@ export default function ProjectDetailPage() {
      }
    };
 
+   const handleDimensionSubmit = async (e: React.FormEvent) => {
+     e.preventDefault();
+     
+     if (!dimensionName.trim()) {
+       toast.error('Dimension name is required');
+       return;
+     }
+
+     // Frontend validation for duplicate dimension names
+     if (!editingDimension) {
+       // For new dimensions, check if name already exists
+       const existingDimension = project.dimensions?.find(
+         (d: any) => d.name.toLowerCase() === dimensionName.trim().toLowerCase()
+       );
+       if (existingDimension) {
+         toast.error(`A dimension with the name "${dimensionName.trim()}" already exists in this project.`);
+         return;
+       }
+     } else {
+       // For editing dimensions, check if name conflicts with other dimensions
+       const existingDimension = project.dimensions?.find(
+         (d: any) => d.name.toLowerCase() === dimensionName.trim().toLowerCase() && d.id !== editingDimension.id
+       );
+       if (existingDimension) {
+         toast.error(`A dimension with the name "${dimensionName.trim()}" already exists in this project.`);
+         return;
+       }
+     }
+
+     try {
+       let dimensionResponse;
+       
+       if (editingDimension) {
+         // Update existing dimension
+         dimensionResponse = await apiFetch(`/api/dimensions/${editingDimension.id}/`, {
+           method: 'PATCH',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+             name: dimensionName.trim(),
+           }),
+         });
+         toast.success(`Updated dimension "${dimensionName}"`);
+       } else {
+         // Create new dimension
+         dimensionResponse = await apiFetch('/api/dimensions/', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+             name: dimensionName.trim(),
+             project: id,
+           }),
+         });
+         toast.success(`Created dimension "${dimensionName}"`);
+       }
+
+       const dimensionId = dimensionResponse.id || editingDimension?.id;
+
+       // Handle dimension values - simplified approach: delete all existing and recreate
+       if (editingDimension && editingDimension.values) {
+         // Delete all existing dimension values for this dimension
+         for (const dimensionValue of editingDimension.values) {
+           await apiFetch(`/api/dimension-values/${dimensionValue.id}/`, {
+             method: 'DELETE',
+           });
+         }
+       }
+
+       // Create all new dimension values
+       for (const value of dimensionValues) {
+         await apiFetch('/api/dimension-values/', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+             dimension: dimensionId,
+             value: value,
+           }),
+         });
+       }
+
+       // Refresh project data
+       const updatedProject = await apiFetch(`/api/projects/${id}/`);
+       setProject(updatedProject);
+
+       closeDimensionDialog();
+     } catch (err: any) {
+       console.error('Failed to save dimension:', err);
+       
+       // Check if it's a validation error about duplicate names
+       if (err.message && err.message.includes('already exists')) {
+         toast.error(err.message);
+       } else {
+         toast.error('Failed to save dimension. Please try again.');
+       }
+     }
+   };
+
    const handleStringSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -697,6 +901,51 @@ export default function ProjectDetailPage() {
           body: JSON.stringify(stringData),
         });
         toast.success('String created successfully!');
+      }
+
+      // Handle dimension values
+      const stringId = stringResponse.id || editingString?.id;
+      if (stringId) {
+        // Delete existing dimension values for this string
+        const existingDimensionValues = await apiFetch(`/api/string-dimension-values/?string=${stringId}`);
+        for (const dv of existingDimensionValues) {
+          await apiFetch(`/api/string-dimension-values/${dv.id}/`, {
+            method: 'DELETE',
+          });
+        }
+
+        // Create new dimension values
+        for (const [dimensionId, value] of Object.entries(stringDimensionValues)) {
+          if (value.trim()) {
+            // First, find or create the dimension value
+            const dimension = project.dimensions?.find((d: any) => d.id.toString() === dimensionId);
+            if (dimension) {
+              let dimensionValue = dimension.values?.find((dv: any) => dv.value === value.trim());
+              
+              if (!dimensionValue) {
+                // Create new dimension value
+                dimensionValue = await apiFetch('/api/dimension-values/', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    dimension: dimensionId,
+                    value: value.trim(),
+                  }),
+                });
+              }
+
+              // Create string-dimension-value relationship
+              await apiFetch('/api/string-dimension-values/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  string: stringId,
+                  dimension_value: dimensionValue.id,
+                }),
+              });
+            }
+          }
+        }
       }
 
       // Handle conversion to string variable if checkbox is checked (only in edit mode)
@@ -789,13 +1038,13 @@ export default function ProjectDetailPage() {
             const projectVariable = project.variables.find((v: any) => v.name === variableName);
             
             if (projectVariable) {
-              let value;
+              let value = null;
               
               if (projectVariable.variable_type === 'string') {
                 // For string variables, behavior depends on showStringVariables toggle
                 if (showStringVariables) {
                   // Show as variable badge - don't replace, leave as {{variableName}}
-                  return; // Skip replacement
+                  value = null; // Skip replacement
                 } else {
                   // Show string content - get the variable content and process it recursively
                   if (projectVariable.content) {
@@ -805,15 +1054,18 @@ export default function ProjectDetailPage() {
                   }
                 }
               } else {
-                // For trait variables, use the trait-specific value
+                // For trait variables, always use the trait-specific value (not affected by showStringVariables)
                 const variableValue = projectVariable.values?.find(
                   (vv: any) => vv.trait === parseInt(traitId || "0")
                 );
                 value = variableValue?.value || projectVariable.name;
               }
               
-              const regex = new RegExp(`{{${variableName}}}`, 'g');
-              processedContent = processedContent.replace(regex, value);
+              // Only replace if we have a value (not when showing string variables)
+              if (value !== null) {
+                const regex = new RegExp(`{{${variableName}}}`, 'g');
+                processedContent = processedContent.replace(regex, value);
+              }
             }
           });
           
@@ -977,7 +1229,7 @@ export default function ProjectDetailPage() {
             }
           }
         } else {
-          // For trait variables, show as colored badges
+          // For trait variables, always show as colored badges with trait-specific values (not affected by showStringVariables)
           const variableValue = variable.values?.find(
             (vv: any) => vv.trait === parseInt(traitId || "0")
           );
@@ -1026,6 +1278,7 @@ export default function ProjectDetailPage() {
   if (sidebarTab === "Variables") sidebarList = project.variables;
   if (sidebarTab === "Traits") sidebarList = project.traits;
   if (sidebarTab === "Conditionals") sidebarList = project.conditionals;
+  if (sidebarTab === "Dimensions") sidebarList = project.dimensions || [];
 
   return (
     <div className="flex h-[calc(100vh-64px)]">
@@ -1095,7 +1348,7 @@ export default function ProjectDetailPage() {
           ) : (
             <ul className="space-y-4">
               {project.strings.map((str: any) => (
-                <Card key={str.id} className="p-4 flex flex-col gap-2 group">
+                <Card key={str.id} className="p-4 flex flex-col gap-3 group">
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-medium text-base flex-1">
                       {isPlaintext 
@@ -1120,6 +1373,27 @@ export default function ProjectDetailPage() {
                       </Button>
                     </div>
                   </div>
+                  
+                  {/* Dimension Values */}
+                  {str.dimension_values && str.dimension_values.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
+                      {str.dimension_values.map((dv: any) => {
+                        // Find the dimension name from the dimension_value
+                        const dimension = project.dimensions?.find((d: any) => d.id === dv.dimension_value.dimension);
+                        return (
+                          <Badge
+                            key={dv.id}
+                            variant="outline"
+                            className="text-xs bg-blue-50 text-blue-700 border-blue-200"
+                          >
+                            <span className="font-medium">{dimension?.name || 'Unknown'}</span>
+                            <span className="mx-1">:</span>
+                            <span>{dv.dimension_value.value}</span>
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
                 </Card>
               ))}
             </ul>
@@ -1155,6 +1429,8 @@ export default function ProjectDetailPage() {
                       openEditVariable(item);
                     } else if (sidebarTab === "Traits") {
                       openEditTrait(item);
+                    } else if (sidebarTab === "Dimensions") {
+                      openEditDimension(item);
                     }
                     // Add other tab handlers here later
                   }}
@@ -1174,6 +1450,24 @@ export default function ProjectDetailPage() {
                       )}
                     </div>
                   </div>
+                  
+                  {/* Show dimension values for dimensions tab */}
+                  {sidebarTab === "Dimensions" && item.values && item.values.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                      <p className="text-xs text-muted-foreground mb-1">Values:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {item.values.map((dimensionValue: any) => (
+                          <Badge
+                            key={dimensionValue.id}
+                            variant="outline"
+                            className="text-xs bg-gray-50 text-gray-600 border-gray-200"
+                          >
+                            {dimensionValue.value}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </Card>
               ))}
             </ul>
@@ -1187,6 +1481,8 @@ export default function ProjectDetailPage() {
                 openCreateVariable();
               } else if (sidebarTab === "Traits") {
                 openCreateTrait();
+              } else if (sidebarTab === "Dimensions") {
+                openCreateDimension();
               } else {
                 const typeMap = { Conditionals: "Conditional" } as const;
                 setCreateDialog(typeMap[sidebarTab as keyof typeof typeMap]);
@@ -1235,6 +1531,8 @@ export default function ProjectDetailPage() {
                 const newVariableNames = uniqueVariableNames.filter(name => 
                   !existingVariableNames.includes(name) && name.trim() !== ''
                 );
+                
+
                 
                 // Show new variables section if there are any
                 const hasNewVariables = newVariableNames.length > 0;
@@ -1291,7 +1589,78 @@ export default function ProjectDetailPage() {
               })()}
             </div>
 
-            
+            {/* Dimension Values Section */}
+            {project.dimensions && project.dimensions.length > 0 && (
+              <div>
+                <h3 className="font-medium mb-2">Dimension Values</h3>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Optional: Assign values for each dimension to categorize this string.
+                </p>
+                <div className="space-y-4">
+                  {project.dimensions.map((dimension: any) => (
+                    <div key={dimension.id} className="space-y-2">
+                      <label className="text-sm font-medium">
+                        {dimension.name}:
+                      </label>
+                      
+                      {/* Show existing values as clickable badges */}
+                      {dimension.values && dimension.values.length > 0 && (
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-2">
+                            Click to select existing values:
+                          </p>
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {dimension.values.map((dimensionValue: any) => (
+                              <Badge
+                                key={dimensionValue.id}
+                                variant={stringDimensionValues[dimension.id] === dimensionValue.value ? "default" : "outline"}
+                                className="cursor-pointer hover:bg-muted"
+                                onClick={() => setStringDimensionValues(prev => ({
+                                  ...prev,
+                                  [dimension.id]: dimensionValue.value
+                                }))}
+                              >
+                                {dimensionValue.value}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Input for custom value or editing selected value */}
+                      <Input
+                        value={stringDimensionValues[dimension.id] || ""}
+                        onChange={(e) => setStringDimensionValues(prev => ({
+                          ...prev,
+                          [dimension.id]: e.target.value
+                        }))}
+                        placeholder={dimension.values && dimension.values.length > 0 
+                          ? `Or enter custom value for ${dimension.name}` 
+                          : `Value for ${dimension.name}`}
+                        className="w-full"
+                      />
+                      
+                      {/* Clear button if value is selected */}
+                      {stringDimensionValues[dimension.id] && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setStringDimensionValues(prev => ({
+                            ...prev,
+                            [dimension.id]: ""
+                          }))}
+                          className="text-xs"
+                        >
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Convert to String Variable Section - Only in Edit Mode */}
             {editingString && (
               <div className="border-t pt-4">
@@ -1645,8 +2014,102 @@ export default function ProjectDetailPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Create/Edit Dimension Dialog */}
+      <Dialog open={createDialog === "Dimension" || !!editingDimension} onOpenChange={v => !v && closeDimensionDialog()}>
+        <DialogContent className="max-w-lg">
+          <DialogTitle>{editingDimension ? "Edit Dimension" : "New Dimension"}</DialogTitle>
+          <form onSubmit={handleDimensionSubmit} className="space-y-4">
+            <div>
+              <label className="block mb-2 font-medium">Dimension Name</label>
+              <Input
+                value={dimensionName}
+                onChange={(e) => setDimensionName(e.target.value)}
+                placeholder="Enter dimension name (e.g., 'kind', 'event', 'category')"
+                required
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                This dimension will be available when creating or editing strings.
+              </p>
+            </div>
+
+            {/* Dimension Values Management */}
+            <div>
+              <label className="block mb-2 font-medium">Dimension Values</label>
+              <p className="text-xs text-muted-foreground mb-3">
+                Optional: Predefined values that users can select when assigning this dimension to strings.
+              </p>
+              
+              {/* Add new value input */}
+              <div className="flex gap-2 mb-3">
+                <Input
+                  value={newDimensionValue}
+                  onChange={(e) => setNewDimensionValue(e.target.value)}
+                  placeholder="Enter new dimension value"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addDimensionValue();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  onClick={addDimensionValue}
+                  disabled={!newDimensionValue.trim()}
+                >
+                  Add
+                </Button>
+              </div>
+
+              {/* Existing values */}
+              {dimensionValues.length > 0 && (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {dimensionValues.map((value, index) => (
+                    <div key={index} className="flex items-center gap-2 p-2 border rounded">
+                      <Input
+                        value={value}
+                        onChange={(e) => updateDimensionValue(value, e.target.value)}
+                        onBlur={(e) => {
+                          if (e.target.value.trim() !== value) {
+                            updateDimensionValue(value, e.target.value.trim());
+                          }
+                        }}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => removeDimensionValue(value)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {dimensionValues.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No values defined. Users will be able to enter custom values when using this dimension.
+                </p>
+              )}
+            </div>
+            
+            <div className="flex justify-end gap-2 mt-6">
+              <Button type="button" variant="secondary" onClick={closeDimensionDialog}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!dimensionName.trim()}>
+                {editingDimension ? "Update" : "Create"} Dimension
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Create Other Items Dialog */}
-      <Dialog open={!!createDialog && createDialog !== "String" && createDialog !== "Variable" && createDialog !== "Trait"} onOpenChange={v => !v && setCreateDialog(null)}>
+      <Dialog open={!!createDialog && createDialog !== "String" && createDialog !== "Variable" && createDialog !== "Trait" && createDialog !== "Dimension"} onOpenChange={v => !v && setCreateDialog(null)}>
         <DialogContent className="max-w-md">
           <DialogTitle>New {createDialog}</DialogTitle>
           <form className="space-y-4">

@@ -26,8 +26,8 @@ This application is called 'Strings'. It allows users to define text strings tha
     In a project detail page:
     
     - The main content of the page should be all the strings in the project, listed out.
-    - In a tabbed sidebar to the right of the page, In tab 1 (Variables) the user can see, edit and delete their variables as well as create new ones. In tab 2 (Traits) the user can see, edit and delete their traits as well as create new ones.
-    - In a project, when a user goes to create or edit a string, trait, or variable - doing so should open up these flows in a dialog box that can then be saved and the page be updated with the change.
+    - In a tabbed sidebar to the right of the page, In tab 1 (Variables) the user can see, edit and delete their variables as well as create new ones. In tab 2 (Traits) the user can see, edit and delete their traits as well as create new ones. In tab 3 (Dimensions) the user can see, edit and delete their dimensions as well as create new ones.
+    - In a project, when a user goes to create or edit a string, trait, variable, or dimension - doing so should open up these flows in a dialog box that can then be saved and the page be updated with the change.
     
     **Primary Technologies to be used**
     
@@ -78,6 +78,18 @@ This application is called 'Strings'. It allows users to define text strings tha
 6. **Conditional**: Named conditional blocks within strings (DEPRECATED - now uses conditional variables)
    - Fields: name, project (foreign key), created_at, updated_at
 
+7. **Dimension**: Categories for organizing/filtering strings
+   - Fields: name, project (foreign key), created_at, updated_at
+   - Constraints: unique_together = ['name', 'project'] (prevents duplicate dimension names within project)
+
+8. **DimensionValue**: Predefined values for each dimension
+   - Fields: dimension (foreign key), value, created_at, updated_at
+   - Constraints: unique_together = ['dimension', 'value'] (prevents duplicate values within same dimension)
+
+9. **StringDimensionValue**: Many-to-many relationship between strings and dimension values
+   - Fields: string (foreign key), dimension_value (foreign key), created_at
+   - Constraints: unique_together = ['string', 'dimension_value'] (prevents duplicate assignments)
+
 ### Variable Types Explained
 1. **Trait Variables** (variable_type='trait'):
    - Have different values for each trait via VariableValue model
@@ -97,11 +109,15 @@ This application is called 'Strings'. It allows users to define text strings tha
 - This replaced the old [[conditional]] ... [[/]] block system
 
 ### Key Relationships
-- Projects contain Traits, Variables, Strings, and Conditionals
+- Projects contain Traits, Variables, Strings, Conditionals, and Dimensions
 - VariableValues link Variables to Traits with specific values (trait variables only)
 - String variables link to other Strings via referenced_string field
 - Strings can reference Variables via {{variable_name}} syntax
 - Variables can be conditional and are toggled via UI selector
+- Dimensions contain DimensionValues (one-to-many)
+- Strings can be assigned DimensionValues via StringDimensionValue (many-to-many)
+- Dimension names must be unique within a project
+- DimensionValues must be unique within a dimension
 
 ## API Endpoints
 
@@ -145,6 +161,27 @@ This application is called 'Strings'. It allows users to define text strings tha
 - `PATCH /api/strings/{id}/` - Update string
 - `DELETE /api/strings/{id}/` - Delete string
 
+### Dimensions
+- `GET /api/dimensions/` - List user's dimensions (filtered by project access)
+- `POST /api/dimensions/` - Create new dimension
+  - Required: name, project
+- `PATCH /api/dimensions/{id}/` - Update dimension
+- `DELETE /api/dimensions/{id}/` - Delete dimension
+
+### Dimension Values
+- `GET /api/dimension-values/` - List dimension values (filtered by user access)
+- `POST /api/dimension-values/` - Create new dimension value
+  - Required: dimension, value
+- `PATCH /api/dimension-values/{id}/` - Update dimension value
+- `DELETE /api/dimension-values/{id}/` - Delete dimension value
+
+### String Dimension Values
+- `GET /api/string-dimension-values/` - List string-dimension-value relationships
+  - Optional query param: `?string={string_id}` to filter by string
+- `POST /api/string-dimension-values/` - Create new string-dimension-value relationship
+  - Required: string, dimension_value
+- `DELETE /api/string-dimension-values/{id}/` - Delete relationship
+
 ## UI Components & Patterns
 
 ### ShadCN Components Used
@@ -176,6 +213,11 @@ This application is called 'Strings'. It allows users to define text strings tha
    - Conditional toggles update display instantly
    - Show String Variables toggle changes display mode
 
+5. **Sidebar Tabs**: Three-tab sidebar for project management
+   - **Variables Tab**: View, edit, delete variables; create new ones
+   - **Traits Tab**: View, edit, delete traits; create new ones  
+   - **Dimensions Tab**: View, edit, delete dimensions; create new ones; shows dimension values as grey badges
+
 ### Main UI Controls (Project Detail Page Header)
 The project detail page header contains several important controls:
 
@@ -188,16 +230,55 @@ The project detail page header contains several important controls:
    - Selected conditionals are "active" and show in strings
    - Unselected conditionals are hidden from string rendering
 
-3. **Show String Variables Toggle**: Switch for string variable display mode
-   - OFF (default): String variables show their referenced string content
-   - ON: String variables show as grey {{variable}} badges
-   - Works with both plaintext and styled modes
+3. **Show String Variables Toggle**: Switch for string variable display mode ONLY
+   - **OFF (default)**: String variables show their actual string variable values (referenced string content)
+   - **ON**: String variables show as their variable names in double brackets {{variableName}}
+   - **IMPORTANT**: This toggle ONLY affects string variables, trait variables always show their trait-specific values
+   - **In Plaintext Mode**: When ON, string variables appear as plain text in {{variableName}} format; when OFF, string variables expand to their content
+   - **In Styled Mode**: When ON, string variables appear as grey badges with {{variableName}} format; when OFF, string variables expand to their content
+   - Trait variables are NOT affected by this toggle and always show their trait-specific values
 
 4. **Plaintext Toggle**: Switch between styled and plaintext modes
    - OFF: Variables show as colored/grey badges with interaction
    - ON: Variables are replaced with their actual values as plain text
 
 ### String Rendering System
+
+The string rendering system has different behaviors based on the current UI toggles and trait selection:
+
+#### Show String Variables Toggle Behavior
+**CRITICAL**: The "Show String Variables" toggle affects ONLY string variables, NOT trait variables:
+
+- **When OFF (default state)**:
+  - String variables: Show their actual content (referenced string content)
+  - Trait variables: Show their trait-specific values (ALWAYS)
+  
+- **When ON**:
+  - String variables: Display as {{variableName}} instead of expanding content
+  - Trait variables: Continue to show their trait-specific values (UNCHANGED)
+
+#### Display Mode Combinations
+
+1. **Plaintext Mode + Show String Variables OFF**:
+   - String variables expand to their content
+   - Trait variables show trait-specific values as plain text
+
+2. **Plaintext Mode + Show String Variables ON**:
+   - String variables show as plain text in {{variableName}} format
+   - Trait variables show trait-specific values as plain text
+
+3. **Styled Mode + Show String Variables OFF**:
+   - String variables expand to their content (with recursive variable processing)
+   - Trait variables show as colored badges with trait-specific values
+
+4. **Styled Mode + Show String Variables ON**:
+   - String variables show as grey badges with {{variableName}} format
+   - Trait variables show as colored badges with trait-specific values
+
+#### Trait Selection Impact
+- **Blank selected**: Variables behave according to Show String Variables toggle
+- **Specific trait selected**: Variables behave according to Show String Variables toggle
+- The trait selection does NOT override the Show String Variables toggle behavior
 The string rendering system is complex and handles multiple display modes:
 
 #### Badge Mode (Styled, isPlaintext=false):
@@ -287,6 +368,26 @@ The string rendering system uses a sophisticated key generation system to avoid 
 - **Form Validation**: Required trait names with proper error handling
 - **Toast Notifications**: Success/error feedback for all operations
 
+### Dimension Management System
+- **Full CRUD Operations**: Create, read, update, delete dimensions with validation
+- **Dimension Values Management**: Each dimension can have predefined values that users can select
+- **String Assignment**: Strings can be assigned dimension values for categorization/filtering
+- **Sidebar Display**: Dimensions in sidebar show their available values as grey badges
+- **String Display**: Strings show their assigned dimension values as blue badges below content
+- **Validation Features**:
+  - Prevents duplicate dimension names within a project (case-insensitive)
+  - Prevents duplicate dimension values within the same dimension (case-insensitive)
+  - Backend constraints enforce uniqueness via database models
+- **UI Features**:
+  - Dimension edit modal allows adding/editing/deleting dimension values
+  - String edit dialog shows dimension value selection with clickable badges
+  - Input fields allow custom values or editing of selected values
+  - Real-time validation with toast notifications for duplicates
+- **Data Relationships**:
+  - Dimension -> DimensionValue (one-to-many)
+  - String -> DimensionValue (many-to-many via StringDimensionValue)
+  - Cascade updates when dimension values are modified
+
 ### CSV Export
 - CSV export now includes a column for every combination of trait and conditional(s), with headers indicating the trait and which conditionals are enabled.
 
@@ -317,6 +418,17 @@ The string rendering system uses a sophisticated key generation system to avoid 
 - **Use processStringContent** for plaintext mode
 - **Respect toggle states**: showStringVariables, isPlaintext, selectedConditionalVariables
 - **Handle nested string variables** by passing unique keyPrefix to prevent React key conflicts
+
+### Dimension Management Guidelines
+- **Dimension Creation**: Include validation for unique names within project scope
+- **Dimension Values**: Allow predefined values for consistency, but permit custom values for flexibility
+- **String Assignment**: Use StringDimensionValue model to link strings to dimension values
+- **Cascade Updates**: When updating dimension values, recreate all string-dimension-value relationships
+- **UI Display**: 
+  - Show dimension values as blue badges on string cards (below content, above border)
+  - Display format: "DimensionName: Value" in badges
+  - Use `bg-blue-50 text-blue-700 border-blue-200` styling for consistency
+- **Form Handling**: Pre-populate dimension values when editing strings, allow clear/reset functionality
 
 ### API Integration Best Practices
 - Use consistent error handling with try/catch blocks
@@ -390,7 +502,10 @@ npm run dev
 - ✅ Both plaintext and styled rendering modes
 - ✅ Automatic variable detection in string content
 - ✅ React key conflict resolution
-- ✅ Full CRUD for all entity types
+- ✅ Full CRUD for all entity types (projects, strings, variables, traits, dimensions)
+- ✅ Dimension management with value assignment to strings
+- ✅ Validation for duplicate dimension names and values
+- ✅ Dimension value display on string cards as blue badges
 - ✅ Real-time UI updates
 
 ### Technical Notes
@@ -398,6 +513,9 @@ npm run dev
 - **API serialization**: Updated to handle string variables and conditional flags
 - **Frontend state management**: Multiple toggle states coordinate string rendering
 - **Key generation**: Uses sophisticated system to prevent React key conflicts in nested content
+- **Dimension system**: Full implementation with migrations 0006-0008 for dimensions, dimension values, and string assignments
+- **Validation constraints**: Database-level unique constraints for dimension names and values prevent duplicates
+- **UI consistency**: Blue badges for dimension values, grey badges for dimension values in sidebar
 
 ### Areas for Future Enhancement
 - Performance optimization for large projects with many nested string variables
@@ -415,10 +533,11 @@ npm run dev
 3. **String Rendering**: Variable substitution with all toggle combinations
 4. **String Variables**: Creation, reference resolution, display modes
 5. **Conditional Variables**: Selection, rendering, toggle behavior
-6. **CSV Export**: Proper formatting with all trait/conditional combinations
-7. **Real-time Updates**: UI responsiveness to state changes
-8. **Form Validation**: Error handling and user feedback
-9. **React Key Uniqueness**: No console errors for duplicate keys
+6. **Dimension Management**: Creation, value assignment, string categorization, validation
+7. **CSV Export**: Proper formatting with all trait/conditional combinations
+8. **Real-time Updates**: UI responsiveness to state changes
+9. **Form Validation**: Error handling and user feedback
+10. **React Key Uniqueness**: No console errors for duplicate keys
 
 ### Testing Scenarios
 - Create string variables both manually and via string dialog checkbox
@@ -426,6 +545,11 @@ npm run dev
 - Verify nested string variables render correctly without key conflicts
 - Test CSV export with various conditional and trait combinations
 - Ensure automatic variable detection works when typing in string content
+- Create dimensions with predefined values and assign them to strings
+- Test dimension value validation (no duplicates within same dimension)
+- Test dimension name validation (no duplicates within same project)
+- Verify dimension values display correctly on string cards as blue badges
+- Test dimension value updates cascade properly to all assigned strings
 
 ### Browser Compatibility
 - Ensure compatibility with modern browsers (Chrome, Firefox, Safari, Edge)

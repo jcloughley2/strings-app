@@ -9,6 +9,9 @@ router.register(r'traits', views.TraitViewSet, basename='trait')
 router.register(r'variables', views.VariableViewSet, basename='variable')
 router.register(r'variable-values', views.VariableValueViewSet, basename='variable-value')
 router.register(r'conditionals', views.ConditionalViewSet, basename='conditional')
+router.register(r'dimensions', views.DimensionViewSet, basename='dimension')
+router.register(r'dimension-values', views.DimensionValueViewSet, basename='dimension-value')
+router.register(r'string-dimension-values', views.StringDimensionValueViewSet, basename='string-dimension-value')
 
 urlpatterns = [
     path('', include(router.urls)),

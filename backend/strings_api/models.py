@@ -21,8 +21,16 @@ class Trait(models.Model):
         return f"{self.name} ({self.project.name})"
 
 class Variable(models.Model):
+    VARIABLE_TYPE_CHOICES = [
+        ('trait', 'Trait Variable'),
+        ('string', 'String Variable'),
+    ]
+    
     name = models.CharField(max_length=100)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='variables')
+    variable_type = models.CharField(max_length=10, choices=VARIABLE_TYPE_CHOICES, default='trait')
+    referenced_string = models.ForeignKey('String', on_delete=models.CASCADE, null=True, blank=True, related_name='referenced_by_variables')
+    is_conditional = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -15,7 +15,7 @@ import { Edit2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
-const SIDEBAR_TABS = ["Variables", "Traits", "Conditionals"];
+const SIDEBAR_TABS = ["Variables", "Traits"];
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
@@ -24,8 +24,9 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState("Variables");
   const [traitId, setTraitId] = useState<string | null>("blank");
-  const [selectedConditionals, setSelectedConditionals] = useState<string[]>([]);
+  const [selectedConditionalVariables, setSelectedConditionalVariables] = useState<string[]>([]);
   const [isPlaintext, setIsPlaintext] = useState(false);
+  const [showStringVariables, setShowStringVariables] = useState(false);
   const [createDialog, setCreateDialog] = useState<null | "Variable" | "Trait" | "Conditional" | "String">(null);
   const [editingString, setEditingString] = useState<any>(null);
   
@@ -36,8 +37,15 @@ export default function ProjectDetailPage() {
   const [selectionStart, setSelectionStart] = useState(0);
   const [selectionEnd, setSelectionEnd] = useState(0);
   
+  // String variable creation state
+  const [createStringVariable, setCreateStringVariable] = useState(false);
+  const [stringVariableName, setStringVariableName] = useState("");
+  
   // Variable form state
   const [variableName, setVariableName] = useState("");
+  const [variableType, setVariableType] = useState<'trait' | 'string'>('trait');
+  const [referencedStringId, setReferencedStringId] = useState<string>("");
+  const [isConditional, setIsConditional] = useState(false);
   const [variableValues, setVariableValues] = useState<{[traitId: string]: string}>({});
   const [editingVariable, setEditingVariable] = useState<any>(null);
   
@@ -61,26 +69,21 @@ export default function ProjectDetailPage() {
   if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
   if (!project) return <div className="p-8 text-center">Project not found.</div>;
 
-  // Function to process conditional content based on selected conditionals
-  const processConditionalContent = (content: string) => {
+  // Function to process conditional variables - removes conditional variables that are not selected
+  const processConditionalVariables = (content: string) => {
+    // Find all variables in content
+    const variableMatches = content.match(/{{([^}]+)}}/g) || [];
     let processedContent = content;
     
-    // Find all conditional blocks: [[conditionalName]] ... [[/]]
-    const conditionalRegex = /\[\[([^\]]+)\]\]([\s\S]*?)\[\[\/\]\]/g;
-    
-    processedContent = processedContent.replace(conditionalRegex, (match, conditionalName, conditionalContent) => {
-      // Check if this conditional is selected/enabled
-      const conditional = project.conditionals.find((c: any) => c.name === conditionalName.trim());
+    variableMatches.forEach((match) => {
+      const variableName = match.slice(2, -2);
+      const variable = project.variables.find((v: any) => v.name === variableName);
       
-      if (conditional) {
-        const isSelected = selectedConditionals.includes(conditional.id.toString());
-        // If conditional is selected, return the content inside the block
-        // If not selected, return empty string (hide the content)
-        return isSelected ? conditionalContent : '';
+      // If this is a conditional variable and it's not selected, remove it from content
+      if (variable?.is_conditional && !selectedConditionalVariables.includes(variable.id.toString())) {
+        const regex = new RegExp(`{{${variableName}}}`, 'g');
+        processedContent = processedContent.replace(regex, '');
       }
-      
-      // If conditional doesn't exist, use default_value or hide
-      return conditional?.default_value ? conditionalContent : '';
     });
     
     return processedContent;
@@ -152,6 +155,8 @@ export default function ProjectDetailPage() {
     setSelectedText("");
     setSelectionStart(0);
     setSelectionEnd(0);
+    setCreateStringVariable(false);
+    setStringVariableName("");
   };
 
   // Handle text selection in textarea
@@ -218,14 +223,20 @@ export default function ProjectDetailPage() {
    };
 
    // Variable dialog handlers
-   const openCreateVariable = () => {
-     setVariableName("");
-     setVariableValues({});
-     setCreateDialog("Variable");
-   };
+     const openCreateVariable = () => {
+    setVariableName("");
+    setVariableType('trait');
+    setReferencedStringId("");
+    setIsConditional(false);
+    setVariableValues({});
+    setCreateDialog("Variable");
+  };
 
    const openEditVariable = (variable: any) => {
      setVariableName(variable.name);
+     setVariableType(variable.variable_type || 'trait');
+     setReferencedStringId(variable.referenced_string?.toString() || "");
+     setIsConditional(variable.is_conditional || false);
      
      // Pre-populate existing values for each trait
      const existingValues: {[traitId: string]: string} = {};
@@ -236,14 +247,15 @@ export default function ProjectDetailPage() {
      }
      setVariableValues(existingValues);
      setEditingVariable(variable);
-     
-
    };
 
    const closeVariableDialog = () => {
      setCreateDialog(null);
      setEditingVariable(null);
      setVariableName("");
+     setVariableType('trait');
+     setReferencedStringId("");
+     setIsConditional(false);
      setVariableValues({});
    };
 
@@ -291,6 +303,9 @@ export default function ProjectDetailPage() {
          // Update existing variable
          const variableData = {
            name: variableName,
+           variable_type: variableType,
+           referenced_string: variableType === 'string' && referencedStringId ? parseInt(referencedStringId) : null,
+           is_conditional: isConditional,
          };
 
          await apiFetch(`/api/variables/${editingVariable.id}/`, {
@@ -305,6 +320,9 @@ export default function ProjectDetailPage() {
          const variableData = {
            name: variableName,
            project: id,
+           variable_type: variableType,
+           referenced_string: variableType === 'string' && referencedStringId ? parseInt(referencedStringId) : null,
+           is_conditional: isConditional,
          };
 
          const newVariable = await apiFetch('/api/variables/', {
@@ -316,8 +334,8 @@ export default function ProjectDetailPage() {
          variableId = newVariable.id;
        }
 
-       // Handle variable values
-       if (editingVariable) {
+       // Handle variable values (only for trait variables)
+       if (variableType === 'trait' && editingVariable) {
          // For editing, we need to update/create/delete variable values
          const existingValues = editingVariable.values || [];
          
@@ -365,8 +383,8 @@ export default function ProjectDetailPage() {
          });
 
          await Promise.all(valuePromises);
-       } else {
-         // For creating, just create new values
+       } else if (variableType === 'trait' && !editingVariable) {
+         // For creating trait variables, just create new values
          const valuePromises = Object.entries(variableValues)
            .filter(([_, value]) => value.trim() !== '')
            .map(([traitId, value]) => {
@@ -516,9 +534,10 @@ export default function ProjectDetailPage() {
         variables: detectedVariables.map((v: any) => v.id),
       };
 
+      let stringResponse;
       if (editingString) {
         // Update existing string
-        await apiFetch(`/api/strings/${editingString.id}/`, {
+        stringResponse = await apiFetch(`/api/strings/${editingString.id}/`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(stringData),
@@ -526,12 +545,32 @@ export default function ProjectDetailPage() {
         toast.success('String updated successfully!');
       } else {
         // Create new string
-        await apiFetch('/api/strings/', {
+        stringResponse = await apiFetch('/api/strings/', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(stringData),
         });
         toast.success('String created successfully!');
+      }
+
+      // Create string variable if checkbox is checked
+      if (createStringVariable && stringVariableName.trim()) {
+        try {
+          await apiFetch('/api/variables/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: stringVariableName.trim(),
+              project: id,
+              variable_type: 'string',
+              referenced_string: stringResponse.id,
+            }),
+          });
+          toast.success(`String variable "${stringVariableName}" created successfully!`);
+        } catch (err) {
+          console.error('Failed to create string variable:', err);
+          toast.error('String created but failed to create variable. You can create it manually later.');
+        }
       }
 
       // Refresh project data
@@ -547,12 +586,35 @@ export default function ProjectDetailPage() {
   // Function to process string content based on selected trait and plaintext mode
   const processStringContent = (content: string, stringVariables: any[]) => {
     // First process conditionals
-    let processedContent = processConditionalContent(content);
+    let processedContent = processConditionalVariables(content);
     
     if (isPlaintext) {
-      // In plaintext mode, show raw content
-      if (traitId === "blank") {
+      // In plaintext mode, behavior depends on showStringVariables toggle and trait selection
+      if (traitId === "blank" && showStringVariables) {
+        // When blank is selected and showStringVariables is ON, show variables as {{variable}} format
         return processedContent;
+      }
+      
+      if (traitId === "blank" && !showStringVariables) {
+        // When blank is selected and showStringVariables is OFF, expand string variables
+        // but leave trait variables as {{variable}}
+        const variableMatches = processedContent.match(/{{([^}]+)}}/g) || [];
+        let result = processedContent;
+        
+        variableMatches.forEach((match) => {
+          const variableName = match.slice(2, -2);
+          const projectVariable = project.variables.find((v: any) => v.name === variableName);
+          
+          if (projectVariable?.variable_type === 'string') {
+            const referencedString = project.strings.find((s: any) => s.id === projectVariable.referenced_string);
+            if (referencedString?.content) {
+              const regex = new RegExp(`{{${variableName}}}`, 'g');
+              result = result.replace(regex, referencedString.content);
+            }
+          }
+        });
+        
+        return result;
       }
       
       // Replace variables with their trait-specific values (plaintext)
@@ -563,18 +625,51 @@ export default function ProjectDetailPage() {
         const variableMatches = processedContent.match(/{{([^}]+)}}/g) || [];
         const variableNames = variableMatches.map(match => match.slice(2, -2));
         
-        variableNames.forEach((variableName: string) => {
-          // Find the variable in the project's variables
-          const projectVariable = project.variables.find((v: any) => v.name === variableName);
-          if (projectVariable) {
-            const variableValue = projectVariable.values?.find(
-              (vv: any) => vv.trait === parseInt(traitId || "0")
-            );
-            const value = variableValue?.value || projectVariable.name;
-            const regex = new RegExp(`{{${variableName}}}`, 'g');
-            processedContent = processedContent.replace(regex, value);
-          }
-        });
+        // Process variables recursively to handle nested string variables
+        const processVariablesRecursively = (content: string, depth: number = 0): string => {
+          if (depth > 10) return content; // Prevent infinite recursion
+          
+          const matches = content.match(/{{([^}]+)}}/g) || [];
+          let processedContent = content;
+          
+          matches.forEach((match) => {
+            const variableName = match.slice(2, -2);
+            const projectVariable = project.variables.find((v: any) => v.name === variableName);
+            
+            if (projectVariable) {
+              let value;
+              
+              if (projectVariable.variable_type === 'string') {
+                // For string variables, behavior depends on showStringVariables toggle
+                if (showStringVariables) {
+                  // Show as variable badge - don't replace, leave as {{variableName}}
+                  return; // Skip replacement
+                } else {
+                  // Show string content - get the referenced string content and process it recursively
+                  const referencedString = project.strings.find((s: any) => s.id === projectVariable.referenced_string);
+                  if (referencedString?.content) {
+                    value = processVariablesRecursively(referencedString.content, depth + 1);
+                  } else {
+                    value = projectVariable.name;
+                  }
+                }
+              } else {
+                // For trait variables, use the trait-specific value
+                const variableValue = projectVariable.values?.find(
+                  (vv: any) => vv.trait === parseInt(traitId || "0")
+                );
+                value = variableValue?.value || projectVariable.name;
+              }
+              
+              const regex = new RegExp(`{{${variableName}}}`, 'g');
+              processedContent = processedContent.replace(regex, value);
+            }
+          });
+          
+          return processedContent;
+        };
+        
+        processedContent = processVariablesRecursively(processedContent);
       }
       
       return processedContent;
@@ -584,129 +679,197 @@ export default function ProjectDetailPage() {
     return null; // We'll handle this in the JSX
   };
 
-  // Function to render content with badge styling for variables
-  const renderStyledContent = (content: string, stringVariables: any[]) => {
-    // First process conditionals
-    const conditionalProcessedContent = processConditionalContent(content);
-    
-    if (traitId === "blank") {
-      // Show variables as grey badges in {{variable}} format
-      const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
-      return parts.map((part, index) => {
-        if (part.match(/{{[^}]+}}/)) {
-          const variableName = part.slice(2, -2); // Remove {{ and }}
-          const variable = project.variables.find((v: any) => v.name === variableName);
-          
-          return (
-            <Badge 
-              key={index} 
-              variant="secondary" 
-              className="mx-1 cursor-pointer hover:bg-secondary/80 transition-colors"
-              onClick={() => {
-                if (variable) {
-                  openEditVariable(variable);
-                }
-              }}
-              title={variable ? `Click to edit variable "${variableName}"` : `Variable "${variableName}" not found`}
-            >
-              {part}
-            </Badge>
-          );
-        }
-        return part;
-      });
+  // Recursive function to render content with proper variable substitution and styling
+  const renderContentRecursively = (content: string, depth: number = 0, keyPrefix: string = ""): (string | React.ReactNode)[] => {
+    // Prevent infinite recursion
+    if (depth > 10) {
+      return [content];
     }
     
-    // Show variable values as color-coded badges based on trait values
-    let finalProcessedContent = conditionalProcessedContent;
-    const selectedTrait = project.traits.find((t: any) => t.id.toString() === traitId);
-    const replacements: { 
-      original: string; 
-      value: string; 
-      start: number; 
-      end: number; 
-      hasValue: boolean;
-      variableId: number;
-    }[] = [];
+    // First process conditionals
+    const conditionalProcessedContent = processConditionalVariables(content);
     
-    if (selectedTrait) {
-      // Auto-detect all variables from content, not just the ones in stringVariables
-      const variableMatches = finalProcessedContent.match(/{{([^}]+)}}/g) || [];
-      const variableNames = variableMatches.map(match => match.slice(2, -2));
-      const uniqueVariableNames = [...new Set(variableNames)]; // Deduplicate variable names
+    if (traitId === "blank") {
+      // Behavior depends on showStringVariables toggle
+      if (showStringVariables) {
+        // Show all variables as grey badges in {{variable}} format
+        const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
+        return parts.map((part: string, index: number) => {
+          if (part.match(/{{[^}]+}}/)) {
+            const variableName = part.slice(2, -2); // Remove {{ and }}
+            const variable = project.variables.find((v: any) => v.name === variableName);
+            
+            return (
+              <Badge 
+                key={`${keyPrefix}${depth}-${index}-${variableName}`} 
+                variant="secondary" 
+                className={`mx-1 transition-colors ${
+                  variable?.variable_type === 'string' 
+                    ? "cursor-default" 
+                    : "cursor-pointer hover:bg-secondary/80"
+                }`}
+                onClick={() => {
+                  if (variable && variable.variable_type !== 'string') {
+                    openEditVariable(variable);
+                  }
+                }}
+                title={
+                  variable 
+                    ? variable.variable_type === 'string' 
+                      ? `String variable "${variableName}" - references a string` 
+                      : `Click to edit variable "${variableName}"`
+                    : `Variable "${variableName}" not found`
+                }
+              >
+                {part}
+              </Badge>
+            );
+          }
+          return part;
+        });
+      } else {
+        // Show string variables expanded, trait variables as badges
+        const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
+        const result: (string | React.ReactNode)[] = [];
+        
+        parts.forEach((part: string, index: number) => {
+          if (part.match(/{{[^}]+}}/)) {
+            const variableName = part.slice(2, -2); // Remove {{ and }}
+            const variable = project.variables.find((v: any) => v.name === variableName);
+            
+            if (variable?.variable_type === 'string') {
+              // For string variables, show their content
+              const referencedString = project.strings.find((s: any) => s.id === variable.referenced_string);
+              if (referencedString?.content) {
+                const nestedParts = renderContentRecursively(referencedString.content, depth + 1, `${keyPrefix}${variableName}-`);
+                result.push(...nestedParts);
+              } else {
+                result.push(variableName);
+              }
+            } else {
+              // For trait variables, show as grey badges
+              result.push(
+                <Badge 
+                  key={`${keyPrefix}${depth}-${index}-${variableName}`} 
+                  variant="secondary" 
+                  className="mx-1 transition-colors cursor-pointer hover:bg-secondary/80"
+                  onClick={() => {
+                    if (variable) {
+                      openEditVariable(variable);
+                    }
+                  }}
+                  title={
+                    variable 
+                      ? `Click to edit variable "${variable.name}"`
+                      : `Variable "${variableName}" not found`
+                  }
+                >
+                  {part}
+                </Badge>
+              );
+            }
+          } else {
+            result.push(part);
+          }
+        });
+        
+        return result;
+      }
+    }
+
+    // When a trait is selected, process variables recursively
+    const selectedTrait = project.traits.find((t: any) => t.id.toString() === traitId);
+    if (!selectedTrait) {
+      return [conditionalProcessedContent];
+    }
+
+    // Find all variables in the content
+    const variableMatches = conditionalProcessedContent.match(/{{([^}]+)}}/g) || [];
+    if (variableMatches.length === 0) {
+      return [conditionalProcessedContent];
+    }
+
+    const parts: (string | React.ReactNode)[] = [];
+    let lastIndex = 0;
+
+    variableMatches.forEach((match: string, matchIndex: number) => {
+      const variableName = match.slice(2, -2); // Remove {{ and }}
+      const variable = project.variables.find((v: any) => v.name === variableName);
+      const currentIndex = conditionalProcessedContent.indexOf(match, lastIndex);
       
-      uniqueVariableNames.forEach((variableName: string) => {
-        // Find the variable in the project's variables
-        const projectVariable = project.variables.find((v: any) => v.name === variableName);
-        if (projectVariable) {
-          const variableValue = projectVariable.values?.find(
+      // Add text before the variable
+      if (currentIndex > lastIndex) {
+        parts.push(conditionalProcessedContent.substring(lastIndex, currentIndex));
+      }
+
+      if (variable) {
+        if (variable.variable_type === 'string') {
+          // For string variables, behavior depends on showStringVariables toggle
+          if (showStringVariables) {
+            // Show as grey badge
+            parts.push(
+              <Badge 
+                key={`${keyPrefix}${depth}-string-${matchIndex}-${variableName}`} 
+                variant="secondary" 
+                className="mx-1 cursor-default"
+                                 title={`String variable "${variableName}" - references a string`}
+               >
+                 {`{{${variableName}}}`}
+               </Badge>
+            );
+          } else {
+            // Show string content - recursively process their content
+            const referencedString = project.strings.find((s: any) => s.id === variable.referenced_string);
+            if (referencedString?.content) {
+              const nestedParts = renderContentRecursively(referencedString.content, depth + 1, `${keyPrefix}${variableName}-`);
+              parts.push(...nestedParts);
+            } else {
+              parts.push(variableName);
+            }
+          }
+        } else {
+          // For trait variables, show as colored badges
+          const variableValue = variable.values?.find(
             (vv: any) => vv.trait === parseInt(traitId || "0")
           );
           const hasValue = !!variableValue?.value;
-          const value = variableValue?.value || projectVariable.name;
+          const value = variableValue?.value || variable.name;
           
-          const pattern = `{{${variableName}}}`;
-          let index = finalProcessedContent.indexOf(pattern);
-          
-          while (index !== -1) {
-            replacements.push({
-              original: pattern,
-              value: value,
-              start: index,
-              end: index + pattern.length,
-              hasValue: hasValue,
-              variableId: projectVariable.id
-            });
-            index = finalProcessedContent.indexOf(pattern, index + 1);
-          }
+          const badgeClassName = hasValue 
+            ? "mx-1 bg-green-100 text-green-800 border-green-200 hover:bg-green-200 cursor-pointer transition-colors" 
+            : "mx-1 bg-red-100 text-red-800 border-red-200 hover:bg-red-200 cursor-pointer transition-colors";
+
+          parts.push(
+            <Badge 
+              key={`${keyPrefix}${depth}-trait-${matchIndex}-${variableName}`} 
+              variant="outline" 
+              className={badgeClassName}
+              onClick={() => openEditVariable(variable)}
+              title={`Click to edit variable "${variable.name}"`}
+            >
+              {value}
+            </Badge>
+          );
         }
-      });
-    }
-    
-    // Sort replacements by start position in reverse order
-    replacements.sort((a, b) => b.start - a.start);
-    
-    const parts: (string | React.ReactNode)[] = [];
-    let lastEnd = finalProcessedContent.length;
-    
-    replacements.forEach((replacement, index) => {
-      // Add text after this replacement
-      if (lastEnd > replacement.end) {
-        parts.unshift(finalProcessedContent.substring(replacement.end, lastEnd));
+      } else {
+        // Variable not found, show as-is
+        parts.push(match);
       }
-      
-      // Add the badge with appropriate color based on whether variable has a value
-      const badgeClassName = replacement.hasValue 
-        ? "mx-1 bg-green-100 text-green-800 border-green-200 hover:bg-green-200 cursor-pointer transition-colors" 
-        : "mx-1 bg-red-100 text-red-800 border-red-200 hover:bg-red-200 cursor-pointer transition-colors";
-      
-      const variable = project.variables.find((v: any) => v.id === replacement.variableId);
-      
-      parts.unshift(
-        <Badge 
-          key={`badge-${index}`} 
-          variant="outline" 
-          className={badgeClassName}
-          onClick={() => {
-            if (variable) {
-              openEditVariable(variable);
-            }
-          }}
-          title={variable ? `Click to edit variable "${variable.name}"` : "Variable not found"}
-        >
-          {replacement.value}
-        </Badge>
-      );
-      
-      lastEnd = replacement.start;
+
+      lastIndex = currentIndex + match.length;
     });
-    
-    // Add any remaining text at the beginning
-    if (lastEnd > 0) {
-      parts.unshift(finalProcessedContent.substring(0, lastEnd));
+
+    // Add any remaining text
+    if (lastIndex < conditionalProcessedContent.length) {
+      parts.push(conditionalProcessedContent.substring(lastIndex));
     }
-    
+
     return parts;
+  };
+
+  // Function to render content with badge styling for variables
+  const renderStyledContent = (content: string, stringVariables: any[], stringId?: string) => {
+    return renderContentRecursively(content, 0, stringId ? `str-${stringId}-` : "");
   };
 
   // Sidebar content
@@ -744,15 +907,25 @@ export default function ProjectDetailPage() {
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Conditionals:</span>
               <MultiSelect
-                options={project.conditionals.map((conditional: any) => ({
-                  label: conditional.name,
-                  value: conditional.id.toString(),
+                options={project.variables.filter((variable: any) => variable.is_conditional).map((variable: any) => ({
+                  label: variable.name,
+                  value: variable.id.toString(),
                 }))}
-                selected={selectedConditionals}
-                onChange={setSelectedConditionals}
-                placeholder="Select conditionals..."
+                selected={selectedConditionalVariables}
+                onChange={setSelectedConditionalVariables}
+                placeholder="Select conditional variables..."
                 className="w-48"
               />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="show-string-variables"
+                checked={showStringVariables}
+                onCheckedChange={setShowStringVariables}
+              />
+              <Label htmlFor="show-string-variables" className="text-sm text-muted-foreground">
+                Show String Variables
+              </Label>
             </div>
             <div className="flex items-center gap-2">
               <Switch
@@ -778,7 +951,7 @@ export default function ProjectDetailPage() {
                     <div className="font-medium text-base flex-1">
                       {isPlaintext 
                         ? processStringContent(str.content, str.variables || [])
-                        : renderStyledContent(str.content, str.variables || [])
+                        : renderStyledContent(str.content, str.variables || [], str.id)
                       }
                     </div>
                     <Button
@@ -819,7 +992,7 @@ export default function ProjectDetailPage() {
               {sidebarList.map((item: any) => (
                 <Card 
                   key={item.id} 
-                  className="p-3 text-sm cursor-pointer hover:bg-muted/50 transition-colors"
+                  className="p-3 text-sm transition-colors cursor-pointer hover:bg-muted/50"
                   onClick={() => {
                     if (sidebarTab === "Variables") {
                       openEditVariable(item);
@@ -829,7 +1002,21 @@ export default function ProjectDetailPage() {
                     // Add other tab handlers here later
                   }}
                 >
-                  {item.name || item.id}
+                  <div className="flex items-center justify-between">
+                    <span>{item.name || item.id}</span>
+                    <div className="flex gap-1">
+                      {sidebarTab === "Variables" && item.variable_type === 'string' && (
+                        <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
+                          String Ref
+                        </Badge>
+                      )}
+                      {sidebarTab === "Variables" && item.is_conditional && (
+                        <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200">
+                          Conditional
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
                 </Card>
               ))}
             </ul>
@@ -867,12 +1054,12 @@ export default function ProjectDetailPage() {
                 onSelect={handleTextSelection}
                 onMouseUp={handleTextSelection}
                 onKeyUp={handleTextSelection}
-                placeholder="Enter string content. Click variables below to insert them, or highlight text and click conditionals to wrap it."
+                placeholder="Enter string content. Click variables below to insert them."
                 rows={4}
                 required
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Click variable badges below to insert them, or highlight text and click conditionals to wrap it.
+                Click variable badges below to insert them.
               </p>
             </div>
             <div>
@@ -946,29 +1133,41 @@ export default function ProjectDetailPage() {
                 );
               })()}
             </div>
-            <div>
-              <h3 className="font-medium mb-2">Conditionals</h3>
-              <p className="text-xs text-muted-foreground mb-2">
-                Highlight text before selecting a conditional.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {project.conditionals.map((conditional: any) => (
-                  <Badge
-                    key={conditional.id}
-                    variant="outline"
-                    className={`cursor-pointer transition-opacity ${
-                      selectedText ? "hover:bg-muted" : "opacity-50 cursor-not-allowed"
-                    }`}
-                    onClick={() => selectedText && wrapWithConditional(conditional.name)}
-                  >
-                    {conditional.name}
-                  </Badge>
-                ))}
-                {project.conditionals.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No conditionals available. Create some in the sidebar.</p>
-                )}
+
+            
+            {/* String Variable Creation Section */}
+            <div className="border-t pt-4">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="createStringVariable"
+                  checked={createStringVariable}
+                  onChange={(e) => setCreateStringVariable(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="createStringVariable" className="text-sm font-medium">
+                  Create a variable to reference this string
+                </Label>
               </div>
+              {createStringVariable && (
+                <div className="mt-3">
+                  <Label htmlFor="stringVariableName" className="block text-sm font-medium mb-1">
+                    Variable Name
+                  </Label>
+                  <Input
+                    id="stringVariableName"
+                    value={stringVariableName}
+                    onChange={(e) => setStringVariableName(e.target.value)}
+                    placeholder="Enter variable name (e.g., 'greeting', 'footer')"
+                    required={createStringVariable}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    This will be used as {`{{${stringVariableName || 'variableName'}}}`} in other strings.
+                  </p>
+                </div>
+              )}
             </div>
+            
             <div className="flex justify-end gap-2 mt-6">
               <Button type="button" variant="secondary" onClick={closeStringDialog}>
                 Cancel
@@ -999,7 +1198,78 @@ export default function ProjectDetailPage() {
               </p>
             </div>
             
-            {project.traits && project.traits.length > 0 && (
+            <div>
+              <label className="block mb-2 font-medium">Variable Type</label>
+              <Select value={variableType} onValueChange={(value: 'trait' | 'string') => setVariableType(value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select variable type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="trait">Trait Variable</SelectItem>
+                  <SelectItem value="string">String Variable</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                {variableType === 'trait' 
+                  ? 'Different values for each trait (default)'
+                  : 'References another string in this project'
+                }
+              </p>
+            </div>
+            
+            <div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="isConditional"
+                  checked={isConditional}
+                  onChange={(e) => setIsConditional(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="isConditional" className="text-sm font-medium">
+                  Make this a conditional variable
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Conditional variables can be toggled on/off when viewing strings
+              </p>
+            </div>
+            
+            {variableType === 'string' && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="font-medium">Referenced String (Optional)</label>
+                  {referencedStringId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setReferencedStringId("")}
+                      className="text-xs"
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                <Select value={referencedStringId || undefined} onValueChange={(value) => setReferencedStringId(value || "")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a string to reference..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {project.strings?.map((str: any) => (
+                      <SelectItem key={str.id} value={str.id.toString()}>
+                        {str.content.length > 50 ? `${str.content.substring(0, 50)}...` : str.content}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  The variable will show the content of this string when rendered.
+                </p>
+              </div>
+            )}
+            
+            {variableType === 'trait' && project.traits && project.traits.length > 0 && (
               <div>
                 <h3 className="font-medium mb-2">Values for Each Trait</h3>
                 <p className="text-xs text-muted-foreground mb-3">

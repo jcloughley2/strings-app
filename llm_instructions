@@ -26,7 +26,7 @@ This application is called 'Strings'. It allows users to define text strings tha
     In a project detail page:
     
     - The main content of the page should be all the strings in the project, listed out.
-    - In a tabbed sidebar to the right of the page, In tab 1 (Traits) the user can see, edit and delete their traits as well as create new ones. In tab 2 (Variables) the user can see, edit and delete their traits as well as create new ones.
+    - In a tabbed sidebar to the right of the page, In tab 1 (Variables) the user can see, edit and delete their variables as well as create new ones. In tab 2 (Traits) the user can see, edit and delete their traits as well as create new ones.
     - In a project, when a user goes to create or edit a string, trait, or variable - doing so should open up these flows in a dialog box that can then be saved and the page be updated with the change.
     
     **Primary Technologies to be used**
@@ -63,23 +63,45 @@ This application is called 'Strings'. It allows users to define text strings tha
 2. **Trait**: Different contexts/modes for variable values
    - Fields: name, project (foreign key), created_at, updated_at
    
-3. **Variable**: Reusable text placeholders
-   - Fields: name, project (foreign key), created_at, updated_at
+3. **Variable**: Reusable text placeholders with TWO TYPES:
+   - **Trait Variables**: Traditional variables with different values per trait
+   - **String Variables**: Variables that reference other strings in the project
+   - Fields: name, project (foreign key), variable_type ('trait' or 'string'), referenced_string (foreign key, nullable), is_conditional (boolean), created_at, updated_at
    
-4. **VariableValue**: Trait-specific values for variables
+4. **VariableValue**: Trait-specific values for TRAIT variables only
    - Fields: variable (foreign key), trait (foreign key), value, created_at, updated_at
+   - Note: String variables don't use VariableValue - they reference strings directly
    
 5. **String**: Main content with variables and conditionals
    - Fields: content, project (foreign key), created_at, updated_at
    
-6. **Conditional**: Named conditional blocks within strings
+6. **Conditional**: Named conditional blocks within strings (DEPRECATED - now uses conditional variables)
    - Fields: name, project (foreign key), created_at, updated_at
+
+### Variable Types Explained
+1. **Trait Variables** (variable_type='trait'):
+   - Have different values for each trait via VariableValue model
+   - Traditional behavior: {{animal}} shows "dog" for trait A, "cat" for trait B
+   
+2. **String Variables** (variable_type='string'):
+   - Reference another string in the project via referenced_string field
+   - When rendered, they show the content of the referenced string
+   - Can be created during string creation/editing with checkbox option
+   - Example: {{footer}} might reference a string containing "Copyright 2024"
+
+### Conditional Variables System
+- Variables can be marked as conditional (is_conditional=True)
+- Conditional variables appear in a special selector in the UI
+- Users can toggle which conditional variables are "active"
+- When a conditional variable is not selected, it's completely removed from string rendering
+- This replaced the old [[conditional]] ... [[/]] block system
 
 ### Key Relationships
 - Projects contain Traits, Variables, Strings, and Conditionals
-- VariableValues link Variables to Traits with specific values
+- VariableValues link Variables to Traits with specific values (trait variables only)
+- String variables link to other Strings via referenced_string field
 - Strings can reference Variables via {{variable_name}} syntax
-- Strings can contain Conditionals via [[conditional_name]] ... [[/]] syntax
+- Variables can be conditional and are toggled via UI selector
 
 ## API Endpoints
 
@@ -92,7 +114,7 @@ This application is called 'Strings'. It allows users to define text strings tha
 ### Projects
 - `GET /api/projects/` - List user's projects
 - `POST /api/projects/` - Create new project
-- `GET /api/projects/{id}/` - Get project details
+- `GET /api/projects/{id}/` - Get project details (includes all related data)
 - `PATCH /api/projects/{id}/` - Update project
 - `DELETE /api/projects/{id}/` - Delete project
 - `GET /api/projects/{id}/download-csv/` - Download project as CSV
@@ -106,6 +128,8 @@ This application is called 'Strings'. It allows users to define text strings tha
 ### Variables
 - `GET /api/projects/{project_id}/variables/` - List project variables
 - `POST /api/variables/` - Create new variable
+  - Required: name, project, variable_type ('trait' or 'string')
+  - Optional: referenced_string (for string variables), is_conditional (boolean)
 - `PATCH /api/variables/{id}/` - Update variable
 - `DELETE /api/variables/{id}/` - Delete variable
 
@@ -121,12 +145,6 @@ This application is called 'Strings'. It allows users to define text strings tha
 - `PATCH /api/strings/{id}/` - Update string
 - `DELETE /api/strings/{id}/` - Delete string
 
-### Conditionals
-- `GET /api/projects/{project_id}/conditionals/` - List project conditionals
-- `POST /api/conditionals/` - Create new conditional
-- `PATCH /api/conditionals/{id}/` - Update conditional
-- `DELETE /api/conditionals/{id}/` - Delete conditional
-
 ## UI Components & Patterns
 
 ### ShadCN Components Used
@@ -134,7 +152,9 @@ This application is called 'Strings'. It allows users to define text strings tha
 - **Button**: Consistent styling with variants (default, secondary, destructive)
 - **Input/Label**: Form inputs with proper accessibility
 - **Select**: Trait selection with SelectSeparator for "Blank" option
-- **Tabs**: Sidebar navigation between Traits and Variables
+- **MultiSelect**: For conditional variables selection (custom component)
+- **Switch**: For plaintext mode and "Show String Variables" toggle
+- **Tabs**: Sidebar navigation between Variables and Traits
 - **DropdownMenu**: Overflow menus for project actions
 - **Badge**: Variable and conditional indicators in strings
 - **Sonner**: Toast notifications for user feedback
@@ -154,14 +174,81 @@ This application is called 'Strings'. It allows users to define text strings tha
 4. **Real-time Updates**: UI reflects changes immediately
    - Trait selection updates string rendering
    - Conditional toggles update display instantly
+   - Show String Variables toggle changes display mode
+
+### Main UI Controls (Project Detail Page Header)
+The project detail page header contains several important controls:
+
+1. **Trait Selector**: Dropdown to select which trait to view
+   - Includes all project traits plus "Blank" option
+   - Changes how trait variables are rendered in strings
+
+2. **Conditionals Selector**: MultiSelect for conditional variables
+   - Shows only variables where is_conditional=True
+   - Selected conditionals are "active" and show in strings
+   - Unselected conditionals are hidden from string rendering
+
+3. **Show String Variables Toggle**: Switch for string variable display mode
+   - OFF (default): String variables show their referenced string content
+   - ON: String variables show as grey {{variable}} badges
+   - Works with both plaintext and styled modes
+
+4. **Plaintext Toggle**: Switch between styled and plaintext modes
+   - OFF: Variables show as colored/grey badges with interaction
+   - ON: Variables are replaced with their actual values as plain text
 
 ### String Rendering System
-- **Badge Mode**: Variables and conditionals shown as interactive badges
-- **Plain Text Mode**: Fully rendered text with variable substitution
-- **Conditional Logic**: [[conditional]] blocks show/hide based on selection
-- **Variable Substitution**: {{variable}} replaced with trait-specific values
+The string rendering system is complex and handles multiple display modes:
+
+#### Badge Mode (Styled, isPlaintext=false):
+- **Trait Variables**: Show as colored badges (green=has value, red=no value)
+- **String Variables**: 
+  - When showStringVariables=OFF: Show referenced string content
+  - When showStringVariables=ON: Show as grey {{variable}} badges
+- **Conditional Variables**: Only show if selected in conditionals selector
+
+#### Plaintext Mode (isPlaintext=true):
+- **Trait Variables**: Replaced with trait-specific values or variable name if no value
+- **String Variables**:
+  - When showStringVariables=OFF: Show referenced string content
+  - When showStringVariables=ON: Show as {{variable}} text
+- **Conditional Variables**: Only show if selected in conditionals selector
+
+#### Special Cases:
+- **Blank Trait + showStringVariables=OFF**: String variables expand, trait variables show as {{variable}}
+- **Blank Trait + showStringVariables=ON**: All variables show as {{variable}}
+- **Selected Trait + showStringVariables=OFF**: String variables expand, trait variables show values
+- **Selected Trait + showStringVariables=ON**: String variables show as badges, trait variables show values
+
+### Variable Creation Workflows
+1. **Manual Creation**: Via sidebar "New Variable" button
+2. **Auto-Creation from Strings**: When {{newVariable}} is typed in string content
+3. **String Variable Creation**: Via checkbox in string create/edit dialog
+   - Checkbox: "Create a variable to reference this string"
+   - Creates a string variable that references the current string
+   - Works for both new strings and edited strings
+
+### React Key Management
+The string rendering system uses a sophisticated key generation system to avoid React key conflicts:
+- **Base Keys**: Include string ID, depth, index, and variable name
+- **Nested Content**: Uses keyPrefix parameter to ensure uniqueness
+- **Format**: `str-${stringId}-${depth}-${type}-${index}-${variableName}`
 
 ## Recent Functionality & UX Enhancements
+
+### String Variables System
+- **Two Variable Types**: Traditional trait variables + new string variables
+- **String Variable Creation**: Checkbox in string dialog to create variables that reference the string
+- **String Variable Display Control**: "Show String Variables" toggle controls rendering mode
+- **Database Schema**: Added variable_type, referenced_string, is_conditional fields to Variable model
+- **API Support**: Updated serializers and views to handle string variable creation and rendering
+
+### Conditional Variables System
+- **Replaced Conditional Blocks**: Old [[conditional]]...[[/]] system replaced with conditional variables
+- **is_conditional Field**: Variables can be marked as conditional
+- **UI Selector**: MultiSelect component for toggling conditional variables
+- **Dynamic Rendering**: Strings update immediately when conditionals are toggled
+- **Sidebar Indicators**: Conditional variables show purple "Conditional" badges in sidebar
 
 ### Project Management & UI
 - Project Tiles (Homepage):
@@ -185,14 +272,12 @@ This application is called 'Strings'. It allows users to define text strings tha
 - Download CSV:  
   - Uses the latest CSV logic, including all trait/conditional combinations.
 
-### CSV Export
-- CSV export now includes a column for every combination of trait and conditional(s), with headers indicating the trait and which conditionals are enabled.
-
-### Conditional Logic
-- Strings support [[conditional]] ... [[/]] blocks.
-- Conditional blocks can include variables.
-- The UI for toggling conditionals is reactive—changes are reflected instantly in the main canvas.
-- Conditional logic is respected in both badge and plaintext rendering modes.
+### Variable Management Enhancements
+- **Type Selection**: Dropdown to choose between 'trait' and 'string' variable types
+- **String Reference**: For string variables, optional dropdown to select which string to reference
+- **Conditional Checkbox**: Option to make any variable conditional
+- **Sidebar Badges**: Visual indicators for variable types ("String Ref", "Conditional")
+- **Smart Defaults**: New variables default to trait type
 
 ### Trait Management System
 - **Comprehensive CRUD**: Full create, read, update, delete functionality for traits
@@ -202,17 +287,16 @@ This application is called 'Strings'. It allows users to define text strings tha
 - **Form Validation**: Required trait names with proper error handling
 - **Toast Notifications**: Success/error feedback for all operations
 
-### Variable Management System
-- **Full CRUD Operations**: Create, edit, delete variables with proper API integration
-- **Trait Value Integration**: When editing variables, users can set values for all project traits
-- **Dynamic Form Generation**: Variable edit dialog shows inputs for all existing traits
-- **Intelligent Defaults**: New variables get empty values for all existing traits
-- **Sidebar Accessibility**: Variables in sidebar are clickable for quick editing
+### CSV Export
+- CSV export now includes a column for every combination of trait and conditional(s), with headers indicating the trait and which conditionals are enabled.
 
-### General UI/UX
-- All dialogs and menus are implemented as reusable components.
-- Overflow menu trigger buttons are visually consistent and accessible.
-- All new features are implemented with reusability and future extensibility in mind.
+### UI/UX Improvements
+- **Automatic Variable Detection**: When typing {{variable}} in string content, new variables are automatically created
+- **String Variable Creation**: Easy workflow to create variables that reference strings
+- **Real-time Rendering**: All display modes update immediately when toggles are changed
+- **Consistent Key Generation**: Solved React key conflicts with sophisticated key generation system
+- **Toast Notifications**: User feedback for all actions
+- **Loading States**: Proper loading indicators for API operations
 
 ## Implementation Guidelines for Future Development
 
@@ -222,17 +306,31 @@ This application is called 'Strings'. It allows users to define text strings tha
 - Follow the established pattern of separate handlers for create vs edit operations
 - Always reset form state when closing dialogs
 
+### Variable System Guidelines
+- **Always specify variable_type** when creating variables ('trait' or 'string')
+- **String variables** should reference another string via referenced_string field
+- **Trait variables** use VariableValue model for trait-specific values
+- **Conditional variables** can be either type, marked with is_conditional=True
+
+### String Rendering Guidelines
+- **Use renderContentRecursively** for styled mode with proper keyPrefix for uniqueness
+- **Use processStringContent** for plaintext mode
+- **Respect toggle states**: showStringVariables, isPlaintext, selectedConditionalVariables
+- **Handle nested string variables** by passing unique keyPrefix to prevent React key conflicts
+
 ### API Integration Best Practices
 - Use consistent error handling with try/catch blocks
 - Implement proper loading states for user feedback
 - Follow RESTful conventions for endpoint design
 - Use PATCH for updates, POST for creation, DELETE for removal
+- **Always refresh project data** after creating variables or strings to get updated relationships
 
 ### Form Handling Patterns
 - Pre-populate edit forms with existing data
 - Implement proper validation before API calls
 - Use controlled components for all form inputs
 - Provide clear user feedback via toast notifications
+- **Handle string variable creation** via checkbox in string dialogs
 
 ### Dialog Management
 - Use boolean state variables for dialog visibility
@@ -245,6 +343,7 @@ This application is called 'Strings'. It allows users to define text strings tha
 - Use consistent styling for interactive elements
 - Implement hover states for better UX
 - Group related functionality logically
+- **Show variable type badges** for quick identification
 
 ## Development: Activating the Backend Virtual Environment
 
@@ -282,15 +381,51 @@ npm run dev
 - **Install Frontend Dependencies**: `npm install <package-name>`
 - **Add ShadCN Components**: `npx shadcn@latest add <component-name>`
 
+## Current State & Known Issues
+
+### Working Features
+- ✅ String variables creation and rendering
+- ✅ Conditional variables system
+- ✅ Show String Variables toggle
+- ✅ Both plaintext and styled rendering modes
+- ✅ Automatic variable detection in string content
+- ✅ React key conflict resolution
+- ✅ Full CRUD for all entity types
+- ✅ Real-time UI updates
+
+### Technical Notes
+- **Database migrations applied**: Variable model includes variable_type, referenced_string, is_conditional fields
+- **API serialization**: Updated to handle string variables and conditional flags
+- **Frontend state management**: Multiple toggle states coordinate string rendering
+- **Key generation**: Uses sophisticated system to prevent React key conflicts in nested content
+
+### Areas for Future Enhancement
+- Performance optimization for large projects with many nested string variables
+- Bulk operations for variables and strings
+- Export formats beyond CSV
+- Advanced conditional logic (AND/OR operations)
+- Variable categories or namespacing
+- Undo/redo functionality
+
 ## Testing & Quality Assurance
 
 ### Key Areas to Test
 1. **Authentication Flow**: Login, logout, registration
 2. **CRUD Operations**: All create, read, update, delete functionality
-3. **String Rendering**: Variable substitution and conditional logic
-4. **CSV Export**: Proper formatting with all trait/conditional combinations
-5. **Real-time Updates**: UI responsiveness to state changes
-6. **Form Validation**: Error handling and user feedback
+3. **String Rendering**: Variable substitution with all toggle combinations
+4. **String Variables**: Creation, reference resolution, display modes
+5. **Conditional Variables**: Selection, rendering, toggle behavior
+6. **CSV Export**: Proper formatting with all trait/conditional combinations
+7. **Real-time Updates**: UI responsiveness to state changes
+8. **Form Validation**: Error handling and user feedback
+9. **React Key Uniqueness**: No console errors for duplicate keys
+
+### Testing Scenarios
+- Create string variables both manually and via string dialog checkbox
+- Test all combinations of trait selection, conditional selection, and display toggles
+- Verify nested string variables render correctly without key conflicts
+- Test CSV export with various conditional and trait combinations
+- Ensure automatic variable detection works when typing in string content
 
 ### Browser Compatibility
 - Ensure compatibility with modern browsers (Chrome, Firefox, Safari, Edge)

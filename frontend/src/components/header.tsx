@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/useAuth";
 
 export function Header() {
-  const { isLoggedIn, username, login, logout } = useAuth();
+  const { isLoggedIn, username, logout } = useAuth();
 
   return (
-    <header className="flex items-center justify-between px-8 py-4 border-b bg-background">
+    <header className="sticky top-0 z-50 flex items-center justify-between px-8 py-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <Link href="/" className="text-2xl font-bold tracking-tight">Strings</Link>
       <div className="flex items-center gap-4">
         {isLoggedIn ? (

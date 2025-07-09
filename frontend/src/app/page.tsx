@@ -95,7 +95,7 @@ export default function Home() {
   }
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-[80vh] gap-8 bg-background">
+    <main className="flex flex-col items-center min-h-[calc(100vh-64px)] gap-8 bg-background pt-16 pb-8">
       <h1 className="text-4xl font-bold text-center">Welcome to Strings</h1>
       <p className="text-lg text-muted-foreground text-center max-w-xl">
         Effortlessly manage, localize, and export your app strings with traits, variables, and conditionals. Built for teams who care about content and flexibility.

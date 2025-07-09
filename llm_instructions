@@ -38,6 +38,129 @@ This application is called 'Strings'. It allows users to define text strings tha
     
     - Please ask before you install and start using any new technology, unless it is a required dependency of a technology/resource you have already been given permission to use.
 
+## Application Architecture
+
+### Frontend (Next.js 14)
+- **Location**: `/frontend/`
+- **Framework**: Next.js 14 with App Router
+- **Styling**: Tailwind CSS with ShadCN/UI components
+- **State Management**: React useState and useEffect hooks
+- **Authentication**: Cookie-based sessions with Django backend
+
+### Backend (Django)
+- **Location**: `/backend/`
+- **Framework**: Django with Django REST Framework
+- **Database**: SQLite (default Django setup)
+- **Authentication**: Django's built-in session authentication
+- **API**: RESTful endpoints with proper CORS configuration
+
+## Data Models & Relationships
+
+### Core Models
+1. **Project**: Container for all user content
+   - Fields: name, description, created_at, updated_at, user (foreign key)
+   
+2. **Trait**: Different contexts/modes for variable values
+   - Fields: name, project (foreign key), created_at, updated_at
+   
+3. **Variable**: Reusable text placeholders
+   - Fields: name, project (foreign key), created_at, updated_at
+   
+4. **VariableValue**: Trait-specific values for variables
+   - Fields: variable (foreign key), trait (foreign key), value, created_at, updated_at
+   
+5. **String**: Main content with variables and conditionals
+   - Fields: content, project (foreign key), created_at, updated_at
+   
+6. **Conditional**: Named conditional blocks within strings
+   - Fields: name, project (foreign key), created_at, updated_at
+
+### Key Relationships
+- Projects contain Traits, Variables, Strings, and Conditionals
+- VariableValues link Variables to Traits with specific values
+- Strings can reference Variables via {{variable_name}} syntax
+- Strings can contain Conditionals via [[conditional_name]] ... [[/]] syntax
+
+## API Endpoints
+
+### Authentication
+- `POST /api/auth/login/` - Login with username/password
+- `POST /api/auth/logout/` - Logout current user
+- `POST /api/auth/register/` - Register new user
+- `GET /api/auth/user/` - Get current user info
+
+### Projects
+- `GET /api/projects/` - List user's projects
+- `POST /api/projects/` - Create new project
+- `GET /api/projects/{id}/` - Get project details
+- `PATCH /api/projects/{id}/` - Update project
+- `DELETE /api/projects/{id}/` - Delete project
+- `GET /api/projects/{id}/download-csv/` - Download project as CSV
+
+### Traits
+- `GET /api/projects/{project_id}/traits/` - List project traits
+- `POST /api/traits/` - Create new trait
+- `PATCH /api/traits/{id}/` - Update trait
+- `DELETE /api/traits/{id}/` - Delete trait
+
+### Variables
+- `GET /api/projects/{project_id}/variables/` - List project variables
+- `POST /api/variables/` - Create new variable
+- `PATCH /api/variables/{id}/` - Update variable
+- `DELETE /api/variables/{id}/` - Delete variable
+
+### Variable Values
+- `GET /api/variables/{variable_id}/values/` - List variable values by trait
+- `POST /api/variable-values/` - Create variable value for trait
+- `PATCH /api/variable-values/{id}/` - Update variable value
+- `DELETE /api/variable-values/{id}/` - Delete variable value
+
+### Strings
+- `GET /api/projects/{project_id}/strings/` - List project strings
+- `POST /api/strings/` - Create new string
+- `PATCH /api/strings/{id}/` - Update string
+- `DELETE /api/strings/{id}/` - Delete string
+
+### Conditionals
+- `GET /api/projects/{project_id}/conditionals/` - List project conditionals
+- `POST /api/conditionals/` - Create new conditional
+- `PATCH /api/conditionals/{id}/` - Update conditional
+- `DELETE /api/conditionals/{id}/` - Delete conditional
+
+## UI Components & Patterns
+
+### ShadCN Components Used
+- **Dialog**: For all create/edit forms (strings, traits, variables)
+- **Button**: Consistent styling with variants (default, secondary, destructive)
+- **Input/Label**: Form inputs with proper accessibility
+- **Select**: Trait selection with SelectSeparator for "Blank" option
+- **Tabs**: Sidebar navigation between Traits and Variables
+- **DropdownMenu**: Overflow menus for project actions
+- **Badge**: Variable and conditional indicators in strings
+- **Sonner**: Toast notifications for user feedback
+
+### Key UI Patterns
+1. **Overflow Menus**: Used on project tiles and project detail pages
+   - Consistent rectangular button with variant="secondary" and size="icon"
+   - Options: Edit, Download CSV, Delete (Duplicate disabled)
+   
+2. **Clickable Cards**: Project tiles and sidebar items are fully clickable
+   - Entire card surface is interactive except for overflow menu areas
+   
+3. **Dialog Forms**: All CRUD operations use modal dialogs
+   - Pre-populated for edit operations
+   - Proper form validation and error handling
+   
+4. **Real-time Updates**: UI reflects changes immediately
+   - Trait selection updates string rendering
+   - Conditional toggles update display instantly
+
+### String Rendering System
+- **Badge Mode**: Variables and conditionals shown as interactive badges
+- **Plain Text Mode**: Fully rendered text with variable substitution
+- **Conditional Logic**: [[conditional]] blocks show/hide based on selection
+- **Variable Substitution**: {{variable}} replaced with trait-specific values
+
 ## Recent Functionality & UX Enhancements
 
 ### Project Management & UI
@@ -71,10 +194,57 @@ This application is called 'Strings'. It allows users to define text strings tha
 - The UI for toggling conditionals is reactive—changes are reflected instantly in the main canvas.
 - Conditional logic is respected in both badge and plaintext rendering modes.
 
+### Trait Management System
+- **Comprehensive CRUD**: Full create, read, update, delete functionality for traits
+- **Variable Value Management**: When editing traits, users can set values for all project variables
+- **Smart Pre-population**: Edit dialogs automatically load existing variable values
+- **Sidebar Integration**: Traits in sidebar are clickable to open edit dialogs
+- **Form Validation**: Required trait names with proper error handling
+- **Toast Notifications**: Success/error feedback for all operations
+
+### Variable Management System
+- **Full CRUD Operations**: Create, edit, delete variables with proper API integration
+- **Trait Value Integration**: When editing variables, users can set values for all project traits
+- **Dynamic Form Generation**: Variable edit dialog shows inputs for all existing traits
+- **Intelligent Defaults**: New variables get empty values for all existing traits
+- **Sidebar Accessibility**: Variables in sidebar are clickable for quick editing
+
 ### General UI/UX
 - All dialogs and menus are implemented as reusable components.
 - Overflow menu trigger buttons are visually consistent and accessible.
 - All new features are implemented with reusability and future extensibility in mind.
+
+## Implementation Guidelines for Future Development
+
+### State Management Patterns
+- Use React useState for component-level state
+- Implement proper cleanup in useEffect hooks
+- Follow the established pattern of separate handlers for create vs edit operations
+- Always reset form state when closing dialogs
+
+### API Integration Best Practices
+- Use consistent error handling with try/catch blocks
+- Implement proper loading states for user feedback
+- Follow RESTful conventions for endpoint design
+- Use PATCH for updates, POST for creation, DELETE for removal
+
+### Form Handling Patterns
+- Pre-populate edit forms with existing data
+- Implement proper validation before API calls
+- Use controlled components for all form inputs
+- Provide clear user feedback via toast notifications
+
+### Dialog Management
+- Use boolean state variables for dialog visibility
+- Implement separate open/close handler functions
+- Clear form state when dialogs close
+- Use descriptive dialog titles that reflect create vs edit mode
+
+### Sidebar Integration
+- Make all sidebar items clickable for quick access
+- Use consistent styling for interactive elements
+- Implement hover states for better UX
+- Group related functionality logically
 
 ## Development: Activating the Backend Virtual Environment
 
@@ -87,3 +257,42 @@ Or, if you are already in the backend directory:
     source venv/bin/activate
 
 Once activated, you can run Django management commands as needed.
+
+## Development Setup & Commands
+
+### Backend Setup
+```bash
+cd backend
+source venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
+```
+
+### Frontend Setup
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### Common Development Tasks
+- **Database Migrations**: `python manage.py makemigrations` then `python manage.py migrate`
+- **Create Superuser**: `python manage.py createsuperuser`
+- **Install Frontend Dependencies**: `npm install <package-name>`
+- **Add ShadCN Components**: `npx shadcn@latest add <component-name>`
+
+## Testing & Quality Assurance
+
+### Key Areas to Test
+1. **Authentication Flow**: Login, logout, registration
+2. **CRUD Operations**: All create, read, update, delete functionality
+3. **String Rendering**: Variable substitution and conditional logic
+4. **CSV Export**: Proper formatting with all trait/conditional combinations
+5. **Real-time Updates**: UI responsiveness to state changes
+6. **Form Validation**: Error handling and user feedback
+
+### Browser Compatibility
+- Ensure compatibility with modern browsers (Chrome, Firefox, Safari, Edge)
+- Test responsive design on mobile and tablet devices
+- Verify accessibility features work properly

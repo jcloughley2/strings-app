@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Edit2 } from "lucide-react";
+import { Edit2, Trash2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
@@ -45,14 +45,21 @@ export default function ProjectDetailPage() {
   const [variableName, setVariableName] = useState("");
   const [variableType, setVariableType] = useState<'trait' | 'string'>('trait');
   const [referencedStringId, setReferencedStringId] = useState<string>("");
+  const [variableContent, setVariableContent] = useState("");
   const [isConditional, setIsConditional] = useState(false);
   const [variableValues, setVariableValues] = useState<{[traitId: string]: string}>({});
   const [editingVariable, setEditingVariable] = useState<any>(null);
+  
+  // Variable content editing state (for string variables)
+  const [variableTextareaRef, setVariableTextareaRef] = useState<HTMLTextAreaElement | null>(null);
   
   // Trait form state
   const [traitName, setTraitName] = useState("");
   const [traitVariableValues, setTraitVariableValues] = useState<{[variableId: string]: string}>({});
   const [editingTrait, setEditingTrait] = useState<any>(null);
+
+  // String deletion state
+  const [deleteStringDialog, setDeleteStringDialog] = useState<any>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -222,11 +229,66 @@ export default function ProjectDetailPage() {
          }, 0);
    };
 
+  // String deletion handlers
+  const openDeleteStringDialog = (str: any) => {
+    setDeleteStringDialog(str);
+  };
+
+  const closeDeleteStringDialog = () => {
+    setDeleteStringDialog(null);
+  };
+
+  const checkStringUsage = (stringId: number) => {
+    // Check if string is referenced by any string variables
+    return project.variables.some((variable: any) => {
+      return variable.variable_type === 'string' && 
+             variable.referenced_string && 
+             variable.referenced_string.toString() === stringId.toString();
+    });
+  };
+
+  const handleDeleteString = async () => {
+    if (!deleteStringDialog) return;
+
+    // Check if string is being referenced by any string variables
+    const isReferenced = checkStringUsage(deleteStringDialog.id);
+    
+    if (isReferenced) {
+      const referencingVariables = project.variables.filter((variable: any) => 
+        variable.variable_type === 'string' && 
+        variable.referenced_string && 
+        variable.referenced_string.toString() === deleteStringDialog.id.toString()
+      );
+      
+      const variableNames = referencingVariables.map((v: any) => v.name).join(', ');
+      toast.error(`Cannot delete this string because it's referenced by string variable${referencingVariables.length > 1 ? 's' : ''}: ${variableNames}. Please update or delete the variable${referencingVariables.length > 1 ? 's' : ''} first.`);
+      return;
+    }
+
+    try {
+      await apiFetch(`/api/strings/${deleteStringDialog.id}/`, {
+        method: 'DELETE',
+      });
+      
+      toast.success(`String deleted successfully!`);
+      
+      // Refresh project data to reflect the deletion
+      const updatedProject = await apiFetch(`/api/projects/${id}/`);
+      setProject(updatedProject);
+      
+      closeDeleteStringDialog();
+    } catch (err) {
+      console.error('Failed to delete string:', err);
+      toast.error('Failed to delete string. Please try again.');
+    }
+  };
+
    // Variable dialog handlers
      const openCreateVariable = () => {
     setVariableName("");
     setVariableType('trait');
     setReferencedStringId("");
+    setVariableContent("");
     setIsConditional(false);
     setVariableValues({});
     setCreateDialog("Variable");
@@ -236,6 +298,7 @@ export default function ProjectDetailPage() {
      setVariableName(variable.name);
      setVariableType(variable.variable_type || 'trait');
      setReferencedStringId(variable.referenced_string?.toString() || "");
+     setVariableContent(variable.content || "");
      setIsConditional(variable.is_conditional || false);
      
      // Pre-populate existing values for each trait
@@ -249,15 +312,53 @@ export default function ProjectDetailPage() {
      setEditingVariable(variable);
    };
 
-   const closeVariableDialog = () => {
-     setCreateDialog(null);
-     setEditingVariable(null);
-     setVariableName("");
-     setVariableType('trait');
-     setReferencedStringId("");
-     setIsConditional(false);
-     setVariableValues({});
-   };
+       const closeVariableDialog = () => {
+      setCreateDialog(null);
+      setEditingVariable(null);
+      setVariableName("");
+      setVariableType('trait');
+      setReferencedStringId("");
+      setVariableContent("");
+      setIsConditional(false);
+      setVariableValues({});
+    };
+
+    const checkVariableUsage = (variableName: string) => {
+      // Check if variable is used in any string content
+      return project.strings.some((str: any) => {
+        const regex = new RegExp(`{{${variableName}}}`, 'g');
+        return regex.test(str.content);
+      });
+    };
+
+    const handleDeleteVariable = async () => {
+      if (!editingVariable) return;
+
+      // Check if variable is being used in any strings
+      const isUsed = checkVariableUsage(editingVariable.name);
+      
+      if (isUsed) {
+        toast.error(`Cannot delete variable "${editingVariable.name}" because it's being used in one or more strings. Please remove it from all strings first.`);
+        return;
+      }
+
+      try {
+        await apiFetch(`/api/variables/${editingVariable.id}/`, {
+          method: 'DELETE',
+        });
+        
+        toast.success(`Variable "${editingVariable.name}" deleted successfully!`);
+        
+        // Refresh project data to reflect the deletion
+        const updatedProject = await apiFetch(`/api/projects/${id}/`);
+        setProject(updatedProject);
+        
+        closeVariableDialog();
+      } catch (err) {
+        console.error('Failed to delete variable:', err);
+        toast.error('Failed to delete variable. Please try again.');
+      }
+    };
 
    // Trait dialog handlers
    const openCreateTrait = () => {
@@ -305,6 +406,7 @@ export default function ProjectDetailPage() {
            name: variableName,
            variable_type: variableType,
            referenced_string: variableType === 'string' && referencedStringId ? parseInt(referencedStringId) : null,
+           content: variableType === 'string' ? variableContent : null,
            is_conditional: isConditional,
          };
 
@@ -322,6 +424,7 @@ export default function ProjectDetailPage() {
            project: id,
            variable_type: variableType,
            referenced_string: variableType === 'string' && referencedStringId ? parseInt(referencedStringId) : null,
+           content: variableType === 'string' ? variableContent : null,
            is_conditional: isConditional,
          };
 
@@ -332,6 +435,49 @@ export default function ProjectDetailPage() {
          });
          
          variableId = newVariable.id;
+       }
+
+       // Auto-create variables detected in string variable content
+       if (variableType === 'string' && variableContent.trim()) {
+         const variableMatches = variableContent.match(/{{([^}]+)}}/g) || [];
+         const detectedVariableNames = variableMatches.map(match => match.slice(2, -2));
+         const uniqueVariableNames = [...new Set(detectedVariableNames)];
+         
+         // Find new variables that don't exist yet
+         const existingVariableNames = project.variables.map((v: any) => v.name);
+         const newVariableNames = uniqueVariableNames.filter(name => 
+           !existingVariableNames.includes(name) && name.trim() !== ''
+         );
+         
+         // Create new variables
+         if (newVariableNames.length > 0) {
+           try {
+             const createdVariables = [];
+             for (const newVariableName of newVariableNames) {
+               try {
+                 const newVar = await apiFetch('/api/variables/', {
+                   method: 'POST',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify({
+                     name: newVariableName,
+                     project: id,
+                     variable_type: 'trait', // Default to trait for auto-created variables
+                   }),
+                 });
+                 createdVariables.push(newVar);
+               } catch (err) {
+                 console.error(`Failed to create variable ${newVariableName}:`, err);
+               }
+             }
+             
+             if (createdVariables.length > 0) {
+               const variableList = createdVariables.map(v => v.name).join(', ');
+               toast.success(`Created ${createdVariables.length} new variable${createdVariables.length > 1 ? 's' : ''}: ${variableList}`);
+             }
+           } catch (err) {
+             console.error('Failed to create new variables:', err);
+           }
+         }
        }
 
        // Handle variable values (only for trait variables)
@@ -553,9 +699,10 @@ export default function ProjectDetailPage() {
         toast.success('String created successfully!');
       }
 
-      // Create string variable if checkbox is checked
-      if (createStringVariable && stringVariableName.trim()) {
+      // Handle conversion to string variable if checkbox is checked (only in edit mode)
+      if (editingString && createStringVariable && stringVariableName.trim()) {
         try {
+          // Create the string variable with the content directly
           await apiFetch('/api/variables/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -563,13 +710,19 @@ export default function ProjectDetailPage() {
               name: stringVariableName.trim(),
               project: id,
               variable_type: 'string',
-              referenced_string: stringResponse.id,
+              content: stringContent, // Store content directly in the variable
             }),
           });
-          toast.success(`String variable "${stringVariableName}" created successfully!`);
+          
+          // Delete the original string since it's now a variable
+          await apiFetch(`/api/strings/${editingString.id}/`, {
+            method: 'DELETE',
+          });
+          
+          toast.success(`String converted to variable "${stringVariableName}" successfully!`);
         } catch (err) {
-          console.error('Failed to create string variable:', err);
-          toast.error('String created but failed to create variable. You can create it manually later.');
+          console.error('Failed to convert to string variable:', err);
+          toast.error('String updated but failed to convert to variable. Please try again.');
         }
       }
 
@@ -606,10 +759,9 @@ export default function ProjectDetailPage() {
           const projectVariable = project.variables.find((v: any) => v.name === variableName);
           
           if (projectVariable?.variable_type === 'string') {
-            const referencedString = project.strings.find((s: any) => s.id === projectVariable.referenced_string);
-            if (referencedString?.content) {
+            if (projectVariable.content) {
               const regex = new RegExp(`{{${variableName}}}`, 'g');
-              result = result.replace(regex, referencedString.content);
+              result = result.replace(regex, projectVariable.content);
             }
           }
         });
@@ -645,10 +797,9 @@ export default function ProjectDetailPage() {
                   // Show as variable badge - don't replace, leave as {{variableName}}
                   return; // Skip replacement
                 } else {
-                  // Show string content - get the referenced string content and process it recursively
-                  const referencedString = project.strings.find((s: any) => s.id === projectVariable.referenced_string);
-                  if (referencedString?.content) {
-                    value = processVariablesRecursively(referencedString.content, depth + 1);
+                  // Show string content - get the variable content and process it recursively
+                  if (projectVariable.content) {
+                    value = processVariablesRecursively(projectVariable.content, depth + 1);
                   } else {
                     value = projectVariable.name;
                   }
@@ -739,9 +890,8 @@ export default function ProjectDetailPage() {
             
             if (variable?.variable_type === 'string') {
               // For string variables, show their content
-              const referencedString = project.strings.find((s: any) => s.id === variable.referenced_string);
-              if (referencedString?.content) {
-                const nestedParts = renderContentRecursively(referencedString.content, depth + 1, `${keyPrefix}${variableName}-`);
+              if (variable.content) {
+                const nestedParts = renderContentRecursively(variable.content, depth + 1, `${keyPrefix}${variableName}-`);
                 result.push(...nestedParts);
               } else {
                 result.push(variableName);
@@ -819,9 +969,8 @@ export default function ProjectDetailPage() {
             );
           } else {
             // Show string content - recursively process their content
-            const referencedString = project.strings.find((s: any) => s.id === variable.referenced_string);
-            if (referencedString?.content) {
-              const nestedParts = renderContentRecursively(referencedString.content, depth + 1, `${keyPrefix}${variableName}-`);
+            if (variable.content) {
+              const nestedParts = renderContentRecursively(variable.content, depth + 1, `${keyPrefix}${variableName}-`);
               parts.push(...nestedParts);
             } else {
               parts.push(variableName);
@@ -954,14 +1103,22 @@ export default function ProjectDetailPage() {
                         : renderStyledContent(str.content, str.variables || [], str.id)
                       }
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                      onClick={() => openEditString(str)}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEditString(str)}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openDeleteStringDialog(str)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </Card>
               ))}
@@ -1135,38 +1292,45 @@ export default function ProjectDetailPage() {
             </div>
 
             
-            {/* String Variable Creation Section */}
-            <div className="border-t pt-4">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="createStringVariable"
-                  checked={createStringVariable}
-                  onChange={(e) => setCreateStringVariable(e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <Label htmlFor="createStringVariable" className="text-sm font-medium">
-                  Create a variable to reference this string
-                </Label>
-              </div>
-              {createStringVariable && (
-                <div className="mt-3">
-                  <Label htmlFor="stringVariableName" className="block text-sm font-medium mb-1">
-                    Variable Name
-                  </Label>
-                  <Input
-                    id="stringVariableName"
-                    value={stringVariableName}
-                    onChange={(e) => setStringVariableName(e.target.value)}
-                    placeholder="Enter variable name (e.g., 'greeting', 'footer')"
-                    required={createStringVariable}
+            {/* Convert to String Variable Section - Only in Edit Mode */}
+            {editingString && (
+              <div className="border-t pt-4">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="convertToStringVariable"
+                    checked={createStringVariable}
+                    onChange={(e) => setCreateStringVariable(e.target.checked)}
+                    className="rounded border-gray-300"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    This will be used as {`{{${stringVariableName || 'variableName'}}}`} in other strings.
-                  </p>
+                  <Label htmlFor="convertToStringVariable" className="text-sm font-medium">
+                    Convert this string to a string variable
+                  </Label>
                 </div>
-              )}
-            </div>
+                {createStringVariable && (
+                  <div className="mt-3">
+                    <Label htmlFor="stringVariableName" className="block text-sm font-medium mb-1">
+                      Variable Name
+                    </Label>
+                    <Input
+                      id="stringVariableName"
+                      value={stringVariableName}
+                      onChange={(e) => setStringVariableName(e.target.value)}
+                      placeholder="Enter variable name (e.g., 'greeting', 'footer')"
+                      required={createStringVariable}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      This will be used as {`{{${stringVariableName || 'variableName'}}}`} in other strings.
+                    </p>
+                    <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-md">
+                      <p className="text-xs text-yellow-800">
+                        <strong>Note:</strong> Converting will remove this string from the strings list and create a new string variable. This action cannot be undone.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             
             <div className="flex justify-end gap-2 mt-6">
               <Button type="button" variant="secondary" onClick={closeStringDialog}>
@@ -1212,60 +1376,143 @@ export default function ProjectDetailPage() {
               <p className="text-xs text-muted-foreground mt-1">
                 {variableType === 'trait' 
                   ? 'Different values for each trait (default)'
-                  : 'References another string in this project'
+                  : 'Contains its own string content with variables'
                 }
               </p>
             </div>
             
-            <div>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="isConditional"
-                  checked={isConditional}
-                  onChange={(e) => setIsConditional(e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <Label htmlFor="isConditional" className="text-sm font-medium">
-                  Make this a conditional variable
-                </Label>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Conditional variables can be toggled on/off when viewing strings
-              </p>
-            </div>
-            
             {variableType === 'string' && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="font-medium">Referenced String (Optional)</label>
-                  {referencedStringId && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setReferencedStringId("")}
-                      className="text-xs"
-                    >
-                      Clear
-                    </Button>
-                  )}
+              <div className="space-y-4">
+                <div>
+                  <label className="block mb-2 font-medium">Content</label>
+                  <Textarea
+                    ref={setVariableTextareaRef}
+                    value={variableContent}
+                    onChange={(e) => setVariableContent(e.target.value)}
+                    placeholder="Enter string variable content. Click variables below to insert them."
+                    rows={4}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Click variable badges below to insert them.
+                  </p>
                 </div>
-                <Select value={referencedStringId || undefined} onValueChange={(value) => setReferencedStringId(value || "")}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a string to reference..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {project.strings?.map((str: any) => (
-                      <SelectItem key={str.id} value={str.id.toString()}>
-                        {str.content.length > 50 ? `${str.content.substring(0, 50)}...` : str.content}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground mt-1">
-                  The variable will show the content of this string when rendered.
-                </p>
+                
+                <div>
+                  <h3 className="font-medium mb-2">Variables</h3>
+                  {(() => {
+                    // Detect variables from current variable content
+                    const variableMatches = variableContent.match(/{{([^}]+)}}/g) || [];
+                    const variableNames = variableMatches.map(match => match.slice(2, -2));
+                    const uniqueVariableNames = [...new Set(variableNames)];
+                    
+                    // Split into existing and new variables
+                    const existingVariables = project.variables.filter((variable: any) => 
+                      uniqueVariableNames.includes(variable.name)
+                    );
+                    const existingVariableNames = existingVariables.map((v: any) => v.name);
+                    const newVariableNames = uniqueVariableNames.filter(name => 
+                      !existingVariableNames.includes(name) && name.trim() !== ''
+                    );
+                    
+                    // Show new variables section if there are any
+                    const hasNewVariables = newVariableNames.length > 0;
+                    const hasExistingVariables = project.variables.length > 0;
+                    
+                    return (
+                      <div className="space-y-3">
+                        {hasNewVariables && (
+                          <div>
+                            <h4 className="text-sm font-medium text-blue-600 mb-2">New variables</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {newVariableNames.map((variableName: string) => (
+                                <Badge
+                                  key={variableName}
+                                  variant="outline"
+                                  className="cursor-pointer hover:bg-muted border-blue-200 bg-blue-50 text-blue-700"
+                                  onClick={() => {
+                                    if (!variableTextareaRef) return;
+                                    
+                                    const cursorPosition = variableTextareaRef.selectionStart;
+                                    const variableText = `{{${variableName}}}`;
+                                    const newContent = 
+                                      variableContent.substring(0, cursorPosition) + 
+                                      variableText + 
+                                      variableContent.substring(cursorPosition);
+                                    
+                                    setVariableContent(newContent);
+                                    
+                                    // Focus back to textarea and set cursor after inserted variable
+                                    setTimeout(() => {
+                                      if (variableTextareaRef) {
+                                        variableTextareaRef.focus();
+                                        variableTextareaRef.setSelectionRange(
+                                          cursorPosition + variableText.length,
+                                          cursorPosition + variableText.length
+                                        );
+                                      }
+                                    }, 0);
+                                  }}
+                                >
+                                  {variableName}
+                                </Badge>
+                              ))}
+                            </div>
+                            <p className="text-xs text-blue-600 mt-1">
+                              These variables will be created when you save this variable.
+                            </p>
+                          </div>
+                        )}
+                        
+                        {hasExistingVariables && (
+                          <div>
+                            {hasNewVariables && (
+                              <h4 className="text-sm font-medium text-muted-foreground mb-2">Existing variables</h4>
+                            )}
+                            <div className="flex flex-wrap gap-2">
+                              {project.variables.map((variable: any) => (
+                                <Badge
+                                  key={variable.id}
+                                  variant="outline"
+                                  className="cursor-pointer hover:bg-muted"
+                                  onClick={() => {
+                                    if (!variableTextareaRef) return;
+                                    
+                                    const cursorPosition = variableTextareaRef.selectionStart;
+                                    const variableText = `{{${variable.name}}}`;
+                                    const newContent = 
+                                      variableContent.substring(0, cursorPosition) + 
+                                      variableText + 
+                                      variableContent.substring(cursorPosition);
+                                    
+                                    setVariableContent(newContent);
+                                    
+                                    // Focus back to textarea and set cursor after inserted variable
+                                    setTimeout(() => {
+                                      if (variableTextareaRef) {
+                                        variableTextareaRef.focus();
+                                        variableTextareaRef.setSelectionRange(
+                                          cursorPosition + variableText.length,
+                                          cursorPosition + variableText.length
+                                        );
+                                      }
+                                    }, 0);
+                                  }}
+                                >
+                                  {variable.name}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {!hasExistingVariables && !hasNewVariables && (
+                          <p className="text-sm text-muted-foreground">No variables available. Create some in the sidebar.</p>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             )}
             
@@ -1296,13 +1543,46 @@ export default function ProjectDetailPage() {
               </div>
             )}
 
-            <div className="flex justify-end gap-2 mt-6">
-              <Button type="button" variant="secondary" onClick={closeVariableDialog}>
-                Cancel
-              </Button>
-                             <Button type="submit" disabled={!variableName.trim()}>
-                 {editingVariable ? "Update" : "Create"} Variable
-               </Button>
+            {/* Conditional Variable Option - at the end */}
+            <div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="isConditional"
+                  checked={isConditional}
+                  onChange={(e) => setIsConditional(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="isConditional" className="text-sm font-medium">
+                  Make this a conditional variable
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Conditional variables can be toggled on/off when viewing strings
+              </p>
+            </div>
+
+            <div className="flex justify-between items-center mt-6">
+              {editingVariable ? (
+                <Button 
+                  type="button" 
+                  variant="destructive" 
+                  onClick={handleDeleteVariable}
+                  className="mr-auto"
+                >
+                  Delete Variable
+                </Button>
+              ) : (
+                <div />
+              )}
+              <div className="flex gap-2">
+                <Button type="button" variant="secondary" onClick={closeVariableDialog}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={!variableName.trim()}>
+                  {editingVariable ? "Update" : "Create"} Variable
+                </Button>
+              </div>
             </div>
           </form>
         </DialogContent>
@@ -1326,14 +1606,14 @@ export default function ProjectDetailPage() {
               </p>
             </div>
             
-            {project.variables && project.variables.length > 0 && (
+            {project.variables && project.variables.filter((variable: any) => variable.variable_type === 'trait').length > 0 && (
               <div>
                 <h3 className="font-medium mb-2">Variable Values for This Trait</h3>
                 <p className="text-xs text-muted-foreground mb-3">
                   Optional: Set how each variable should appear when this trait is selected.
                 </p>
                 <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {project.variables.map((variable: any) => (
+                  {project.variables.filter((variable: any) => variable.variable_type === 'trait').map((variable: any) => (
                     <div key={variable.id} className="flex items-center gap-3">
                       <label className="text-sm font-medium min-w-0 flex-1 truncate">
                         {variable.name}:
@@ -1380,6 +1660,77 @@ export default function ProjectDetailPage() {
               <Button type="submit">Create</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete String Confirmation Dialog */}
+      <Dialog open={!!deleteStringDialog} onOpenChange={v => !v && closeDeleteStringDialog()}>
+        <DialogContent className="max-w-md">
+          <DialogTitle>Delete String</DialogTitle>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to delete this string?
+            </p>
+            {deleteStringDialog && (
+              <div className="p-3 bg-muted rounded-md">
+                <p className="text-sm font-medium">String to delete:</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {deleteStringDialog.content.length > 100 
+                    ? `${deleteStringDialog.content.substring(0, 100)}...` 
+                    : deleteStringDialog.content
+                  }
+                </p>
+              </div>
+            )}
+            
+            {deleteStringDialog && (() => {
+              const referencingVariables = project.variables.filter((variable: any) => 
+                variable.variable_type === 'string' && 
+                variable.referenced_string && 
+                variable.referenced_string.toString() === deleteStringDialog.id.toString()
+              );
+              
+              if (referencingVariables.length > 0) {
+                return (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                    <p className="text-sm text-red-800">
+                      <strong>Cannot delete:</strong> This string is referenced by the following string variable{referencingVariables.length > 1 ? 's' : ''}:
+                    </p>
+                    <ul className="mt-2 text-sm text-red-700">
+                      {referencingVariables.map((variable: any) => (
+                        <li key={variable.id} className="ml-4">• {variable.name}</li>
+                      ))}
+                    </ul>
+                    <p className="text-sm text-red-800 mt-2">
+                      Please update or delete the variable{referencingVariables.length > 1 ? 's' : ''} first.
+                    </p>
+                  </div>
+                );
+              } else {
+                return (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <p className="text-sm text-blue-800">
+                      <strong>Note:</strong> Deleting this string will not affect any existing variables. 
+                      No string variables currently reference this string.
+                    </p>
+                  </div>
+                );
+              }
+            })()}
+            <div className="flex justify-end gap-2 mt-6">
+              <Button type="button" variant="secondary" onClick={closeDeleteStringDialog}>
+                Cancel
+              </Button>
+              <Button 
+                type="button" 
+                variant="destructive" 
+                onClick={handleDeleteString}
+                disabled={deleteStringDialog && checkStringUsage(deleteStringDialog.id)}
+              >
+                Delete String
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

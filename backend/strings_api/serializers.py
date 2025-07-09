@@ -11,7 +11,7 @@ class VariableSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Variable
-        fields = ['id', 'name', 'variable_type', 'referenced_string', 'is_conditional', 'values', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'variable_type', 'referenced_string', 'content', 'is_conditional', 'values', 'created_at', 'updated_at']
 
 class TraitSerializer(serializers.ModelSerializer):
     variable_values = VariableValueSerializer(many=True, read_only=True)

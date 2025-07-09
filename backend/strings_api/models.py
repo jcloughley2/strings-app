@@ -30,6 +30,7 @@ class Variable(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='variables')
     variable_type = models.CharField(max_length=10, choices=VARIABLE_TYPE_CHOICES, default='trait')
     referenced_string = models.ForeignKey('String', on_delete=models.CASCADE, null=True, blank=True, related_name='referenced_by_variables')
+    content = models.TextField(blank=True, null=True)  # For string variables that have their own content
     is_conditional = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

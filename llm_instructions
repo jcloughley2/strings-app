@@ -34,7 +34,7 @@ The Strings application allows users to create and manage dynamic text content t
 - **Trait System**: Define contexts like "Good" and "Evil" that determine how trait variables are rendered
 - **Conditional Variables**: Variables that can be toggled on/off to show/hide content dynamically
 - **Dimension System**: Categorize strings with multiple values per dimension for organization and filtering
-- **Export Functionality**: Download CSV files with strings rendered for all trait/conditional combinations
+- **Export Functionality**: Download filtered CSV files containing only strings that match current filter state
 
 ### Example Use Case
 A project with string "The {{animal}} is {{color}}" and traits "Good"/"Evil":
@@ -140,7 +140,7 @@ A project with string "The {{animal}} is {{color}}" and traits "Good"/"Evil":
 - `GET /api/projects/{id}/` - Get project details (includes all related data)
 - `PATCH /api/projects/{id}/` - Update project
 - `DELETE /api/projects/{id}/` - Delete project
-- `GET /api/projects/{id}/download-csv/` - Download project as CSV
+- `POST /api/projects/{id}/download-csv/` - Download filtered CSV with current filter parameters
 
 ### Traits
 - `GET /api/projects/{project_id}/traits/` - List project traits
@@ -204,7 +204,8 @@ The application uses a sophisticated three-panel layout system optimized for con
 - **App Header**: Full-width header with app name "Strings" and user authentication controls
 - **Project Header**: Full-width header beneath global navigation containing:
   - Project name (left side) with proper typography hierarchy
-  - Action buttons (right side): "Manage Variables", "Edit Project", and overflow menu with "Delete Project"
+  - Action buttons (right side): "Download CSV", "Manage Variables", "Edit Project", and overflow menu with "Delete Project"
+  - The "Download CSV" button opens a confirmation dialog for filtered export
   - The "Manage Variables" button toggles the collapsible variables sidebar
 
 ### Left Panel: Filter Sidebar
@@ -410,6 +411,138 @@ The system uses sophisticated key generation to avoid React conflicts:
 - **No Matches**: "No strings match the current filters" when filters eliminate all results
 - **Smart Messaging**: Contextual messages based on filter state
 
+## CSV Export System
+
+The application provides a sophisticated filtered CSV export system that allows users to download only the strings that match their current filter state, rather than generating massive files with every possible combination.
+
+### Export Functionality Overview
+
+#### Filtered Export Approach
+- **User-Controlled**: Only exports strings matching current UI filter state
+- **Manageable Files**: Avoids massive exports by respecting active filters
+- **Transparent Process**: Users see exactly what will be exported before confirming
+- **Smart Processing**: Strings are rendered with the current trait/conditional selection
+
+#### Export Button Location
+- **Position**: Located in project header, positioned before "Manage Variables" button
+- **Icon**: Download icon from Lucide React
+- **Behavior**: Opens confirmation dialog showing current filter state and string count
+
+### Export Dialog System
+
+#### Confirmation Dialog Features
+- **Clear Communication**: Explains that export will contain only filtered strings
+- **Current Filter Display**: Shows active dimension filters, trait selection, and conditional variables
+- **String Count**: Displays exact number of strings to be exported
+- **Smart Messaging**: Context-aware descriptions based on filter state
+- **Cancel/Confirm**: Clear action buttons with loading states
+
+#### Filter State Transparency
+The dialog displays current filter state including:
+- **Selected Trait**: Shows which trait is selected or "Blank (Variables)" mode
+- **Dimension Filters**: Lists active dimension filters (e.g., "Type: Email, Platform: Web")
+- **Conditional Variables**: Shows which conditional variables are enabled
+- **Unfiltered State**: Clear messaging when no filters are active
+
+#### User Experience Features
+- **Loading States**: Button shows "Downloading..." during export process
+- **Error Handling**: Proper error messages and toast notifications
+- **File Naming**: Automatic filename format: `{ProjectName}_filtered_strings.csv`
+- **Browser Download**: Standard browser download with proper headers
+
+### Backend Export Processing
+
+#### API Endpoint
+- **Method**: `POST /api/projects/{id}/download-csv/`
+- **Authentication**: Requires user authentication and project access
+- **Parameters**: Accepts current filter state from frontend
+
+#### Filter Parameters Accepted
+```
+{
+  "trait_id": number|null,  // Selected trait ID or null for blank
+  "selected_conditional_variables": number[],  // Array of conditional variable IDs
+  "selected_dimension_values": number[]  // Array of selected dimension value IDs
+}
+```
+
+#### String Processing Logic
+The backend mirrors the frontend rendering logic exactly:
+
+1. **Conditional Variable Processing**:
+   - Variables not in `selected_conditional_variables` are completely removed from content
+   - Selected conditional variables are processed normally
+
+2. **Trait Variable Processing**:
+   - If trait_id is provided: Show trait-specific values from VariableValue
+   - If trait_id is null: Show variable names in {{variable}} format
+   - If no value exists for trait: Show {{variable}} format
+
+3. **String Variable Processing**:
+   - Always expand string variables to their referenced content
+   - Recursive processing for nested string variables
+
+4. **Dimension Filtering**:
+   - Only include strings that have ALL selected dimension values
+   - Uses AND logic across all dimension filters
+   - Strings without dimension assignments are excluded when filters are active
+
+#### CSV Output Format
+```
+String ID,Original Content,Processed Content,Created At
+1,"Hello {{name}}","Hello John","2024-01-01 12:00:00"
+2,"The {{animal}} is {{color}}","The dog is blue","2024-01-01 12:05:00"
+```
+
+- **String ID**: Unique identifier for the string
+- **Original Content**: Raw string content with variable placeholders
+- **Processed Content**: String rendered with current filter state
+- **Created At**: Timestamp when string was created
+
+#### Technical Implementation
+- **HTTP Response**: Proper CSV content-type headers
+- **File Download**: Browser-compatible attachment headers
+- **CSRF Protection**: Proper CSRF token handling in POST request
+- **Error Handling**: Appropriate HTTP status codes and error messages
+
+### Integration with Frontend State
+
+#### Filter State Synchronization
+- **Real-time Updates**: Export reflects current UI filter state
+- **State Capture**: All filter values captured at time of export request
+- **Consistency**: Backend processing matches frontend rendering exactly
+
+#### Authentication Handling
+- **Session Cookies**: Uses Django session authentication
+- **CSRF Tokens**: Proper CSRF token transmission in POST headers
+- **Permission Checks**: Verifies user access to project before export
+
+#### Error Scenarios
+- **Network Errors**: Proper error handling with user feedback
+- **Authentication Issues**: Clear messaging for auth failures
+- **Server Errors**: Graceful handling of backend processing failures
+- **Empty Results**: Informative messaging when no strings match filters
+
+### Use Cases and Benefits
+
+#### Practical Export Scenarios
+1. **Dimension-Specific Export**: Export only strings for specific platforms or types
+2. **Trait-Specific Export**: Export strings rendered for specific trait context
+3. **Conditional Content Export**: Export with specific conditional variables enabled
+4. **Combined Filtering**: Multiple filter types for precise content selection
+
+#### User Benefits
+- **Relevant Content**: Only export needed strings, not every permutation
+- **Manageable Files**: Avoid overwhelming CSV files with thousands of combinations
+- **Predictable Output**: See exactly what will be exported before confirming
+- **Flexible Filtering**: Use existing UI filters to control export scope
+
+#### Technical Benefits
+- **Performance**: Reduced server processing and file sizes
+- **Scalability**: System remains usable even with large projects
+- **Maintainability**: Single rendering logic shared between UI and export
+- **User Experience**: Fast downloads with immediate feedback
+
 ## Form System and Data Management
 
 ### Variable Creation Workflows
@@ -473,6 +606,7 @@ The system uses sophisticated key generation to avoid React conflicts:
 - Follow RESTful conventions for endpoint design
 - Use PATCH for updates, POST for creation, DELETE for removal
 - **Always refresh project data** after creating variables or strings to get updated relationships
+- **CSV Export**: Use POST method with filter parameters, include CSRF tokens for authentication
 
 ### Form Handling Patterns
 - Pre-populate edit forms with existing data
@@ -563,7 +697,7 @@ npm run dev  # Runs on port 3000 (or next available port like 3001/3002)
 #### Advanced Features
 - ✅ **Multi-Select Dimension Values**: Multiple values per dimension per string
 - ✅ **Dimension Value Validation**: Prevents duplicates with real-time feedback
-- ✅ **CSV Export**: Comprehensive export with all trait/conditional combinations
+- ✅ **Filtered CSV Export**: Smart export system with current filter state transparency
 - ✅ **Dialog Height Management**: Proper viewport handling with scroll behavior
 - ✅ **Responsive Design**: Works across different screen sizes and devices
 - ✅ **Professional Styling**: ShadCN components with custom enhancements
@@ -621,6 +755,14 @@ npm run dev  # Runs on port 3000 (or next available port like 3001/3002)
 2. **Validation**: Required fields and duplicate prevention
 3. **Real-time Updates**: UI reflects changes immediately
 4. **Error Handling**: Proper feedback for failed operations
+
+#### CSV Export Testing
+1. **Filter State Accuracy**: Verify export matches current UI filter state exactly
+2. **Dialog Functionality**: Test confirmation dialog with different filter combinations
+3. **File Download**: Verify proper CSV format and filename generation
+4. **Authentication**: Test export with proper session authentication
+5. **Error Handling**: Test network failures and invalid filter states
+6. **String Processing**: Verify conditional/trait/string variable processing matches UI rendering
 
 ### Browser Compatibility
 - **Modern Browsers**: Chrome, Firefox, Safari, Edge support

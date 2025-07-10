@@ -11,7 +11,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectSe
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Edit2, Trash2, Type, Bookmark, Spool, Signpost, Plus, X, Globe, SwatchBook, MoreHorizontal } from "lucide-react";
+import { Edit2, Trash2, Type, Bookmark, Spool, Signpost, Plus, X, Globe, SwatchBook, MoreHorizontal, Download } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -78,6 +78,10 @@ export default function ProjectDetailPage() {
   const [dimensionValues, setDimensionValues] = useState<string[]>([]);
   const [newDimensionValue, setNewDimensionValue] = useState("");
   const [editingDimension, setEditingDimension] = useState<any>(null);
+
+  // Download dialog state
+  const [downloadDialog, setDownloadDialog] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -1342,6 +1346,53 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleDownloadCSV = async () => {
+    setDownloadLoading(true);
+    try {
+      const response = await fetch(`http://localhost:8000/api/projects/${project.id}/download-csv/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': document.cookie.split('; ')
+            .find(row => row.startsWith('csrftoken='))
+            ?.split('=')[1] || '',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          trait_id: traitId,
+          selected_conditional_variables: selectedConditionalVariables,
+          selected_dimension_values: selectedDimensionValues,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download CSV');
+      }
+
+      // Get the filename from the response headers
+      const disposition = response.headers.get('Content-Disposition');
+      const filename = disposition?.match(/filename="([^"]+)"/)?.[1] || `${project.name}_filtered_strings.csv`;
+      
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast.success('CSV downloaded successfully');
+      setDownloadDialog(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to download CSV');
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
+
   const filterStringsByDimensions = (strings: any[]) => {
     const selectedDimensions = Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null);
     
@@ -1396,6 +1447,14 @@ export default function ProjectDetailPage() {
       <div className="flex items-center justify-between px-6 py-4 bg-background border-b">
         <h1 className="text-xl font-semibold flex-1 truncate">{project.name}</h1>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDownloadDialog(true)}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Download CSV
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -1951,6 +2010,88 @@ export default function ProjectDetailPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Download CSV Confirmation Dialog */}
+      <Dialog open={downloadDialog} onOpenChange={setDownloadDialog}>
+        <DialogContent>
+          <DialogTitle>Download Filtered CSV</DialogTitle>
+          <div className="space-y-4">
+            <p>This will download a CSV file containing all strings that match your current filters.</p>
+            
+            {/* Show current filter state */}
+            <div className="bg-muted/50 p-4 rounded-lg space-y-3">
+              <h4 className="font-medium text-sm">Current Filters:</h4>
+              
+              {/* Trait filter */}
+              <div className="text-sm">
+                <span className="font-medium">Trait: </span>
+                <span className="text-muted-foreground">
+                  {traitId === "blank" ? "Blank (Variables)" : 
+                   project.traits.find((t: any) => t.id.toString() === traitId)?.name || "None"}
+                </span>
+              </div>
+              
+              {/* Dimension filters */}
+              {Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null).length > 0 && (
+                <div className="text-sm">
+                  <span className="font-medium">Dimensions: </span>
+                  <div className="ml-2 space-y-1">
+                    {Object.entries(selectedDimensionValues)
+                      .filter(([_, value]) => value !== null)
+                      .map(([dimensionId, value]) => {
+                        const dimension = project.dimensions.find((d: any) => d.id.toString() === dimensionId);
+                        return (
+                          <div key={dimensionId} className="text-muted-foreground">
+                            {dimension?.name}: {value}
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+              
+              {/* Conditional filters */}
+              {selectedConditionalVariables.length > 0 && (
+                <div className="text-sm">
+                  <span className="font-medium">Conditionals: </span>
+                  <span className="text-muted-foreground">
+                    {selectedConditionalVariables.map(varId => {
+                      const variable = project.variables.find((v: any) => v.id.toString() === varId);
+                      return variable?.name;
+                    }).join(', ')}
+                  </span>
+                </div>
+              )}
+              
+              {/* Show filtered count */}
+              <div className="text-sm">
+                <span className="font-medium">Strings to export: </span>
+                <span className="text-muted-foreground">{filteredStrings.length}</span>
+              </div>
+              
+              {/* Show message if no filters */}
+              {Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null).length === 0 &&
+               selectedConditionalVariables.length === 0 && (
+                <div className="text-sm text-muted-foreground">
+                  No dimension or conditional filters applied. All {project.strings.length} strings will be exported.
+                </div>
+              )}
+            </div>
+            
+            <div className="flex gap-2 justify-end">
+              <Button variant="ghost" onClick={() => setDownloadDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleDownloadCSV}
+                disabled={downloadLoading}
+              >
+                {downloadLoading ? 'Downloading...' : 'Download CSV'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

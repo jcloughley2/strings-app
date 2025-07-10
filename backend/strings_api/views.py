@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from rest_framework import viewsets, permissions, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.models import User
@@ -25,6 +25,10 @@ from .serializers import (
 )
 from rest_framework import serializers
 import logging
+import csv
+import io
+from django.http import HttpResponse
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +189,164 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=['post'], url_path='download-csv')
+    def download_csv(self, request, pk=None):
+        """
+        Download CSV for filtered strings based on current filter state.
+        Accepts filter parameters to determine which strings to include.
+        """
+        project = self.get_object()
+        
+        # Get filter parameters from request
+        trait_id = request.data.get('trait_id', 'blank')
+        selected_conditional_variables = request.data.get('selected_conditional_variables', [])
+        selected_dimension_values = request.data.get('selected_dimension_values', {})
+        
+        # Get all strings for the project
+        strings = project.strings.all()
+        
+        # Apply dimension filtering (same logic as frontend)
+        if selected_dimension_values:
+            filtered_strings = []
+            for string in strings:
+                # Check if string has dimension values
+                if not string.dimension_values.exists():
+                    continue  # String has no dimension values, skip it
+                
+                # Check if string matches ALL selected dimension filters
+                matches_all_filters = True
+                for dimension_id_str, selected_value in selected_dimension_values.items():
+                    if selected_value is None:
+                        continue
+                    
+                    dimension_id = int(dimension_id_str)
+                    string_has_matching_value = string.dimension_values.filter(
+                        dimension_value__dimension_id=dimension_id,
+                        dimension_value__value=selected_value
+                    ).exists()
+                    
+                    if not string_has_matching_value:
+                        matches_all_filters = False
+                        break
+                
+                if matches_all_filters:
+                    filtered_strings.append(string)
+            
+            strings = filtered_strings
+        
+        # Process strings with current filters
+        processed_strings = []
+        for string in strings:
+            processed_content = self._process_string_content(
+                string.content, 
+                project, 
+                trait_id, 
+                selected_conditional_variables
+            )
+            processed_strings.append({
+                'id': string.id,
+                'original_content': string.content,
+                'processed_content': processed_content,
+                'created_at': string.created_at
+            })
+        
+        # Generate CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write headers
+        headers = ['String ID', 'Original Content', 'Processed Content', 'Created At']
+        writer.writerow(headers)
+        
+        # Write data rows
+        for string_data in processed_strings:
+            writer.writerow([
+                string_data['id'],
+                string_data['original_content'],
+                string_data['processed_content'],
+                string_data['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            ])
+        
+        # Create HTTP response
+        response = HttpResponse(output.getvalue(), content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="{project.name}_filtered_strings.csv"'
+        
+        return response
+    
+    def _process_string_content(self, content, project, trait_id, selected_conditional_variables):
+        """
+        Process string content based on trait and conditional selections.
+        Mirrors the frontend string processing logic.
+        """
+        # First, process conditional variables - remove unselected conditionals
+        processed_content = self._process_conditional_variables(content, project, selected_conditional_variables)
+        
+        # Then process trait and string variables
+        variable_pattern = re.compile(r'{{([^}]+)}}')
+        variables_in_content = variable_pattern.findall(processed_content)
+        
+        for variable_name in variables_in_content:
+            try:
+                variable = project.variables.get(name=variable_name)
+                replacement_value = self._get_variable_replacement(variable, trait_id, project)
+                
+                if replacement_value is not None:
+                    processed_content = processed_content.replace(f'{{{{{variable_name}}}}}', replacement_value)
+                
+            except Variable.DoesNotExist:
+                # Variable not found, leave as is
+                continue
+        
+        return processed_content
+    
+    def _process_conditional_variables(self, content, project, selected_conditional_variables):
+        """
+        Remove conditional variables that are not selected.
+        """
+        variable_pattern = re.compile(r'{{([^}]+)}}')
+        variables_in_content = variable_pattern.findall(content)
+        processed_content = content
+        
+        for variable_name in variables_in_content:
+            try:
+                variable = project.variables.get(name=variable_name)
+                if variable.is_conditional and str(variable.id) not in selected_conditional_variables:
+                    # Remove this conditional variable from content
+                    processed_content = processed_content.replace(f'{{{{{variable_name}}}}}', '')
+                    
+            except Variable.DoesNotExist:
+                continue
+        
+        return processed_content
+    
+    def _get_variable_replacement(self, variable, trait_id, project):
+        """
+        Get the replacement value for a variable based on trait selection.
+        """
+        if variable.variable_type == 'string':
+            # For string variables, get the referenced string content
+            if variable.referenced_string:
+                return variable.referenced_string.content
+            elif variable.content:
+                return variable.content
+            else:
+                return f'{{{{{variable.name}}}}}'  # Return original if no content
+        
+        elif variable.variable_type == 'trait':
+            if trait_id == 'blank':
+                # When blank trait is selected, show variable name
+                return f'{{{{{variable.name}}}}}'
+            else:
+                # Get value for specific trait
+                try:
+                    trait = project.traits.get(id=trait_id)
+                    variable_value = variable.values.get(trait=trait)
+                    return variable_value.value
+                except (Trait.DoesNotExist, VariableValue.DoesNotExist):
+                    return f'{{{{{variable.name}}}}}'  # Return original if no value
+        
+        return f'{{{{{variable.name}}}}}'  # Default fallback
 
 class StringViewSet(viewsets.ModelViewSet):
     serializer_class = StringSerializer

@@ -25,9 +25,40 @@ This application is called 'Strings'. It allows users to define text strings tha
     
     In a project detail page:
     
-    - The main content of the page should be all the strings in the project, listed out.
-    - In a tabbed sidebar to the right of the page, In tab 1 (Variables) the user can see, edit and delete their variables as well as create new ones. In tab 2 (Traits) the user can see, edit and delete their traits as well as create new ones. In tab 3 (Dimensions) the user can see, edit and delete their dimensions as well as create new ones.
-    - In a project, when a user goes to create or edit a string, trait, variable, or dimension - doing so should open up these flows in a dialog box that can then be saved and the page be updated with the change.
+    - **Three-Panel Layout Structure**:
+      - **Left Panel (Filter Sidebar)**: Fixed 264px wide sidebar containing filtering controls
+      - **Center Panel (Main Canvas)**: Flexible width area displaying project strings and main content
+      - **Right Panel (Variables Sidebar)**: Collapsible 288px wide sidebar for variable management
+    
+    - **Project Header**: Full-width header beneath global navigation containing:
+      - Project name (left side)
+      - Action buttons (right side): "Manage Variables", "Edit Project", and overflow menu with "Delete Project"
+      - The "Manage Variables" button toggles the collapsible variables sidebar
+    
+    - **Filter Sidebar (Left Panel)**: Dedicated filtering controls including:
+      - **Dimensions Section**: Filtering by dimension values with single selection per dimension and clear functionality
+      - **Traits Section**: Radio button selection for trait contexts (including "Blank (Variables)" option)
+      - **Conditionals Section**: Checkbox selection for conditional variables (multiple selection supported)
+    
+    - **Main Canvas (Center Panel)**: Primary content area featuring:
+      - **Canvas Header**: Contains "Project Strings" title and display mode toggles
+      - **Display Mode Controls**: Three toggle buttons for String Variables (green), Highlight (yellow), and Dimensions (blue)
+      - **String List**: Filtered and rendered strings based on current filter and display settings
+      - **Action Button**: "+ New String" button for creating new strings
+    
+    - **Variables Sidebar (Right Panel)**: Collapsible management panel containing:
+      - **Variables Tab Only**: Simplified to focus solely on variable management (Traits and Dimensions removed)
+      - **Variable List**: All project variables with type indicators (String Ref and Conditional icons)
+      - **Create Button**: "+ New Variable" button at the bottom
+      - **Close Control**: X button in header to collapse the sidebar
+      - **Push Behavior**: When open, pushes main canvas content (does not overlay)
+    
+    - **Dialog System**: All create/edit operations use modal dialogs:
+      - String creation/editing with variable detection and dimension assignment
+      - Variable creation with type selection (trait vs string) and conditional options
+      - Trait creation/editing with variable value management
+      - Dimension creation/editing with predefined values management
+      - Project editing and deletion confirmations
     
     **Primary Technologies to be used**
     
@@ -222,20 +253,30 @@ This application is called 'Strings'. It allows users to define text strings tha
 The left sidebar provides comprehensive filtering controls for the main canvas:
 
 1. **Dimension Filters**: Each dimension has its own section
-   - Section header shows dimension name
+   - Section header shows dimension name with globe icon and edit button on hover
    - Clickable badges for each dimension value (single selection per dimension)
    - "Clear" button appears when a value is selected
    - Only strings with matching dimension values are shown
+   - Plus icon in section header for creating new dimensions
 
 2. **Trait Filter**: Controls variable rendering mode
-   - All project traits plus "Blank" option as clickable badges
-   - Single selection (radio-like behavior)
-   - Determines how trait variables are rendered in strings
+   - Section header with SwatchBook icon and plus icon for creating new traits
+   - Radio button selection including "Blank (Variables)" as first option
+   - All project traits with edit buttons appearing on hover
+   - Single selection determines how trait variables are rendered in strings
 
 3. **Conditional Filter**: Controls conditional content visibility
-   - Individual checkboxes for each conditional variable
+   - Section header with Signpost icon (only appears if conditional variables exist)
+   - Individual checkboxes for each conditional variable with edit buttons on hover
    - Multiple selection supported
    - Selected conditionals show their content, unselected are hidden
+
+4. **Visual Design**:
+   - Fixed width of 264px with `bg-muted/40` background
+   - Consistent spacing with ml-6 content indentation
+   - Hover interactions with `hover:bg-muted/50` for interactive elements
+   - Semantic icons for each section (Globe, SwatchBook, Signpost)
+   - Edit buttons appear on hover with smooth opacity transitions
 
 ### Main UI Controls (Project Detail Page Header)
 The project detail page header contains display mode controls:
@@ -461,6 +502,26 @@ The string rendering system uses a sophisticated key generation system to avoid 
 - **Smart Empty States**: Shows appropriate messages for no strings vs no matches
 - **Filter Logic**: AND operation across dimensions, strings without dimension values hidden when filters active
 
+#### Project Header and Layout Restructure
+- **Dedicated Project Header**: Full-width header beneath global navigation with project name and actions
+- **Centralized Project Actions**: "Manage Variables", "Edit Project", and overflow menu with "Delete Project"
+- **Overflow Menu Integration**: ShadCN DropdownMenu component with proper action handling
+- **Three-Panel Layout**: Organized layout with filter sidebar (left), main canvas (center), and collapsible variables sidebar (right)
+- **Variables Sidebar Reorganization**: 
+  - Removed multi-tab system (Traits, Dimensions tabs eliminated)
+  - Focused exclusively on Variables management
+  - Collapsible drawer that pushes main content (not overlay)
+  - Closed by default, toggled via "Manage Variables" button in project header
+- **Streamlined Canvas Header**: "Project Strings" title with display mode toggles and "+ New String" action
+- **Removed Redundancy**: Eliminated duplicate "Manage Variables" button from filter sidebar footer
+
+#### Enhanced Interactive Design
+- **Semantic Icon System**: Globe (Dimensions), SwatchBook (Traits), Signpost (Conditionals)
+- **Hover Interactions**: Edit buttons appear on hover throughout filter sidebar
+- **Visual Hierarchy**: Proper content indentation (ml-6) and consistent spacing
+- **Professional Layout**: Clear separation of concerns between filtering, content, and management
+- **Accessibility Improvements**: Full-width clickable areas for dimension headers and trait/conditional options
+
 ## Implementation Guidelines for Future Development
 
 ### State Management Patterns
@@ -525,6 +586,17 @@ The string rendering system uses a sophisticated key generation system to avoid 
 - Group related functionality logically
 - **Show variable type badges** for quick identification
 
+### Layout and Sidebar Patterns
+- **Three-Panel Layout**: Filter sidebar (264px) → Main canvas (flexible) → Variables sidebar (288px, collapsible)
+- **Project Header**: Full-width header with project name (left) and actions (right)
+- **Filter Sidebar**: Fixed left panel with semantic icons (Globe, SwatchBook, Signpost) and hover interactions
+- **Variables Sidebar**: Collapsible right panel that pushes content (no overlay), closed by default
+- **Sidebar State Management**: Use boolean `isVariablesSidebarOpen` for variables sidebar visibility
+- **Hover Interactions**: Edit buttons with opacity transitions (opacity-0 to opacity-100 on group-hover)
+- **Content Indentation**: Use ml-6 for content alignment with section headers
+- **Responsive Behavior**: Ensure layout works across different screen sizes
+- **Visual Hierarchy**: Clear separation between filtering, content display, and management functions
+
 ## Development: Activating the Backend Virtual Environment
 
 To activate the Python virtual environment for the backend, use the following command from the project root:
@@ -584,6 +656,12 @@ npm run dev
 - ✅ Three-panel layout with dedicated filter controls
 - ✅ Real-time string filtering with AND logic across dimensions
 - ✅ Streamlined header with focus on display mode toggles
+- ✅ Project header with centralized actions and overflow menu
+- ✅ Collapsible variables sidebar with push behavior
+- ✅ Variables-only management sidebar (traits/dimensions removed)
+- ✅ Enhanced hover interactions and edit functionality throughout filter sidebar
+- ✅ Semantic icon system for filter sections and variable types
+- ✅ Professional three-panel layout with clear separation of concerns
 
 ### Technical Notes
 - **Database migrations applied**: Variable model includes variable_type, referenced_string, is_conditional fields
@@ -644,12 +722,43 @@ npm run dev
   - Test combination filtering (dimension + trait + conditional)
   - Verify empty states show correctly for no strings vs no matches
   - Test filter sidebar responsiveness and layout
+- **Project Header and Layout**:
+  - Test "Manage Variables" button toggles variables sidebar correctly
+  - Verify "Edit Project" opens dialog with pre-filled values
+  - Test overflow menu (DropdownMenu) with "Delete Project" action
+  - Verify project deletion confirmation and redirect to homepage
+  - Test project header responsiveness and action button layout
+  - Verify project name displays correctly and truncates if needed
+- **Variables Sidebar (Collapsible)**:
+  - Test variables sidebar opens/closes via "Manage Variables" button
+  - Verify sidebar pushes main canvas content (no overlay)
+  - Test X close button in variables sidebar header
+  - Verify sidebar is closed by default when entering project page
+  - Test variables list with type indicators (Spool and Signpost icons)
+  - Verify "+ New Variable" button functionality within sidebar
+  - Test sidebar responsiveness and fixed width behavior
+- **Three-Panel Layout Integration**:
+  - Test layout behavior with variables sidebar open/closed
+  - Verify filter sidebar remains fixed width during variables sidebar toggle
+  - Test main canvas content reflow when variables sidebar opens/closes
+  - Verify all three panels work together without layout conflicts
+  - Test responsive behavior on different screen sizes
+- **Filter Sidebar Interactive Elements**:
+  - Test hover interactions for dimension headers with edit buttons
+  - Verify trait radio buttons with hover edit functionality
+  - Test conditional checkboxes with hover edit buttons
+  - Verify plus icons in section headers open appropriate create dialogs
+  - Test semantic icons display correctly (Globe, SwatchBook, Signpost)
+  - Verify content indentation (ml-6) and visual hierarchy
 - **Cross-Feature Integration**:
   - Test strings with both variables and multiple dimension values
   - Verify all toggle combinations work with multi-dimensional strings
   - Test editing strings that have multiple dimension values assigned
   - Test filter sidebar with all toggle combinations
   - Verify filtered strings render correctly in both plaintext and styled modes
+  - Test variables sidebar operations while filters are active
+  - Verify project actions work correctly with active filters
+  - Test dialog operations (create/edit) with three-panel layout
 
 ### Browser Compatibility
 - Ensure compatibility with modern browsers (Chrome, Firefox, Safari, Edge)

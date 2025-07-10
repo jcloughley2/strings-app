@@ -11,18 +11,16 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectSe
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Edit2, Trash2, Highlighter, Bookmark, Spool, Signpost } from "lucide-react";
+import { Edit2, Trash2, Highlighter, Bookmark, Spool, Signpost, Plus, X, Globe, SwatchBook, MoreHorizontal } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-
-const SIDEBAR_TABS = ["Variables", "Traits", "Dimensions"];
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sidebarTab, setSidebarTab] = useState("Variables");
   const [traitId, setTraitId] = useState<string | null>("blank");
   const [selectedConditionalVariables, setSelectedConditionalVariables] = useState<string[]>([]);
   const [isHighlighterMode, setIsHighlighterMode] = useState(false);
@@ -31,6 +29,13 @@ export default function ProjectDetailPage() {
   
   // Filter sidebar state
   const [selectedDimensionValues, setSelectedDimensionValues] = useState<{[dimensionId: number]: string | null}>({});
+  const [isVariablesSidebarOpen, setIsVariablesSidebarOpen] = useState(false);
+  
+  // Project edit/delete state
+  const [editingProject, setEditingProject] = useState<any>(null);
+  const [deleteProjectDialog, setDeleteProjectDialog] = useState(false);
+  const [projectName, setProjectName] = useState("");
+  const [projectDescription, setProjectDescription] = useState("");
   const [createDialog, setCreateDialog] = useState<null | "Variable" | "Trait" | "Conditional" | "String" | "Dimension">(null);
   const [editingString, setEditingString] = useState<any>(null);
   
@@ -1285,6 +1290,53 @@ export default function ProjectDetailPage() {
   };
 
   // Filter strings based on selected dimension values
+  // Project edit/delete handlers
+  const openEditProject = () => {
+    setProjectName(project.name);
+    setProjectDescription(project.description || "");
+    setEditingProject(project);
+  };
+
+  const closeProjectDialog = () => {
+    setEditingProject(null);
+    setProjectName("");
+    setProjectDescription("");
+  };
+
+  const handleProjectSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const updatedProject = await apiFetch(`/api/projects/${id}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: projectName,
+          description: projectDescription,
+        }),
+      });
+      setProject(updatedProject);
+      closeProjectDialog();
+      toast.success('Project updated successfully');
+    } catch (err) {
+      console.error('Failed to update project:', err);
+      toast.error('Failed to update project');
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    try {
+      await apiFetch(`/api/projects/${id}/`, {
+        method: 'DELETE',
+      });
+      toast.success('Project deleted successfully');
+      // Redirect to homepage
+      window.location.href = '/';
+    } catch (err) {
+      console.error('Failed to delete project:', err);
+      toast.error('Failed to delete project');
+    }
+  };
+
   const filterStringsByDimensions = (strings: any[]) => {
     const selectedDimensions = Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null);
     
@@ -1311,39 +1363,111 @@ export default function ProjectDetailPage() {
   // Apply dimension filtering to strings
   const filteredStrings = filterStringsByDimensions(project.strings);
 
-  // Sidebar content
-  let sidebarList = [];
-  if (sidebarTab === "Variables") sidebarList = project.variables;
-  if (sidebarTab === "Traits") sidebarList = project.traits;
-  if (sidebarTab === "Conditionals") sidebarList = project.conditionals;
-  if (sidebarTab === "Dimensions") sidebarList = project.dimensions || [];
-
   return (
-    <div className="flex h-[calc(100vh-64px)]">
-      {/* Filter Sidebar (left) */}
-      <aside className="w-64 border-r bg-muted/40 flex flex-col">
+    <div className="flex flex-col h-[calc(100vh-64px)]">
+      {/* Project Header */}
+      <div className="flex items-center justify-between px-8 py-4 bg-background border-b">
+        <h1 className="text-2xl font-bold flex-1 truncate">{project.name}</h1>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsVariablesSidebarOpen(!isVariablesSidebarOpen)}
+          >
+            Manage Variables
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openEditProject}
+          >
+            Edit Project
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem 
+                onClick={() => setDeleteProjectDialog(true)}
+                className="text-red-600 focus:text-red-600"
+              >
+                Delete Project
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex flex-1">
+        {/* Filter Sidebar (left) */}
+        <aside className="w-64 border-r bg-muted/40 flex flex-col">
         <div className="p-4 border-b">
           <h2 className="font-semibold text-lg">Filters</h2>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {/* Dimension Filters */}
-          {project.dimensions && project.dimensions.length > 0 && project.dimensions.map((dimension: any) => (
+          {/* Dimensions Section */}
+          <div className="space-y-3">
+            <div className="group">
+              <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="font-medium text-sm">Dimensions</h3>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                  onClick={() => openCreateDimension()}
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+            {/* Dimension Filters */}
+            {project.dimensions && project.dimensions.length > 0 ? (
+              <div className="space-y-4 ml-6">
+                {project.dimensions.map((dimension: any) => (
             <div key={dimension.id} className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium text-sm">{dimension.name}</h3>
-                {selectedDimensionValues[dimension.id] && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedDimensionValues(prev => ({
-                      ...prev,
-                      [dimension.id]: null
-                    }))}
-                    className="text-xs h-6 px-2"
-                  >
-                    Clear
-                  </Button>
-                )}
+              <div className="flex items-center justify-between group">
+                <div 
+                  className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1 cursor-pointer"
+                  onClick={() => openEditDimension(dimension)}
+                >
+                  <h3 className="font-medium text-sm">{dimension.name}</h3>
+                  <div className="flex items-center gap-2">
+                    {selectedDimensionValues[dimension.id] && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDimensionValues(prev => ({
+                            ...prev,
+                            [dimension.id]: null
+                          }));
+                        }}
+                        className="text-xs h-6 px-2"
+                      >
+                        Clear
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditDimension(dimension);
+                      }}
+                    >
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 {dimension.values && dimension.values.map((dimensionValue: any) => (
@@ -1361,113 +1485,181 @@ export default function ProjectDetailPage() {
                 ))}
               </div>
             </div>
-          ))}
+                ))}
+              </div>
+                          ) : (
+                <div className="text-muted-foreground text-center text-sm ml-6">
+                  No dimensions found in this project.
+                </div>
+              )}
+          </div>
           
-          {/* Traits Filter */}
+          {/* Traits Section */}
           <div className="space-y-3">
-            <h3 className="font-medium text-sm">Traits</h3>
-            <div className="flex flex-wrap gap-2">
-              <Badge
-                variant={traitId === "blank" ? "default" : "outline"}
-                className="cursor-pointer hover:bg-muted text-xs"
-                onClick={() => setTraitId("blank")}
-              >
-                Blank
-              </Badge>
-              {project.traits.map((trait: any) => (
-                <Badge
-                  key={trait.id}
-                  variant={traitId === trait.id.toString() ? "default" : "outline"}
-                  className="cursor-pointer hover:bg-muted text-xs"
-                  onClick={() => setTraitId(trait.id.toString())}
+            <div className="group">
+              <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
+                <div className="flex items-center gap-2">
+                  <SwatchBook className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="font-medium text-sm">Traits</h3>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                  onClick={() => openCreateTrait()}
                 >
-                  {trait.name}
-                </Badge>
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2 ml-6">
+              <div className="group">
+                <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      id="trait-blank"
+                      name="trait"
+                      checked={traitId === "blank"}
+                      onChange={() => setTraitId("blank")}
+                      className="rounded-full"
+                    />
+                    <Label htmlFor="trait-blank" className="text-sm cursor-pointer">
+                      Blank (Variables)
+                    </Label>
+                  </div>
+                </div>
+              </div>
+              {project.traits.map((trait: any) => (
+                <div key={trait.id} className="group">
+                  <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        id={`trait-${trait.id}`}
+                        name="trait"
+                        checked={traitId === trait.id.toString()}
+                        onChange={() => setTraitId(trait.id.toString())}
+                        className="rounded-full"
+                      />
+                      <Label htmlFor={`trait-${trait.id}`} className="text-sm cursor-pointer">
+                        {trait.name}
+                      </Label>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                      onClick={() => openEditTrait(trait)}
+                    >
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
           
-          {/* Conditionals Filter */}
+          {/* Conditionals Section */}
           {project.variables.filter((variable: any) => variable.is_conditional).length > 0 && (
             <div className="space-y-3">
-              <h3 className="font-medium text-sm">Conditionals</h3>
-              <div className="space-y-2">
+              <div className="group">
+                <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
+                  <div className="flex items-center gap-2">
+                    <Signpost className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="font-medium text-sm">Conditionals</h3>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2 ml-6">
                 {project.variables.filter((variable: any) => variable.is_conditional).map((variable: any) => (
-                  <div key={variable.id} className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id={`conditional-${variable.id}`}
-                      checked={selectedConditionalVariables.includes(variable.id.toString())}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedConditionalVariables(prev => [...prev, variable.id.toString()]);
-                        } else {
-                          setSelectedConditionalVariables(prev => prev.filter(id => id !== variable.id.toString()));
-                        }
-                      }}
-                      className="rounded border-gray-300"
-                    />
-                    <Label htmlFor={`conditional-${variable.id}`} className="text-sm cursor-pointer">
-                      {variable.name}
-                    </Label>
+                  <div key={variable.id} className="group">
+                    <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id={`conditional-${variable.id}`}
+                          checked={selectedConditionalVariables.includes(variable.id.toString())}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedConditionalVariables(prev => [...prev, variable.id.toString()]);
+                            } else {
+                              setSelectedConditionalVariables(prev => prev.filter(id => id !== variable.id.toString()));
+                            }
+                          }}
+                          className="rounded border-gray-300"
+                        />
+                        <Label htmlFor={`conditional-${variable.id}`} className="text-sm cursor-pointer">
+                          {variable.name}
+                        </Label>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                        onClick={() => openEditVariable(variable)}
+                      >
+                        <Edit2 className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
-          )}
+                      )}
         </div>
       </aside>
 
-      {/* Main Canvas */}
-      <main className="flex-1 flex flex-col items-stretch min-w-0">
-        <div className="flex items-center gap-4 border-b px-8 py-4 bg-background">
-          <h1 className="text-2xl font-bold flex-1 truncate">{project.name}</h1>
-          {/* Display Mode Controls */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowStringVariables(!showStringVariables)}
-              className={`flex items-center gap-2 transition-colors ${
-                showStringVariables 
-                  ? 'bg-green-50 border-green-200 text-green-800 hover:bg-green-100' 
-                  : 'hover:bg-muted'
-              }`}
-            >
-              <Spool className="h-4 w-4" />
-              String Variables
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsHighlighterMode(!isHighlighterMode)}
-              className={`flex items-center gap-2 transition-colors ${
-                isHighlighterMode 
-                  ? 'bg-yellow-50 border-yellow-200 text-yellow-800 hover:bg-yellow-100' 
-                  : 'hover:bg-muted'
-              }`}
-            >
-              <Highlighter className="h-4 w-4" />
-              Highlight
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowDimensions(!showDimensions)}
-              className={`flex items-center gap-2 transition-colors ${
-                showDimensions 
-                  ? 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100' 
-                  : 'hover:bg-muted'
-              }`}
-            >
-              <Bookmark className="h-4 w-4" />
-              Dimensions
-            </Button>
+        {/* Main Canvas */}
+        <main className="flex-1 flex flex-col items-stretch min-w-0">
+          <div className="flex items-center justify-between gap-4 border-b px-8 py-4 bg-background">
+            <h2 className="text-lg font-semibold">Project Strings</h2>
+            <div className="flex items-center gap-2">
+              {/* Display Mode Controls */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowStringVariables(!showStringVariables)}
+                className={`flex items-center gap-2 transition-colors ${
+                  showStringVariables 
+                    ? 'bg-green-50 border-green-200 text-green-800 hover:bg-green-100' 
+                    : 'hover:bg-muted'
+                }`}
+              >
+                <Spool className="h-4 w-4" />
+                String Variables
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsHighlighterMode(!isHighlighterMode)}
+                className={`flex items-center gap-2 transition-colors ${
+                  isHighlighterMode 
+                    ? 'bg-yellow-50 border-yellow-200 text-yellow-800 hover:bg-yellow-100' 
+                    : 'hover:bg-muted'
+                }`}
+              >
+                <Highlighter className="h-4 w-4" />
+                Highlight
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDimensions(!showDimensions)}
+                className={`flex items-center gap-2 transition-colors ${
+                  showDimensions 
+                    ? 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100' 
+                    : 'hover:bg-muted'
+                }`}
+              >
+                <Bookmark className="h-4 w-4" />
+                Dimensions
+              </Button>
+              <Button onClick={openCreateString} size="sm">
+                + New String
+              </Button>
+            </div>
           </div>
-          <Button onClick={openCreateString} size="sm">
-            + New String
-          </Button>
-        </div>
         {/* Strings List */}
         <div className="flex-1 overflow-y-auto p-8">
           {filteredStrings.length === 0 ? (
@@ -1548,74 +1740,46 @@ export default function ProjectDetailPage() {
           )}
         </div>
       </main>
-      {/* Sidebar (now on the right) */}
-      <aside className="w-72 border-l bg-muted/40 flex flex-col">
-        <div className="flex gap-2 p-4 border-b">
-          {SIDEBAR_TABS.map((tab) => (
+      {/* Variables Management Sidebar (right) */}
+      {isVariablesSidebarOpen && (
+        <aside className="w-72 border-l bg-muted/40 flex flex-col">
+          <div className="p-4 border-b flex items-center justify-between">
+            <h2 className="font-semibold text-lg">Variables</h2>
             <Button
-              key={tab}
-              variant={sidebarTab === tab ? "secondary" : "ghost"}
+              variant="ghost"
               size="sm"
-              className={`font-medium text-sm ${sidebarTab === tab ? "shadow" : ""}`}
-              onClick={() => setSidebarTab(tab)}
+              onClick={() => setIsVariablesSidebarOpen(false)}
+              className="h-8 w-8 p-0"
             >
-              {tab}
+              <X className="h-4 w-4" />
             </Button>
-          ))}
-        </div>
+          </div>
         <div className="flex-1 overflow-y-auto p-4">
-          {sidebarList.length === 0 ? (
-            <div className="text-muted-foreground text-sm">No {sidebarTab.toLowerCase()} found.</div>
+          {project.variables.length === 0 ? (
+            <div className="text-muted-foreground text-sm">No variables found.</div>
           ) : (
             <ul className="space-y-2">
-              {sidebarList.map((item: any) => (
+              {project.variables.map((variable: any) => (
                 <Card 
-                  key={item.id} 
+                  key={variable.id} 
                   className="p-3 text-sm transition-colors cursor-pointer hover:bg-muted/50"
-                  onClick={() => {
-                    if (sidebarTab === "Variables") {
-                      openEditVariable(item);
-                    } else if (sidebarTab === "Traits") {
-                      openEditTrait(item);
-                    } else if (sidebarTab === "Dimensions") {
-                      openEditDimension(item);
-                    }
-                    // Add other tab handlers here later
-                  }}
+                  onClick={() => openEditVariable(variable)}
                 >
                   <div className="flex items-center justify-between">
-                    <span>{item.name || item.id}</span>
+                    <span>{variable.name}</span>
                     <div className="flex gap-1">
-                      {sidebarTab === "Variables" && item.variable_type === 'string' && (
+                      {variable.variable_type === 'string' && (
                         <Badge variant="outline" className="text-xs bg-green-50 text-green-600 border-green-200 p-1">
                           <Spool className="h-3 w-3" />
                         </Badge>
                       )}
-                      {sidebarTab === "Variables" && item.is_conditional && (
+                      {variable.is_conditional && (
                         <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
                           <Signpost className="h-3 w-3" />
                         </Badge>
                       )}
                     </div>
                   </div>
-                  
-                  {/* Show dimension values for dimensions tab */}
-                  {sidebarTab === "Dimensions" && item.values && item.values.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-gray-100">
-                      <p className="text-xs text-muted-foreground mb-1">Values:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {item.values.map((dimensionValue: any) => (
-                          <Badge
-                            key={dimensionValue.id}
-                            variant="outline"
-                            className="text-xs bg-gray-50 text-gray-600 border-gray-200"
-                          >
-                            {dimensionValue.value}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </Card>
               ))}
             </ul>
@@ -1624,23 +1788,147 @@ export default function ProjectDetailPage() {
         <div className="p-4 border-t">
           <Button
             className="w-full"
-            onClick={() => {
-              if (sidebarTab === "Variables") {
-                openCreateVariable();
-              } else if (sidebarTab === "Traits") {
-                openCreateTrait();
-              } else if (sidebarTab === "Dimensions") {
-                openCreateDimension();
-              } else {
-                const typeMap = { Conditionals: "Conditional" } as const;
-                setCreateDialog(typeMap[sidebarTab as keyof typeof typeMap]);
-              }
-            }}
+            onClick={openCreateVariable}
           >
-            + New {sidebarTab.slice(0, -1)}
+            + New Variable
           </Button>
         </div>
-      </aside>
+              </aside>
+        )}
+      </div>
+
+      {/* Delete String Confirmation Dialog */}
+      <Dialog open={!!deleteStringDialog} onOpenChange={v => !v && closeDeleteStringDialog()}>
+        <DialogContent className="max-w-md">
+          <DialogTitle>Delete String</DialogTitle>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to delete this string?
+            </p>
+            {deleteStringDialog && (
+              <div className="p-3 bg-muted rounded-md">
+                <p className="text-sm font-medium">String to delete:</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {deleteStringDialog.content.length > 100 
+                    ? `${deleteStringDialog.content.substring(0, 100)}...` 
+                    : deleteStringDialog.content
+                  }
+                </p>
+              </div>
+            )}
+            
+            {deleteStringDialog && (() => {
+              const referencingVariables = project.variables.filter((variable: any) => 
+                variable.variable_type === 'string' && 
+                variable.referenced_string && 
+                variable.referenced_string.toString() === deleteStringDialog.id.toString()
+              );
+              
+              if (referencingVariables.length > 0) {
+                return (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                    <p className="text-sm text-red-800">
+                      <strong>Cannot delete:</strong> This string is referenced by the following string variable{referencingVariables.length > 1 ? 's' : ''}:
+                    </p>
+                    <ul className="mt-2 text-sm text-red-700">
+                      {referencingVariables.map((variable: any) => (
+                        <li key={variable.id} className="ml-4">• {variable.name}</li>
+                      ))}
+                    </ul>
+                    <p className="text-sm text-red-800 mt-2">
+                      Please update or delete the variable{referencingVariables.length > 1 ? 's' : ''} first.
+                    </p>
+                  </div>
+                );
+              } else {
+                return (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <p className="text-sm text-blue-800">
+                      <strong>Note:</strong> Deleting this string will not affect any existing variables. 
+                      No string variables currently reference this string.
+                    </p>
+                  </div>
+                );
+              }
+            })()}
+            <div className="flex justify-end gap-2 mt-6">
+              <Button type="button" variant="secondary" onClick={closeDeleteStringDialog}>
+                Cancel
+              </Button>
+              <Button 
+                type="button" 
+                variant="destructive" 
+                onClick={handleDeleteString}
+                disabled={deleteStringDialog && checkStringUsage(deleteStringDialog.id)}
+              >
+                Delete String
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Project Edit Dialog */}
+      <Dialog open={!!editingProject} onOpenChange={v => !v && closeProjectDialog()}>
+        <DialogContent>
+          <DialogTitle>Edit Project</DialogTitle>
+          <form onSubmit={handleProjectSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="project-name">Project Name</Label>
+              <Input
+                id="project-name"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                placeholder="Enter project name"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="project-description">Description (Optional)</Label>
+              <Textarea
+                id="project-description"
+                value={projectDescription}
+                onChange={(e) => setProjectDescription(e.target.value)}
+                placeholder="Enter project description"
+                rows={3}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="ghost" onClick={closeProjectDialog}>
+                Cancel
+              </Button>
+              <Button type="submit">
+                Update Project
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Project Confirmation Dialog */}
+      <Dialog open={deleteProjectDialog} onOpenChange={setDeleteProjectDialog}>
+        <DialogContent>
+          <DialogTitle>Delete Project</DialogTitle>
+          <div className="space-y-4">
+            <p>Are you sure you want to delete this project? This action cannot be undone.</p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="ghost" onClick={() => setDeleteProjectDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive"
+                onClick={() => {
+                  handleDeleteProject();
+                  setDeleteProjectDialog(false);
+                }}
+              >
+                Delete Project
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Create/Edit String Dialog */}
       <Dialog open={createDialog === "String" || !!editingString} onOpenChange={v => !v && closeStringDialog()}>
         <DialogContent className="max-w-2xl">
@@ -2275,77 +2563,6 @@ export default function ProjectDetailPage() {
               <Button type="submit">Create</Button>
             </div>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete String Confirmation Dialog */}
-      <Dialog open={!!deleteStringDialog} onOpenChange={v => !v && closeDeleteStringDialog()}>
-        <DialogContent className="max-w-md">
-          <DialogTitle>Delete String</DialogTitle>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Are you sure you want to delete this string?
-            </p>
-            {deleteStringDialog && (
-              <div className="p-3 bg-muted rounded-md">
-                <p className="text-sm font-medium">String to delete:</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {deleteStringDialog.content.length > 100 
-                    ? `${deleteStringDialog.content.substring(0, 100)}...` 
-                    : deleteStringDialog.content
-                  }
-                </p>
-              </div>
-            )}
-            
-            {deleteStringDialog && (() => {
-              const referencingVariables = project.variables.filter((variable: any) => 
-                variable.variable_type === 'string' && 
-                variable.referenced_string && 
-                variable.referenced_string.toString() === deleteStringDialog.id.toString()
-              );
-              
-              if (referencingVariables.length > 0) {
-                return (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-                    <p className="text-sm text-red-800">
-                      <strong>Cannot delete:</strong> This string is referenced by the following string variable{referencingVariables.length > 1 ? 's' : ''}:
-                    </p>
-                    <ul className="mt-2 text-sm text-red-700">
-                      {referencingVariables.map((variable: any) => (
-                        <li key={variable.id} className="ml-4">• {variable.name}</li>
-                      ))}
-                    </ul>
-                    <p className="text-sm text-red-800 mt-2">
-                      Please update or delete the variable{referencingVariables.length > 1 ? 's' : ''} first.
-                    </p>
-                  </div>
-                );
-              } else {
-                return (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                    <p className="text-sm text-blue-800">
-                      <strong>Note:</strong> Deleting this string will not affect any existing variables. 
-                      No string variables currently reference this string.
-                    </p>
-                  </div>
-                );
-              }
-            })()}
-            <div className="flex justify-end gap-2 mt-6">
-              <Button type="button" variant="secondary" onClick={closeDeleteStringDialog}>
-                Cancel
-              </Button>
-              <Button 
-                type="button" 
-                variant="destructive" 
-                onClick={handleDeleteString}
-                disabled={deleteStringDialog && checkStringUsage(deleteStringDialog.id)}
-              >
-                Delete String
-              </Button>
-            </div>
-          </div>
         </DialogContent>
       </Dialog>
     </div>

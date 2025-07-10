@@ -1,73 +1,45 @@
-This document is a reference for what this application is and how an LLM should contribute to it. 
+# LLM Instructions for Strings App
 
-**Introduction/Overview**
+## About This Document
 
-This application is called 'Strings'. It allows users to define text strings that have conditional content based on a selected trait. 
+**PURPOSE**: This document serves as a comprehensive reference guide for any LLM agent that needs to work on the Strings application. It contains everything needed to understand the app's purpose, architecture, functionality, and implementation patterns without requiring prior context.
 
-**What the Strings app does**
+**INTENDED AUDIENCE**: Future LLM agents who may need to:
+- Develop new features for this application
+- Debug or fix existing functionality
+- Rebuild or significantly modify the application
+- Understand the codebase structure and patterns
+- Maintain consistency with established patterns
 
-- Users can create projects.
-- For a single project, users can define three separate types of data: Strings, variables, and traits. For each project, these should be stored and will be called in the UI in various places. Strings, variables, and traits can be created, read, updated and deleted.
-    - Strings. When users create a string, which is actually a text string but can also include variables. An example string may be, "The {{animal}} is {{color}}".
-    - Traits. Users can define traits. Example traits are "Good" and "Evil".
-        - Strings (and particularly their variables) get presented differently, depending on which trait the user has selected at any point.
-        - When the user creates or edits a trait, the user should be able to create/edit the name, and the value of each variable with respect to the trait.
-    - Variables. Users can also define variables which can be used in a string. Variables can be defined independently, or as part of a string when the string is created or edited. Example variables may be, {{animal}}, {{color}} or {{eye-shape}}.
-        - When the user creates or edits a variable, the user should be able to create/edit the name, and the value of the variable with respect to each trait.
-        - Each variable has an array of values; a value for each trait.
-    - As an example, if the project has string, "The {{animal}} is {{color}}" and variables "Good" and "Evil", and let's say when "Good" is selected, {{animal}} is "gerbil" and {{color}} is "blue", and when "Evil" is selected, {{animal}} is "snake" and {{color}} is "red". When Good is selected, the string will present as "The gerbil is blue" and when Evil is selected, the string will present as "The snake is red".
-    - By using Django, users have standard functions for creating an account, logging in, logging out, etc.
-    -Also in a project, present a 'Download' button. When clicked, the user should be able to download a CSV file of all the strings they created, represented for each trait. So each row is a string and then each column is a trait. each cell in the column has the string adjusted to show variable values for the trait of that column. The first row of this file can be the header row with the traits listed out. Reserve the first column for "Blank". While not really a trait, the "Blank" column can list out the strings where the variables show not as their variable value's but as their actual variable names represented in double brackets (Ex. {{animal}}).
-    
-    **UX specifications**
-    
-    This app should have a standard landing page where (when the user is logged in) they can view all their projects. 
-    
-    In a project detail page:
-    
-    - **Three-Panel Layout Structure**:
-      - **Left Panel (Filter Sidebar)**: Fixed 264px wide sidebar containing filtering controls
-      - **Center Panel (Main Canvas)**: Flexible width area displaying project strings and main content
-      - **Right Panel (Variables Sidebar)**: Collapsible 288px wide sidebar for variable management
-    
-    - **Project Header**: Full-width header beneath global navigation containing:
-      - Project name (left side)
-      - Action buttons (right side): "Manage Variables", "Edit Project", and overflow menu with "Delete Project"
-      - The "Manage Variables" button toggles the collapsible variables sidebar
-    
-    - **Filter Sidebar (Left Panel)**: Dedicated filtering controls including:
-      - **Dimensions Section**: Filtering by dimension values with single selection per dimension and clear functionality
-      - **Traits Section**: Radio button selection for trait contexts (including "Blank (Variables)" option)
-      - **Conditionals Section**: Checkbox selection for conditional variables (multiple selection supported)
-    
-    - **Main Canvas (Center Panel)**: Primary content area featuring:
-      - **Canvas Header**: Contains "Project Strings" title and display mode toggles
-      - **Display Mode Controls**: Three toggle buttons for String Variables (green), Highlight (yellow), and Dimensions (blue)
-      - **String List**: Filtered and rendered strings based on current filter and display settings
-      - **Action Button**: "+ New String" button for creating new strings
-    
-    - **Variables Sidebar (Right Panel)**: Collapsible management panel containing:
-      - **Variables Tab Only**: Simplified to focus solely on variable management (Traits and Dimensions removed)
-      - **Variable List**: All project variables with type indicators (String Ref and Conditional icons)
-      - **Create Button**: "+ New Variable" button at the bottom
-      - **Close Control**: X button in header to collapse the sidebar
-      - **Push Behavior**: When open, pushes main canvas content (does not overlay)
-    
-    - **Dialog System**: All create/edit operations use modal dialogs:
-      - String creation/editing with variable detection and dimension assignment
-      - Variable creation with type selection (trait vs string) and conditional options
-      - Trait creation/editing with variable value management
-      - Dimension creation/editing with predefined values management
-      - Project editing and deletion confirmations
-    
-    **Primary Technologies to be used**
-    
-    - Django
-    - Shadcn design components and styles.
-    
-    **Instructions for the LLM**
-    
-    - Please ask before you install and start using any new technology, unless it is a required dependency of a technology/resource you have already been given permission to use.
+**MAINTENANCE REQUIREMENT**: This document MUST be kept up-to-date whenever changes are made to the application. Any developer (human or AI) working on this app has the responsibility to update this documentation to reflect their changes, ensuring future developers have accurate information.
+
+**HOW TO USE**: Read through this document to understand the application before making any changes. Use the implementation guidelines to maintain consistency with existing patterns. Update this document immediately after making significant changes.
+
+---
+
+## Application Overview
+
+**Application Name**: Strings  
+**Purpose**: A web application for managing dynamic text content with conditional variables, traits, and organizational dimensions.
+
+### What the Strings App Does
+
+The Strings application allows users to create and manage dynamic text content that changes based on different contexts (traits) and conditions. Key functionality includes:
+
+- **Project Management**: Users create projects to organize their content
+- **String Management**: Define text strings that can contain variables (e.g., "The {{animal}} is {{color}}")
+- **Variable System**: Two types of variables:
+  - **Trait Variables**: Have different values for different traits (e.g., {{animal}} = "dog" for "Good" trait, "snake" for "Evil" trait)
+  - **String Variables**: Reference other strings in the project (e.g., {{footer}} references a footer string)
+- **Trait System**: Define contexts like "Good" and "Evil" that determine how trait variables are rendered
+- **Conditional Variables**: Variables that can be toggled on/off to show/hide content dynamically
+- **Dimension System**: Categorize strings with multiple values per dimension for organization and filtering
+- **Export Functionality**: Download CSV files with strings rendered for all trait/conditional combinations
+
+### Example Use Case
+A project with string "The {{animal}} is {{color}}" and traits "Good"/"Evil":
+- Good trait: {{animal}} = "gerbil", {{color}} = "blue" → "The gerbil is blue"
+- Evil trait: {{animal}} = "snake", {{color}} = "red" → "The snake is red"
 
 ## Application Architecture
 
@@ -88,6 +60,7 @@ This application is called 'Strings'. It allows users to define text strings tha
 ## Data Models & Relationships
 
 ### Core Models
+
 1. **Project**: Container for all user content
    - Fields: name, description, created_at, updated_at, user (foreign key)
    
@@ -122,6 +95,7 @@ This application is called 'Strings'. It allows users to define text strings tha
    - Constraints: unique_together = ['string', 'dimension_value'] (prevents duplicate assignments)
 
 ### Variable Types Explained
+
 1. **Trait Variables** (variable_type='trait'):
    - Have different values for each trait via VariableValue model
    - Traditional behavior: {{animal}} shows "dog" for trait A, "cat" for trait B
@@ -133,6 +107,7 @@ This application is called 'Strings'. It allows users to define text strings tha
    - Example: {{footer}} might reference a string containing "Copyright 2024"
 
 ### Conditional Variables System
+
 - Variables can be marked as conditional (is_conditional=True)
 - Conditional variables appear in a special selector in the UI
 - Users can toggle which conditional variables are "active"
@@ -140,6 +115,7 @@ This application is called 'Strings'. It allows users to define text strings tha
 - This replaced the old [[conditional]] ... [[/]] block system
 
 ### Key Relationships
+
 - Projects contain Traits, Variables, Strings, Conditionals, and Dimensions
 - VariableValues link Variables to Traits with specific values (trait variables only)
 - String variables link to other Strings via referenced_string field
@@ -213,96 +189,162 @@ This application is called 'Strings'. It allows users to define text strings tha
   - Required: string, dimension_value
 - `DELETE /api/string-dimension-values/{id}/` - Delete relationship
 
-## UI Components & Patterns
+## User Interface Design
 
-### ShadCN Components Used
-- **Dialog**: For all create/edit forms (strings, traits, variables, dimensions)
+### Layout Structure
+
+The application uses a sophisticated three-panel layout system optimized for content management:
+
+#### Three-Panel Layout Structure:
+- **Left Panel (Filter Sidebar)**: Fixed 264px wide sidebar containing filtering controls
+- **Center Panel (Main Canvas)**: Flexible width area displaying project strings and main content
+- **Right Panel (Variables Sidebar)**: Collapsible 288px wide sidebar for variable management
+
+#### Global Navigation
+- **App Header**: Full-width header with app name "Strings" and user authentication controls
+- **Project Header**: Full-width header beneath global navigation containing:
+  - Project name (left side) with proper typography hierarchy
+  - Action buttons (right side): "Manage Variables", "Edit Project", and overflow menu with "Delete Project"
+  - The "Manage Variables" button toggles the collapsible variables sidebar
+
+### Left Panel: Filter Sidebar
+
+Dedicated filtering controls with semantic icon system and hover interactions:
+
+#### Dimensions Section
+- **Purpose**: Filter strings by dimension values
+- **Icon**: Globe icon with semantic meaning
+- **Functionality**: 
+  - One section per dimension with dimension name as header
+  - Clickable badges for each dimension value (single selection per dimension)
+  - "Clear" button appears when a value is selected
+  - Plus icon in section header for creating new dimensions
+  - Edit buttons appear on hover for dimension management
+- **Behavior**: Only strings with matching dimension values are shown (AND logic across dimensions)
+
+#### Traits Section  
+- **Purpose**: Control variable rendering context
+- **Icon**: SwatchBook icon with semantic meaning
+- **Functionality**:
+  - Radio button selection including "Blank (Variables)" as first option
+  - All project traits listed with edit buttons appearing on hover
+  - Plus icon for creating new traits
+  - Single selection determines how trait variables are rendered in strings
+
+#### Conditionals Section
+- **Purpose**: Control conditional content visibility  
+- **Icon**: Signpost icon with semantic meaning
+- **Functionality**:
+  - Individual checkboxes for each conditional variable
+  - Edit buttons appear on hover for conditional variable management
+  - Multiple selection supported
+  - Section only appears if conditional variables exist
+- **Behavior**: Selected conditionals show their content, unselected are hidden
+
+#### Visual Design Features:
+- Fixed width of 264px with `bg-muted/40` background
+- Consistent spacing with ml-6 content indentation  
+- Hover interactions with `hover:bg-muted/50` for interactive elements
+- Edit buttons with smooth opacity transitions (opacity-0 to opacity-100 on group-hover)
+- Professional visual hierarchy with clear section separation
+
+### Center Panel: Main Canvas
+
+Primary content area with streamlined controls and responsive design:
+
+#### Canvas Header
+- **Title**: "Project Strings" with proper typography hierarchy
+- **Display Mode Controls**: Three toggle buttons with semantic color coding:
+  1. **String Variables** (Green, `Spool` icon) - Controls string variable display mode
+  2. **Highlight** (Yellow, `Highlighter` icon) - Controls plaintext vs badge mode 
+  3. **Dimensions** (Blue, `Bookmark` icon) - Controls dimension tag visibility
+- **Action Button**: "+ New String" button positioned at far right for optimal layout
+
+#### String Display Area
+- **String Cards**: Clickable ShadCN Card components for each string
+- **Interactive Elements**: 
+  - Entire card is clickable to edit string content
+  - Delete buttons with proper event handling (e.stopPropagation())
+  - Variable badges in highlight mode with click prevention
+- **Responsive Design**: 
+  - Conditional line height: `leading-normal` for plaintext, `leading-loose` for badge mode
+  - Proper spacing between cards and consistent padding (px-6 throughout)
+- **Empty States**: Intelligent messages for no strings vs no filtered matches
+
+### Right Panel: Variables Sidebar (Collapsible)
+
+Dedicated variable management panel with streamlined focus:
+
+#### Sidebar Structure
+- **Header**: Contains "Variables" title and X close button
+- **Content**: Variables-only management (removed multi-tab system)
+- **Footer**: "+ New Variable" button for creating variables
+- **Behavior**: 
+  - Collapsible drawer that pushes main content (not overlay)
+  - Closed by default when entering project
+  - Toggled via "Manage Variables" button in project header
+  - Fixed width of 288px when open
+
+#### Variable Management
+- **Variable List**: All project variables with visual type indicators
+  - **String Variables**: Green `Spool` icon badge
+  - **Conditional Variables**: Purple `Signpost` icon badge
+- **Interactions**: All variables clickable for editing
+- **Visual Design**: Consistent with filter sidebar hover patterns and spacing
+
+### UI Component System
+
+#### ShadCN Components Used
+- **Dialog**: All create/edit forms with height constraints and scroll behavior
 - **Button**: Consistent styling with variants (default, secondary, destructive, outline)
-- **Input/Label**: Form inputs with proper accessibility
+- **Input/Label**: Form inputs with proper accessibility and consistent spacing
 - **Select**: Trait selection with SelectSeparator for "Blank" option
-- **MultiSelect**: For conditional variables and dimension values selection (custom component)
-- **Tabs**: Sidebar navigation between Variables, Traits, and Dimensions
-- **DropdownMenu**: Overflow menus for project actions
+- **MultiSelect**: Conditional variables and dimension values selection (custom component)
+- **DropdownMenu**: Overflow menus for project actions with proper styling
 - **Badge**: Variable indicators, dimension values, and type indicators
 - **Sonner**: Toast notifications for user feedback
-- **Popover**: Used within MultiSelect component for dropdown functionality
+- **Card**: String display with clickable interaction design
 
-### Key UI Patterns
-1. **Overflow Menus**: Used on project tiles and project detail pages
-   - Consistent rectangular button with variant="secondary" and size="icon"
-   - Options: Edit, Download CSV, Delete (Duplicate disabled)
-   
-2. **Clickable Cards**: Project tiles and sidebar items are fully clickable
-   - Entire card surface is interactive except for overflow menu areas
-   
-3. **Dialog Forms**: All CRUD operations use modal dialogs
-   - Pre-populated for edit operations
-   - Proper form validation and error handling
-   
-4. **Real-time Updates**: UI reflects changes immediately
-   - Trait selection updates string rendering
-   - Conditional toggles update display instantly
-   - Show String Variables toggle changes display mode
+#### Key UI Patterns
 
-5. **Sidebar Tabs**: Three-tab sidebar for project management
-   - **Variables Tab**: View, edit, delete variables; create new ones
-   - **Traits Tab**: View, edit, delete traits; create new ones  
-   - **Dimensions Tab**: View, edit, delete dimensions; create new ones; shows dimension values as grey badges
+1. **Toggle Button System**: 
+   - Semantic color coding (green/yellow/blue) for different functions
+   - Meaningful Lucide icons for visual recognition
+   - Consistent `variant="outline"` styling with custom active themes
 
-### Filter Sidebar (Left Panel)
-The left sidebar provides comprehensive filtering controls for the main canvas:
+2. **Clickable Interface Elements**:
+   - Project tiles and string cards are fully clickable surfaces
+   - Proper event handling for nested interactive elements
+   - Stop propagation for delete buttons and variable badges
 
-1. **Dimension Filters**: Each dimension has its own section
-   - Section header shows dimension name with globe icon and edit button on hover
-   - Clickable badges for each dimension value (single selection per dimension)
-   - "Clear" button appears when a value is selected
-   - Only strings with matching dimension values are shown
-   - Plus icon in section header for creating new dimensions
+3. **Dialog System Enhancements**:
+   - Height constraints with `max-h-[calc(100vh-2rem)]` to prevent viewport overflow
+   - Scroll behavior with `overflow-y-auto` for long content
+   - Pre-populated forms for edit operations with proper validation
 
-2. **Trait Filter**: Controls variable rendering mode
-   - Section header with SwatchBook icon and plus icon for creating new traits
-   - Radio button selection including "Blank (Variables)" as first option
-   - All project traits with edit buttons appearing on hover
-   - Single selection determines how trait variables are rendered in strings
+4. **Form Standardization**:
+   - Consistent `space-y-2` spacing between form elements
+   - Proper Label components with `htmlFor`/`id` attributes
+   - Helper text styling and error handling patterns
 
-3. **Conditional Filter**: Controls conditional content visibility
-   - Section header with Signpost icon (only appears if conditional variables exist)
-   - Individual checkboxes for each conditional variable with edit buttons on hover
-   - Multiple selection supported
-   - Selected conditionals show their content, unselected are hidden
+5. **Typography Hierarchy**:
+   - App name: `text-2xl font-bold tracking-tight`
+   - Project name: `text-xl font-semibold`  
+   - Section headers: `text-lg font-semibold`
+   - Clear visual distinction between hierarchy levels
 
-4. **Visual Design**:
-   - Fixed width of 264px with `bg-muted/40` background
-   - Consistent spacing with ml-6 content indentation
-   - Hover interactions with `hover:bg-muted/50` for interactive elements
-   - Semantic icons for each section (Globe, SwatchBook, Signpost)
-   - Edit buttons appear on hover with smooth opacity transitions
+6. **Consistent Padding System**:
+   - Uniform 24px (`px-6`) padding across all headers and content areas
+   - Applied to app header, project header, filter sidebar, strings canvas, and variables sidebar
 
-### Main UI Controls (Project Detail Page Header)
-The project detail page header contains display mode controls:
+## String Rendering System
 
-1. **Show String Variables Toggle**: Switch for string variable display mode ONLY
-   - **OFF (default)**: String variables show their actual string variable values (referenced string content)
-   - **ON**: String variables show as their variable names in double brackets {{variableName}}
-   - **IMPORTANT**: This toggle ONLY affects string variables, trait variables always show their trait-specific values
-   - **In Plaintext Mode**: When ON, string variables appear as plain text in {{variableName}} format; when OFF, string variables expand to their content
-   - **In Styled Mode**: When ON, string variables appear as grey badges with {{variableName}} format; when OFF, string variables expand to their content
-   - Trait variables are NOT affected by this toggle and always show their trait-specific values
+The application features a sophisticated string rendering system that handles multiple display modes and variable types.
 
-2. **Highlight Toggle**: Switch between styled and plaintext modes
-   - OFF: Variables show as colored/grey badges with interaction
-   - ON: Variables are replaced with their actual values as plain text
+### Display Mode Controls
 
-3. **Dimensions Toggle**: Controls dimension tag visibility
-   - OFF: Dimension tags are hidden from string display
-   - ON: Dimension tags show as blue badges below string content
-
-### String Rendering System
-
-The string rendering system has different behaviors based on the current UI toggles and trait selection:
-
-#### Show String Variables Toggle Behavior
-**CRITICAL**: The "Show String Variables" toggle affects ONLY string variables, NOT trait variables:
+#### Show String Variables Toggle
+**CRITICAL**: This toggle affects ONLY string variables, NOT trait variables:
 
 - **When OFF (default state)**:
   - String variables: Show their actual content (referenced string content)
@@ -312,222 +354,105 @@ The string rendering system has different behaviors based on the current UI togg
   - String variables: Display as {{variableName}} instead of expanding content
   - Trait variables: Continue to show their trait-specific values (UNCHANGED)
 
-#### Display Mode Combinations
+#### Highlight Toggle (Plaintext vs Styled Mode)
+- **OFF (Plaintext Mode)**: Variables are replaced with their actual values as plain text
+- **ON (Styled Mode - DEFAULT)**: Variables show as colored/grey badges with interaction
 
-1. **Plaintext Mode + Show String Variables OFF**:
-   - String variables expand to their content
-   - Trait variables show trait-specific values as plain text
+#### Dimensions Toggle
+- **OFF**: Dimension tags are hidden from string display
+- **ON**: Dimension tags show as blue badges below string content
 
-2. **Plaintext Mode + Show String Variables ON**:
-   - String variables show as plain text in {{variableName}} format
-   - Trait variables show trait-specific values as plain text
+### Rendering Behavior by Mode
 
-3. **Styled Mode + Show String Variables OFF**:
-   - String variables expand to their content (with recursive variable processing)
-   - Trait variables show as colored badges with trait-specific values
-
-4. **Styled Mode + Show String Variables ON**:
-   - String variables show as grey badges with {{variableName}} format
-   - Trait variables show as colored badges with trait-specific values
-
-#### Trait Selection Impact
-- **Blank selected**: Variables behave according to Show String Variables toggle
-- **Specific trait selected**: Variables behave according to Show String Variables toggle
-- The trait selection does NOT override the Show String Variables toggle behavior
-The string rendering system is complex and handles multiple display modes:
-
-#### Badge Mode (Styled, isPlaintext=false):
+#### Styled Mode (Highlight ON, Default):
 - **Trait Variables**: Show as colored badges (green=has value, red=no value)
 - **String Variables**: 
   - When showStringVariables=OFF: Show referenced string content
   - When showStringVariables=ON: Show as grey {{variable}} badges
 - **Conditional Variables**: Only show if selected in conditionals selector
 
-#### Plaintext Mode (isPlaintext=true):
+#### Plaintext Mode (Highlight OFF):
 - **Trait Variables**: Replaced with trait-specific values or variable name if no value
 - **String Variables**:
   - When showStringVariables=OFF: Show referenced string content
   - When showStringVariables=ON: Show as {{variable}} text
 - **Conditional Variables**: Only show if selected in conditionals selector
 
-#### Special Cases:
+#### Special Trait Selection Cases:
 - **Blank Trait + showStringVariables=OFF**: String variables expand, trait variables show as {{variable}}
 - **Blank Trait + showStringVariables=ON**: All variables show as {{variable}}
 - **Selected Trait + showStringVariables=OFF**: String variables expand, trait variables show values
 - **Selected Trait + showStringVariables=ON**: String variables show as badges, trait variables show values
 
+### Technical Implementation
+
+#### React Key Management
+The system uses sophisticated key generation to avoid React conflicts:
+- **Base Keys**: Include string ID, depth, index, and variable name
+- **Nested Content**: Uses keyPrefix parameter to ensure uniqueness
+- **Format**: `str-${stringId}-${depth}-${type}-${index}-${variableName}`
+
+#### Rendering Functions
+- **renderContentRecursively**: For styled mode with proper keyPrefix for uniqueness
+- **processStringContent**: For plaintext mode
+- **Recursive Handling**: Supports nested string variables by passing unique keyPrefix
+
+## Filtering System
+
+### Filter Logic
+- **AND Operation**: All active filters must match for a string to be displayed
+- **Dimension Filtering**: Single selection per dimension, strings without dimension values are hidden when filters active
+- **Trait Filtering**: Affects variable rendering but doesn't filter strings
+- **Conditional Filtering**: Multiple selection, affects content visibility within strings
+
+### Empty States
+- **No Strings**: "No strings created yet" when project has no strings
+- **No Matches**: "No strings match the current filters" when filters eliminate all results
+- **Smart Messaging**: Contextual messages based on filter state
+
+## Form System and Data Management
+
 ### Variable Creation Workflows
-1. **Manual Creation**: Via sidebar "New Variable" button
+
+1. **Manual Creation**: Via sidebar "New Variable" button with type selection
 2. **Auto-Creation from Strings**: When {{newVariable}} is typed in string content
 3. **String Variable Creation**: Via checkbox in string create/edit dialog
    - Checkbox: "Create a variable to reference this string"
    - Creates a string variable that references the current string
    - Works for both new strings and edited strings
 
-### React Key Management
-The string rendering system uses a sophisticated key generation system to avoid React key conflicts:
-- **Base Keys**: Include string ID, depth, index, and variable name
-- **Nested Content**: Uses keyPrefix parameter to ensure uniqueness
-- **Format**: `str-${stringId}-${depth}-${type}-${index}-${variableName}`
-
-## Recent Functionality & UX Enhancements
-
-### String Variables System
-- **Two Variable Types**: Traditional trait variables + new string variables
-- **String Variable Creation**: Checkbox in string dialog to create variables that reference the string
-- **String Variable Display Control**: "Show String Variables" toggle controls rendering mode
-- **Database Schema**: Added variable_type, referenced_string, is_conditional fields to Variable model
-- **API Support**: Updated serializers and views to handle string variable creation and rendering
-
-### Conditional Variables System
-- **Replaced Conditional Blocks**: Old [[conditional]]...[[/]] system replaced with conditional variables
-- **is_conditional Field**: Variables can be marked as conditional
-- **UI Selector**: MultiSelect component for toggling conditional variables
-- **Dynamic Rendering**: Strings update immediately when conditionals are toggled
-- **Sidebar Indicators**: Conditional variables show purple "Conditional" badges in sidebar
-
-### Project Management & UI
-- Project Tiles (Homepage):
-  - Entire tile (including padding) is now clickable to open the project, except for the overflow menu.
-  - Overflow menu button uses ShadCN's rectangular Button with variant="secondary" and size="icon" for a modern, consistent look.
-  - Overflow menu appears on hover or when open, and remains visible while interacting.
-  - Overflow menu options: Edit Project, Download CSV, Delete Project (Duplicate Project is present but disabled).
-  - Edit and Delete actions open dialogs; Download CSV triggers an immediate download for that project.
-- Project Detail Page:
-  - The same overflow menu (with the same options and style) is present next to the "Add String" button.
-  - The standalone Download CSV button has been removed; it's now in the overflow menu.
-  - Edit and Delete dialogs are reused here for consistency.
-
-### Dialogs & Actions
-- Edit Project:  
-  - Opens a modal with the same fields as the create project form, pre-filled for editing.
-  - Updates the project name/description via a PATCH request.
-- Delete Project:  
-  - Opens a confirmation dialog.
-  - Deletes the project and removes it from the UI (redirects to homepage if on the project page).
-- Download CSV:  
-  - Uses the latest CSV logic, including all trait/conditional combinations.
-
-### Variable Management Enhancements
-- **Type Selection**: Dropdown to choose between 'trait' and 'string' variable types
-- **String Reference**: For string variables, optional dropdown to select which string to reference
-- **Conditional Checkbox**: Option to make any variable conditional
-- **Sidebar Badges**: Visual indicators for variable types ("String Ref", "Conditional")
-- **Smart Defaults**: New variables default to trait type
-
-### Trait Management System
-- **Comprehensive CRUD**: Full create, read, update, delete functionality for traits
-- **Variable Value Management**: When editing traits, users can set values for all project variables
-- **Smart Pre-population**: Edit dialogs automatically load existing variable values
-- **Sidebar Integration**: Traits in sidebar are clickable to open edit dialogs
-- **Form Validation**: Required trait names with proper error handling
-- **Toast Notifications**: Success/error feedback for all operations
-
 ### Dimension Management System
-- **Full CRUD Operations**: Create, read, update, delete dimensions with validation
-- **Multi-Select Dimension Values**: Strings can have MULTIPLE values per dimension for flexible categorization
-- **String Assignment**: Strings can be assigned multiple dimension values per dimension for comprehensive categorization/filtering
-- **Sidebar Display**: Dimensions in sidebar show their available values as grey badges
-- **String Display**: Strings show their assigned dimension values as blue badges below content
-  - **Multi-Value Display Format**: `DimensionName: value1, value2, value3` (comma-separated)
-  - **Grouped by Dimension**: Multiple values for same dimension are combined into single badge
-- **Validation Features**:
-  - Prevents duplicate dimension names within a project (case-insensitive)
-  - Prevents duplicate dimension values within the same dimension (case-insensitive)
-  - Backend constraints enforce uniqueness via database models
-- **UI Features**:
-  - **MultiSelect Component**: Dropdown with checkboxes for selecting multiple predefined values
-  - **Custom Value Entry**: Press Enter to add custom values not in predefined list
-  - **Dimension edit modal**: Allows adding/editing/deleting dimension values
-  - **String edit dialog**: Uses MultiSelect for dimension value selection
-  - **Clear All functionality**: Button to reset all selected values for a dimension
-  - Real-time validation with toast notifications for duplicates
-- **Data Relationships**:
-  - Dimension -> DimensionValue (one-to-many)
-  - String -> DimensionValue (many-to-many via StringDimensionValue) - MULTIPLE relationships per dimension
-  - Cascade updates when dimension values are modified
 
-### CSV Export
-- CSV export now includes a column for every combination of trait and conditional(s), with headers indicating the trait and which conditionals are enabled.
+#### Comprehensive CRUD Operations
+- **Create**: New dimensions with validation for unique names within project
+- **Read**: Display dimensions with their predefined values as grey badges in sidebar
+- **Update**: Edit dimension names and manage dimension values
+- **Delete**: Remove dimensions with proper cascade handling
 
-### UI/UX Improvements
-- **Automatic Variable Detection**: When typing {{variable}} in string content, new variables are automatically created
-- **String Variable Creation**: Easy workflow to create variables that reference strings
-- **Real-time Rendering**: All display modes update immediately when toggles are changed
-- **Consistent Key Generation**: Solved React key conflicts with sophisticated key generation system
-- **Toast Notifications**: User feedback for all actions
-- **Loading States**: Proper loading indicators for API operations
+#### Multi-Select Dimension Values
+- **Multiple Values per Dimension**: Strings can have multiple values for each dimension
+- **Flexible Assignment**: Mix of predefined and custom values supported
+- **UI Implementation**: MultiSelect component with checkboxes and custom value entry
+- **Data Storage**: Multiple StringDimensionValue relationships per string per dimension
 
-### Recent UI/UX Enhancements
+#### Validation Features
+- **Unique Dimension Names**: Prevents duplicate dimension names within project (case-insensitive)
+- **Unique Dimension Values**: Prevents duplicate values within same dimension (case-insensitive)
+- **Database Constraints**: Backend enforces uniqueness via model constraints
+- **Real-time Validation**: Toast notifications for validation errors
 
-#### Toggle Button System Redesign
-- **Replaced Switch Components**: Converted to consistent toggle button design using ShadCN Button component
-- **Three Toggle Buttons with Semantic Color Coding**:
-  1. **String Variables** (Green, `Spool` icon) - Controls string variable display mode
-  2. **Highlight** (Yellow, `Highlighter` icon) - Controls plaintext vs badge mode (renamed from "Plaintext")
-  3. **Dimensions** (Blue, `Bookmark` icon) - Controls dimension tag visibility
-- **Semantic Icons**: Each toggle uses meaningful Lucide icons for better visual recognition
-- **Color-Coded Themes**: Active states use semantic colors (green/yellow/blue) for clear visual feedback
-- **Consistent Styling**: All toggles use `variant="outline"` with custom active themes
+#### Display Features
+- **String Cards**: Show dimension values as blue badges below content
+- **Multi-Value Format**: "DimensionName: value1, value2, value3" (comma-separated)
+- **Grouped Display**: Multiple values for same dimension combined into single badge
+- **Consistent Styling**: `bg-blue-50 text-blue-700 border-blue-200` theme
 
-#### Sidebar Icon System
-- **Variable Type Icons**: Replaced text badges with semantic icons for space efficiency
-  - **String Variables**: Green `Spool` icon badge (consistent with toggle button theme)
-  - **Conditional Variables**: Purple `Signpost` icon badge
-- **Compact Design**: Icons save space while maintaining clear type identification
-- **Consistent Theming**: Icon colors match their respective toggle button themes
-
-#### Dialog System Improvements
-- **Height Constraint Fix**: Added `max-h-[calc(100vh-2rem)]` to prevent dialogs from overflowing viewport
-- **Scroll Behavior**: Added `overflow-y-auto` for content that exceeds available height
-- **Viewport Safety**: Ensures dialogs remain accessible with proper top/bottom margins
-- **Universal Application**: Fix applies to all dialog types (string, variable, trait, dimension, project)
-
-#### String Display Enhancements
-- **Conditional Line Height**: 
-  - `leading-normal` for plaintext mode (compact)
-  - `leading-loose` for badge mode (better spacing around badges)
-- **Button Layout Optimization**: Moved "New String" button to far right of canvas bar for better layout balance
-
-#### Filter Sidebar Implementation
-- **New Left Sidebar**: Dedicated 256px wide filter sidebar for comprehensive string filtering
-- **Three-Panel Layout**: Filter sidebar (left) → Main canvas (center) → Management sidebar (right)
-- **Moved Controls**: Trait and conditional selection relocated from header to filter sidebar
-- **Streamlined Header**: Header now focuses on display mode toggles and actions
-- **Real-Time Filtering**: String list updates immediately when filters change
-- **Comprehensive Filtering System**:
-  - **Dimension Filters**: Section per dimension with single-select clickable badges and clear functionality
-  - **Trait Filter**: All traits plus "Blank" option with single selection
-  - **Conditional Filter**: Individual checkboxes for multiple selection of conditional variables
-- **Smart Empty States**: Shows appropriate messages for no strings vs no matches
-- **Filter Logic**: AND operation across dimensions, strings without dimension values hidden when filters active
-
-#### Project Header and Layout Restructure
-- **Dedicated Project Header**: Full-width header beneath global navigation with project name and actions
-- **Centralized Project Actions**: "Manage Variables", "Edit Project", and overflow menu with "Delete Project"
-- **Overflow Menu Integration**: ShadCN DropdownMenu component with proper action handling
-- **Three-Panel Layout**: Organized layout with filter sidebar (left), main canvas (center), and collapsible variables sidebar (right)
-- **Variables Sidebar Reorganization**: 
-  - Removed multi-tab system (Traits, Dimensions tabs eliminated)
-  - Focused exclusively on Variables management
-  - Collapsible drawer that pushes main content (not overlay)
-  - Closed by default, toggled via "Manage Variables" button in project header
-- **Streamlined Canvas Header**: "Project Strings" title with display mode toggles and "+ New String" action
-- **Removed Redundancy**: Eliminated duplicate "Manage Variables" button from filter sidebar footer
-
-#### Enhanced Interactive Design
-- **Semantic Icon System**: Globe (Dimensions), SwatchBook (Traits), Signpost (Conditionals)
-- **Hover Interactions**: Edit buttons appear on hover throughout filter sidebar
-- **Visual Hierarchy**: Proper content indentation (ml-6) and consistent spacing
-- **Professional Layout**: Clear separation of concerns between filtering, content, and management
-- **Accessibility Improvements**: Full-width clickable areas for dimension headers and trait/conditional options
-
-## Implementation Guidelines for Future Development
+## Development Guidelines and Patterns
 
 ### State Management Patterns
 - Use React useState for component-level state
 - Implement proper cleanup in useEffect hooks
-- Follow the established pattern of separate handlers for create vs edit operations
+- Follow established pattern of separate handlers for create vs edit operations
 - Always reset form state when closing dialogs
 
 ### Variable System Guidelines
@@ -541,23 +466,6 @@ The string rendering system uses a sophisticated key generation system to avoid 
 - **Use processStringContent** for plaintext mode
 - **Respect toggle states**: showStringVariables, isPlaintext, selectedConditionalVariables
 - **Handle nested string variables** by passing unique keyPrefix to prevent React key conflicts
-
-### Dimension Management Guidelines
-- **Dimension Creation**: Include validation for unique names within project scope
-- **Dimension Values**: Allow predefined values for consistency, but permit custom values for flexibility
-- **Multi-Select Implementation**: Use arrays to handle multiple dimension values per dimension per string
-- **String Assignment**: Create multiple StringDimensionValue relationships for each selected dimension value
-- **Cascade Updates**: When updating dimension values, recreate all string-dimension-value relationships
-- **UI Display**: 
-  - Show dimension values as blue badges on string cards (below content, above border)
-  - **Multi-Value Format**: Group values by dimension and display as "DimensionName: value1, value2, value3"
-  - Use `bg-blue-50 text-blue-700 border-blue-200` styling for consistency
-- **Form Handling**: 
-  - Use MultiSelect component for predefined value selection
-  - Support custom value entry via Enter key in input field
-  - Pre-populate arrays of dimension values when editing strings
-  - Provide "Clear All" functionality to reset dimension selections
-- **State Management**: Use `{[dimensionId: number]: string[]}` format for dimension value state
 
 ### API Integration Best Practices
 - Use consistent error handling with try/catch blocks
@@ -573,58 +481,41 @@ The string rendering system uses a sophisticated key generation system to avoid 
 - Provide clear user feedback via toast notifications
 - **Handle string variable creation** via checkbox in string dialogs
 
-### Dialog Management
-- Use boolean state variables for dialog visibility
-- Implement separate open/close handler functions
-- Clear form state when dialogs close
-- Use descriptive dialog titles that reflect create vs edit mode
+### Layout and Interaction Patterns
 
-### Sidebar Integration
-- Make all sidebar items clickable for quick access
-- Use consistent styling for interactive elements
-- Implement hover states for better UX
-- Group related functionality logically
-- **Show variable type badges** for quick identification
-
-### Layout and Sidebar Patterns
-- **Three-Panel Layout**: Filter sidebar (264px) → Main canvas (flexible) → Variables sidebar (288px, collapsible)
-- **Project Header**: Full-width header with project name (left) and actions (right)
-- **Filter Sidebar**: Fixed left panel with semantic icons (Globe, SwatchBook, Signpost) and hover interactions
-- **Variables Sidebar**: Collapsible right panel that pushes content (no overlay), closed by default
-- **Sidebar State Management**: Use boolean `isVariablesSidebarOpen` for variables sidebar visibility
-- **Hover Interactions**: Edit buttons with opacity transitions (opacity-0 to opacity-100 on group-hover)
-- **Content Indentation**: Use ml-6 for content alignment with section headers
+#### Three-Panel Layout Management
+- **Filter Sidebar**: Fixed 264px width, never changes
+- **Main Canvas**: Flexible width, adjusts when variables sidebar opens/closes
+- **Variables Sidebar**: Fixed 288px when open, pushes content (no overlay)
 - **Responsive Behavior**: Ensure layout works across different screen sizes
-- **Visual Hierarchy**: Clear separation between filtering, content display, and management functions
 
-## Development: Activating the Backend Virtual Environment
+#### Hover Interaction System
+- **Edit Button Pattern**: Opacity transitions (opacity-0 to opacity-100 on group-hover)
+- **Consistent Application**: Used throughout filter sidebar and management interfaces
+- **Semantic Icons**: Globe (Dimensions), SwatchBook (Traits), Signpost (Conditionals)
 
-To activate the Python virtual environment for the backend, use the following command from the project root:
-
-    source backend/venv/bin/activate
-
-Or, if you are already in the backend directory:
-
-    source venv/bin/activate
-
-Once activated, you can run Django management commands as needed.
+#### Dialog and Form Standards
+- **Height Constraints**: `max-h-[calc(100vh-2rem)]` prevents viewport overflow
+- **Scroll Behavior**: `overflow-y-auto` for content exceeding available height
+- **Consistent Spacing**: `space-y-2` between form elements
+- **Proper Accessibility**: Label components with `htmlFor`/`id` attributes
 
 ## Development Setup & Commands
 
 ### Backend Setup
 ```bash
 cd backend
-source venv/bin/activate
+source venv/bin/activate  # Activate Python virtual environment
 pip install -r requirements.txt
 python manage.py migrate
-python manage.py runserver
+python manage.py runserver  # Runs on port 8000
 ```
 
 ### Frontend Setup
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev  # Runs on port 3000 (or next available port like 3001/3002)
 ```
 
 ### Common Development Tasks
@@ -633,134 +524,129 @@ npm run dev
 - **Install Frontend Dependencies**: `npm install <package-name>`
 - **Add ShadCN Components**: `npx shadcn@latest add <component-name>`
 
-## Current State & Known Issues
+### Development Server Notes
+- Backend runs on port 8000 by default
+- Frontend auto-detects available ports (3000, 3001, 3002, etc.)
+- CORS is configured for cross-origin requests between frontend and backend
+- Hot reloading enabled for both frontend and backend development
 
-### Working Features
-- ✅ String variables creation and rendering
-- ✅ Conditional variables system
-- ✅ Show String Variables toggle
-- ✅ Both plaintext and styled rendering modes
-- ✅ Automatic variable detection in string content
-- ✅ React key conflict resolution
-- ✅ Full CRUD for all entity types (projects, strings, variables, traits, dimensions)
-- ✅ Multi-select dimension values (multiple values per dimension per string)
-- ✅ Dimension management with comprehensive value assignment
-- ✅ Validation for duplicate dimension names and values
-- ✅ Dimension value display on string cards as blue badges with comma-separated format
-- ✅ Real-time UI updates
-- ✅ Toggle button system with semantic icons and color coding
-- ✅ Sidebar icon system for variable types
-- ✅ Dialog height constraints and scroll behavior
-- ✅ Responsive string display with conditional line height
-- ✅ Filter sidebar with dimension, trait, and conditional filtering
-- ✅ Three-panel layout with dedicated filter controls
-- ✅ Real-time string filtering with AND logic across dimensions
-- ✅ Streamlined header with focus on display mode toggles
-- ✅ Project header with centralized actions and overflow menu
-- ✅ Collapsible variables sidebar with push behavior
-- ✅ Variables-only management sidebar (traits/dimensions removed)
-- ✅ Enhanced hover interactions and edit functionality throughout filter sidebar
-- ✅ Semantic icon system for filter sections and variable types
-- ✅ Professional three-panel layout with clear separation of concerns
+## Current State & Features
 
-### Technical Notes
-- **Database migrations applied**: Variable model includes variable_type, referenced_string, is_conditional fields
-- **API serialization**: Updated to handle string variables and conditional flags
-- **Frontend state management**: Multiple toggle states coordinate string rendering
-- **Key generation**: Uses sophisticated system to prevent React key conflicts in nested content
-- **Dimension system**: Full implementation with migrations 0006-0008 for dimensions, dimension values, and string assignments
-- **Validation constraints**: Database-level unique constraints for dimension names and values prevent duplicates
-- **UI consistency**: Blue badges for dimension values, grey badges for dimension values in sidebar
+### Fully Implemented Features ✅
 
-### Areas for Future Enhancement
-- Performance optimization for large projects with many nested string variables
+#### Core Functionality
+- ✅ **Authentication System**: Login, logout, registration with Django sessions
+- ✅ **Project Management**: Full CRUD with overflow menus and project tiles
+- ✅ **String Management**: Create, edit, delete strings with automatic variable detection
+- ✅ **Variable System**: Both trait and string variables with proper type handling
+- ✅ **Conditional Variables**: Replace old conditional blocks with toggle-based system
+- ✅ **Trait Management**: Full CRUD with variable value management
+- ✅ **Dimension System**: Complete implementation with multi-value assignment
+
+#### Advanced String Rendering
+- ✅ **Show String Variables Toggle**: Controls string variable display mode independently
+- ✅ **Highlight/Plaintext Modes**: Badge vs text rendering with conditional line heights
+- ✅ **Dimensions Toggle**: Show/hide dimension tags on strings
+- ✅ **Nested Variable Support**: Recursive rendering with React key conflict resolution
+- ✅ **Real-time Updates**: Immediate UI response to all toggle and selection changes
+
+#### UI/UX Excellence
+- ✅ **Three-Panel Layout**: Professional filter/content/management layout
+- ✅ **Semantic Toggle System**: Color-coded buttons with meaningful icons
+- ✅ **Filter Sidebar**: Comprehensive filtering with dimension/trait/conditional controls
+- ✅ **Variables Sidebar**: Collapsible management panel with push behavior
+- ✅ **Clickable Interface**: Fully interactive cards and tiles with proper event handling
+- ✅ **Form Standardization**: Consistent spacing, validation, and accessibility
+- ✅ **Typography Hierarchy**: Clear visual distinction between content levels
+- ✅ **Consistent Padding**: Uniform 24px spacing throughout application
+
+#### Advanced Features
+- ✅ **Multi-Select Dimension Values**: Multiple values per dimension per string
+- ✅ **Dimension Value Validation**: Prevents duplicates with real-time feedback
+- ✅ **CSV Export**: Comprehensive export with all trait/conditional combinations
+- ✅ **Dialog Height Management**: Proper viewport handling with scroll behavior
+- ✅ **Responsive Design**: Works across different screen sizes and devices
+- ✅ **Professional Styling**: ShadCN components with custom enhancements
+
+### Technical Achievements ✅
+
+#### Database and API
+- ✅ **Complete Data Model**: All entities with proper relationships and constraints
+- ✅ **RESTful API**: Comprehensive endpoints with proper CORS and authentication
+- ✅ **Database Migrations**: Properly versioned schema with constraint validation
+- ✅ **Cascade Operations**: Proper handling of related data deletion and updates
+
+#### Frontend Architecture  
+- ✅ **Component System**: Reusable ShadCN components with custom modifications
+- ✅ **State Management**: Proper React patterns with controlled components
+- ✅ **Error Handling**: Comprehensive try/catch with user-friendly notifications
+- ✅ **Performance**: Optimized rendering with proper key management
+
+## Testing Guidelines
+
+### Critical Test Areas
+
+#### Authentication and Project Flow
+1. **User Registration/Login**: Test complete authentication flow
+2. **Project CRUD**: Create, edit, delete projects with proper navigation
+3. **Project Tiles**: Clickable navigation and overflow menu functionality
+
+#### Variable System Testing
+1. **String Variables**: Creation via checkbox and manual creation
+2. **Trait Variables**: Value assignment across different traits
+3. **Conditional Variables**: Toggle functionality and content visibility
+4. **Variable Type Icons**: Proper display of Spool and Signpost indicators
+
+#### String Rendering Combinations
+1. **Toggle Combinations**: Test all combinations of three toggle buttons
+2. **Trait Selection**: Verify rendering changes with different trait selections
+3. **Conditional Selection**: Multiple conditional variable combinations
+4. **Nested Variables**: String variables referencing strings with variables
+
+#### Dimension System Testing
+1. **Multi-Value Assignment**: Assign multiple values per dimension to strings
+2. **Validation**: Test duplicate prevention for names and values
+3. **Filtering**: Single selection per dimension with AND logic
+4. **Display**: Verify comma-separated format on string cards
+
+#### Layout and Interaction Testing
+1. **Three-Panel Layout**: Test with variables sidebar open/closed
+2. **Filter Sidebar**: All filtering combinations and clear functionality
+3. **Hover Interactions**: Edit buttons throughout filter sidebar
+4. **Dialog Management**: Height constraints and scroll behavior
+5. **Clickable Elements**: Cards, tiles, buttons with proper event handling
+
+#### Form and Dialog Testing
+1. **Pre-population**: Edit dialogs load existing data correctly
+2. **Validation**: Required fields and duplicate prevention
+3. **Real-time Updates**: UI reflects changes immediately
+4. **Error Handling**: Proper feedback for failed operations
+
+### Browser Compatibility
+- **Modern Browsers**: Chrome, Firefox, Safari, Edge support
+- **Responsive Design**: Mobile and tablet device compatibility
+- **Accessibility**: Screen reader and keyboard navigation support
+
+## Future Enhancement Areas
+
+### Performance Optimization
 - Bulk operations for variables and strings
-- Export formats beyond CSV
+- Lazy loading for large projects
+- Optimized rendering for complex nested variables
+
+### Feature Extensions
+- Export formats beyond CSV (JSON, XML)
 - Advanced conditional logic (AND/OR operations)
 - Variable categories or namespacing
 - Undo/redo functionality
+- Project templates and cloning
 
-## Testing & Quality Assurance
+### User Experience
+- Keyboard shortcuts for common actions
+- Advanced search and filtering
+- Drag-and-drop reordering
+- Collaborative editing features
 
-### Key Areas to Test
-1. **Authentication Flow**: Login, logout, registration
-2. **CRUD Operations**: All create, read, update, delete functionality
-3. **String Rendering**: Variable substitution with all toggle combinations
-4. **String Variables**: Creation, reference resolution, display modes
-5. **Conditional Variables**: Selection, rendering, toggle behavior
-6. **Dimension Management**: Creation, value assignment, string categorization, validation
-7. **CSV Export**: Proper formatting with all trait/conditional combinations
-8. **Real-time Updates**: UI responsiveness to state changes
-9. **Form Validation**: Error handling and user feedback
-10. **React Key Uniqueness**: No console errors for duplicate keys
+---
 
-### Testing Scenarios
-- Create string variables both manually and via string dialog checkbox
-- Test all combinations of trait selection, conditional selection, and display toggles
-- Verify nested string variables render correctly without key conflicts
-- Test CSV export with various conditional and trait combinations
-- Ensure automatic variable detection works when typing in string content
-- **Multi-Select Dimension Values**:
-  - Create dimensions with predefined values and assign multiple values per dimension to strings
-  - Test MultiSelect component functionality (select/deselect multiple values)
-  - Test custom value entry via Enter key in input field
-  - Verify "Clear All" functionality resets all selected values
-  - Test dimension value validation (no duplicates within same dimension)
-  - Test dimension name validation (no duplicates within same project)
-  - Verify multiple dimension values display correctly as comma-separated format on string cards
-  - Test dimension value updates cascade properly to all assigned strings
-- **UI/UX Enhancements**:
-  - Test toggle button functionality with semantic icons and color themes
-  - Verify sidebar variable type icons display correctly (Spool for string, Signpost for conditional)
-  - Test dialog height constraints with long content (should scroll, not overflow)
-  - Verify conditional line height changes between plaintext and badge modes
-- **Filter Sidebar Functionality**:
-  - Test dimension filtering with single selection per dimension
-  - Verify trait filtering affects variable rendering correctly
-  - Test conditional filtering with multiple selection
-  - Verify "Clear" buttons reset individual dimension filters
-  - Test combination filtering (dimension + trait + conditional)
-  - Verify empty states show correctly for no strings vs no matches
-  - Test filter sidebar responsiveness and layout
-- **Project Header and Layout**:
-  - Test "Manage Variables" button toggles variables sidebar correctly
-  - Verify "Edit Project" opens dialog with pre-filled values
-  - Test overflow menu (DropdownMenu) with "Delete Project" action
-  - Verify project deletion confirmation and redirect to homepage
-  - Test project header responsiveness and action button layout
-  - Verify project name displays correctly and truncates if needed
-- **Variables Sidebar (Collapsible)**:
-  - Test variables sidebar opens/closes via "Manage Variables" button
-  - Verify sidebar pushes main canvas content (no overlay)
-  - Test X close button in variables sidebar header
-  - Verify sidebar is closed by default when entering project page
-  - Test variables list with type indicators (Spool and Signpost icons)
-  - Verify "+ New Variable" button functionality within sidebar
-  - Test sidebar responsiveness and fixed width behavior
-- **Three-Panel Layout Integration**:
-  - Test layout behavior with variables sidebar open/closed
-  - Verify filter sidebar remains fixed width during variables sidebar toggle
-  - Test main canvas content reflow when variables sidebar opens/closes
-  - Verify all three panels work together without layout conflicts
-  - Test responsive behavior on different screen sizes
-- **Filter Sidebar Interactive Elements**:
-  - Test hover interactions for dimension headers with edit buttons
-  - Verify trait radio buttons with hover edit functionality
-  - Test conditional checkboxes with hover edit buttons
-  - Verify plus icons in section headers open appropriate create dialogs
-  - Test semantic icons display correctly (Globe, SwatchBook, Signpost)
-  - Verify content indentation (ml-6) and visual hierarchy
-- **Cross-Feature Integration**:
-  - Test strings with both variables and multiple dimension values
-  - Verify all toggle combinations work with multi-dimensional strings
-  - Test editing strings that have multiple dimension values assigned
-  - Test filter sidebar with all toggle combinations
-  - Verify filtered strings render correctly in both plaintext and styled modes
-  - Test variables sidebar operations while filters are active
-  - Verify project actions work correctly with active filters
-  - Test dialog operations (create/edit) with three-panel layout
-
-### Browser Compatibility
-- Ensure compatibility with modern browsers (Chrome, Firefox, Safari, Edge)
-- Test responsive design on mobile and tablet devices
-- Verify accessibility features work properly
+**REMEMBER**: Keep this document updated with any changes made to the application. Future developers depend on accurate documentation to maintain and enhance the application effectively.

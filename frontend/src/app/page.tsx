@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { OverflowMenu } from "@/components/ui/menu";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export default function Home() {
   const { isLoggedIn } = useAuth();
@@ -164,13 +165,22 @@ export default function Home() {
             onSubmit={e => { e.preventDefault(); saveEdit(); }}
             className="space-y-4"
           >
-            <div>
-              <label className="block mb-1 font-medium">Name</label>
-              <Input value={editName} onChange={e => setEditName(e.target.value)} required />
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input 
+                id="edit-name"
+                value={editName} 
+                onChange={e => setEditName(e.target.value)} 
+                required 
+              />
             </div>
-            <div>
-              <label className="block mb-1 font-medium">Description</label>
-              <Input value={editDescription} onChange={e => setEditDescription(e.target.value)} />
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Input 
+                id="edit-description"
+                value={editDescription} 
+                onChange={e => setEditDescription(e.target.value)} 
+              />
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button type="button" variant="secondary" onClick={() => setEditProject(null)} disabled={saving}>Cancel</Button>
@@ -194,13 +204,25 @@ export default function Home() {
         <DialogContent className="max-w-md">
           <DialogTitle>New Project</DialogTitle>
           <form onSubmit={handleCreate} className="space-y-4">
-            <div>
-              <label className="block mb-1 font-medium">Name</label>
-              <Input value={createName} onChange={e => setCreateName(e.target.value)} required autoFocus maxLength={200} />
+            <div className="space-y-2">
+              <Label htmlFor="create-name">Name</Label>
+              <Input 
+                id="create-name"
+                value={createName} 
+                onChange={e => setCreateName(e.target.value)} 
+                required 
+                autoFocus 
+                maxLength={200} 
+              />
             </div>
-            <div>
-              <label className="block mb-1 font-medium">Description</label>
-              <Input value={createDescription} onChange={e => setCreateDescription(e.target.value)} maxLength={500} />
+            <div className="space-y-2">
+              <Label htmlFor="create-description">Description</Label>
+              <Input 
+                id="create-description"
+                value={createDescription} 
+                onChange={e => setCreateDescription(e.target.value)} 
+                maxLength={500} 
+              />
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button type="button" variant="secondary" onClick={() => setCreateOpen(false)} disabled={createSaving}>Cancel</Button>

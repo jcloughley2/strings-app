@@ -11,7 +11,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectSe
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Edit2, Trash2, Highlighter, Bookmark, Spool, Signpost, Plus, X, Globe, SwatchBook, MoreHorizontal } from "lucide-react";
+import { Edit2, Trash2, Type, Bookmark, Spool, Signpost, Plus, X, Globe, SwatchBook, MoreHorizontal } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -23,7 +23,7 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [traitId, setTraitId] = useState<string | null>("blank");
   const [selectedConditionalVariables, setSelectedConditionalVariables] = useState<string[]>([]);
-  const [isHighlighterMode, setIsHighlighterMode] = useState(false);
+  const [isPlaintextMode, setIsPlaintextMode] = useState(false);
   const [showDimensions, setShowDimensions] = useState(true);
   const [showStringVariables, setShowStringVariables] = useState(false);
   
@@ -1006,7 +1006,7 @@ export default function ProjectDetailPage() {
     // First process conditionals
     let processedContent = processConditionalVariables(content);
     
-    if (!isHighlighterMode) {
+    if (isPlaintextMode) {
       // In plaintext mode (default), behavior depends on showStringVariables toggle and trait selection
       if (traitId === "blank" && showStringVariables) {
         // When blank is selected and showStringVariables is ON, show variables as {{variable}} format
@@ -1127,7 +1127,8 @@ export default function ProjectDetailPage() {
                     ? "cursor-default" 
                     : "cursor-pointer hover:bg-secondary/80"
                 }`}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   if (variable && variable.variable_type !== 'string') {
                     openEditVariable(variable);
                   }
@@ -1171,7 +1172,8 @@ export default function ProjectDetailPage() {
                   key={`${keyPrefix}${depth}-${index}-${variableName}`} 
                   variant="secondary" 
                   className="mx-1 transition-colors cursor-pointer hover:bg-secondary/80"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     if (variable) {
                       openEditVariable(variable);
                     }
@@ -1261,7 +1263,10 @@ export default function ProjectDetailPage() {
               key={`${keyPrefix}${depth}-trait-${matchIndex}-${variableName}`} 
               variant="outline" 
               className={badgeClassName}
-              onClick={() => openEditVariable(variable)}
+              onClick={(e) => {
+                e.stopPropagation();
+                openEditVariable(variable);
+              }}
               title={`Click to edit variable "${variable.name}"`}
             >
               {value}
@@ -1363,11 +1368,33 @@ export default function ProjectDetailPage() {
   // Apply dimension filtering to strings
   const filteredStrings = filterStringsByDimensions(project.strings);
 
+  // Helper function to get variable value for current trait
+  const getVariableValueForCurrentTrait = (variable: any) => {
+    // Don't show values when "blank" trait is selected
+    if (traitId === "blank") {
+      return null;
+    }
+
+    // For string variables, get the referenced string content
+    if (variable.variable_type === 'string' && variable.referenced_string) {
+      const referencedString = project.strings.find((str: any) => str.id.toString() === variable.referenced_string.toString());
+      return referencedString ? referencedString.content : null;
+    }
+
+    // For trait variables, get the value for the current trait
+    if (variable.variable_type === 'trait' && traitId && traitId !== "blank") {
+      const variableValue = variable.values?.find((value: any) => value.trait.toString() === traitId);
+      return variableValue ? variableValue.value : null;
+    }
+
+    return null;
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
       {/* Project Header */}
-      <div className="flex items-center justify-between px-8 py-4 bg-background border-b">
-        <h1 className="text-2xl font-bold flex-1 truncate">{project.name}</h1>
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b">
+        <h1 className="text-xl font-semibold flex-1 truncate">{project.name}</h1>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -1405,10 +1432,10 @@ export default function ProjectDetailPage() {
       <div className="flex flex-1">
         {/* Filter Sidebar (left) */}
         <aside className="w-64 border-r bg-muted/40 flex flex-col">
-        <div className="p-4 border-b">
-          <h2 className="font-semibold text-lg">Filters</h2>
+        <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background min-h-[65px]">
+          <h2 className="text-lg font-semibold">Filters</h2>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Dimensions Section */}
           <div className="space-y-3">
             <div className="group">
@@ -1473,8 +1500,12 @@ export default function ProjectDetailPage() {
                 {dimension.values && dimension.values.map((dimensionValue: any) => (
                   <Badge
                     key={dimensionValue.id}
-                    variant={selectedDimensionValues[dimension.id] === dimensionValue.value ? "default" : "outline"}
-                    className="cursor-pointer hover:bg-muted text-xs"
+                    variant="outline"
+                    className={`cursor-pointer text-xs transition-colors ${
+                      selectedDimensionValues[dimension.id] === dimensionValue.value
+                        ? 'bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200'
+                        : 'hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 active:bg-blue-100'
+                    }`}
                     onClick={() => setSelectedDimensionValues(prev => ({
                       ...prev,
                       [dimension.id]: prev[dimension.id] === dimensionValue.value ? null : dimensionValue.value
@@ -1612,7 +1643,7 @@ export default function ProjectDetailPage() {
 
         {/* Main Canvas */}
         <main className="flex-1 flex flex-col items-stretch min-w-0">
-          <div className="flex items-center justify-between gap-4 border-b px-8 py-4 bg-background">
+          <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background">
             <h2 className="text-lg font-semibold">Project Strings</h2>
             <div className="flex items-center gap-2">
               {/* Display Mode Controls */}
@@ -1632,15 +1663,15 @@ export default function ProjectDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setIsHighlighterMode(!isHighlighterMode)}
+                onClick={() => setIsPlaintextMode(!isPlaintextMode)}
                 className={`flex items-center gap-2 transition-colors ${
-                  isHighlighterMode 
+                  isPlaintextMode 
                     ? 'bg-yellow-50 border-yellow-200 text-yellow-800 hover:bg-yellow-100' 
                     : 'hover:bg-muted'
                 }`}
               >
-                <Highlighter className="h-4 w-4" />
-                Highlight
+                <Type className="h-4 w-4" />
+                Plaintext
               </Button>
               <Button
                 variant="outline"
@@ -1652,7 +1683,7 @@ export default function ProjectDetailPage() {
                     : 'hover:bg-muted'
                 }`}
               >
-                <Bookmark className="h-4 w-4" />
+                <Globe className="h-4 w-4" />
                 Dimensions
               </Button>
               <Button onClick={openCreateString} size="sm">
@@ -1661,7 +1692,7 @@ export default function ProjectDetailPage() {
             </div>
           </div>
         {/* Strings List */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-6">
           {filteredStrings.length === 0 ? (
             <div className="text-muted-foreground text-center">
               {project.strings.length === 0 
@@ -1672,10 +1703,14 @@ export default function ProjectDetailPage() {
           ) : (
             <ul className="space-y-4">
               {filteredStrings.map((str: any) => (
-                <Card key={str.id} className="p-4 flex flex-col gap-3 group">
+                <Card 
+                  key={str.id} 
+                  className="p-4 flex flex-col gap-3 group cursor-pointer hover:bg-muted/30 transition-colors"
+                  onClick={() => openEditString(str)}
+                >
                   <div className="flex items-start justify-between gap-2">
-                    <div className={`font-medium text-base flex-1 ${!isHighlighterMode ? 'leading-normal' : 'leading-loose'}`}>
-                      {!isHighlighterMode 
+                    <div className={`font-medium text-base flex-1 ${isPlaintextMode ? 'leading-normal' : 'leading-loose'}`}>
+                      {isPlaintextMode 
                         ? processStringContent(str.content, str.variables || [])
                         : renderStyledContent(str.content, str.variables || [], str.id)
                       }
@@ -1684,14 +1719,10 @@ export default function ProjectDetailPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => openEditString(str)}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openDeleteStringDialog(str)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDeleteStringDialog(str);
+                        }}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -1743,18 +1774,29 @@ export default function ProjectDetailPage() {
       {/* Variables Management Sidebar (right) */}
       {isVariablesSidebarOpen && (
         <aside className="w-72 border-l bg-muted/40 flex flex-col">
-          <div className="p-4 border-b flex items-center justify-between">
-            <h2 className="font-semibold text-lg">Variables</h2>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsVariablesSidebarOpen(false)}
-              className="h-8 w-8 p-0"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+          <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background">
+            <h2 className="text-lg font-semibold">Variables</h2>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openCreateVariable}
+                className="flex items-center gap-1"
+              >
+                <Plus className="h-3 w-3" />
+                New
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsVariablesSidebarOpen(false)}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-6">
           {project.variables.length === 0 ? (
             <div className="text-muted-foreground text-sm">No variables found.</div>
           ) : (
@@ -1766,32 +1808,39 @@ export default function ProjectDetailPage() {
                   onClick={() => openEditVariable(variable)}
                 >
                   <div className="flex items-center justify-between">
-                    <span>{variable.name}</span>
-                    <div className="flex gap-1">
-                      {variable.variable_type === 'string' && (
-                        <Badge variant="outline" className="text-xs bg-green-50 text-green-600 border-green-200 p-1">
-                          <Spool className="h-3 w-3" />
-                        </Badge>
-                      )}
-                      {variable.is_conditional && (
-                        <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
-                          <Signpost className="h-3 w-3" />
-                        </Badge>
-                      )}
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span>{variable.name}</span>
+                        <div className="flex gap-1">
+                          {variable.variable_type === 'string' && (
+                            <Badge variant="outline" className="text-xs bg-green-50 text-green-600 border-green-200 p-1">
+                              <Spool className="h-3 w-3" />
+                            </Badge>
+                          )}
+                          {variable.is_conditional && (
+                            <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
+                              <Signpost className="h-3 w-3" />
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      {(() => {
+                        const currentValue = getVariableValueForCurrentTrait(variable);
+                        if (currentValue) {
+                          return (
+                            <div className="text-xs text-muted-foreground mt-1 truncate">
+                              {currentValue.length > 50 ? `${currentValue.substring(0, 50)}...` : currentValue}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   </div>
                 </Card>
               ))}
             </ul>
           )}
-        </div>
-        <div className="p-4 border-t">
-          <Button
-            className="w-full"
-            onClick={openCreateVariable}
-          >
-            + New Variable
-          </Button>
         </div>
               </aside>
         )}
@@ -1873,7 +1922,7 @@ export default function ProjectDetailPage() {
         <DialogContent>
           <DialogTitle>Edit Project</DialogTitle>
           <form onSubmit={handleProjectSubmit} className="space-y-4">
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="project-name">Project Name</Label>
               <Input
                 id="project-name"
@@ -1883,7 +1932,7 @@ export default function ProjectDetailPage() {
                 required
               />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="project-description">Description (Optional)</Label>
               <Textarea
                 id="project-description"
@@ -1934,9 +1983,10 @@ export default function ProjectDetailPage() {
         <DialogContent className="max-w-2xl">
           <DialogTitle>{editingString ? "Edit String" : "New String"}</DialogTitle>
           <form onSubmit={handleStringSubmit} className="space-y-4">
-            <div>
-              <label className="block mb-2 font-medium">Content</label>
+            <div className="space-y-2">
+              <Label htmlFor="string-content">Content</Label>
               <Textarea
+                id="string-content"
                 ref={setTextareaRef}
                 value={stringContent}
                 onChange={(e) => setStringContent(e.target.value)}
@@ -1947,7 +1997,7 @@ export default function ProjectDetailPage() {
                 rows={4}
                 required
               />
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground">
                 Click variable badges below to insert them.
               </p>
             </div>
@@ -2158,23 +2208,24 @@ export default function ProjectDetailPage() {
         <DialogContent className="max-w-lg">
           <DialogTitle>{editingVariable ? "Edit Variable" : "New Variable"}</DialogTitle>
           <form onSubmit={handleVariableSubmit} className="space-y-4">
-            <div>
-              <label className="block mb-2 font-medium">Variable Name</label>
+            <div className="space-y-2">
+              <Label htmlFor="variable-name">Variable Name</Label>
               <Input
+                id="variable-name"
                 value={variableName}
                 onChange={(e) => setVariableName(e.target.value)}
                 placeholder="Enter variable name (e.g., 'animal', 'color')"
                 required
               />
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground">
                 This will be used as {`{{${variableName || 'variableName'}}}`} in strings.
               </p>
             </div>
             
-            <div>
-              <label className="block mb-2 font-medium">Variable Type</label>
+            <div className="space-y-2">
+              <Label htmlFor="variable-type">Variable Type</Label>
               <Select value={variableType} onValueChange={(value: 'trait' | 'string') => setVariableType(value)}>
-                <SelectTrigger>
+                <SelectTrigger id="variable-type">
                   <SelectValue placeholder="Select variable type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -2182,7 +2233,7 @@ export default function ProjectDetailPage() {
                   <SelectItem value="string">String Variable</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground">
                 {variableType === 'trait' 
                   ? 'Different values for each trait (default)'
                   : 'Contains its own string content with variables'
@@ -2192,9 +2243,10 @@ export default function ProjectDetailPage() {
             
             {variableType === 'string' && (
               <div className="space-y-4">
-                <div>
-                  <label className="block mb-2 font-medium">Content</label>
+                <div className="space-y-2">
+                  <Label htmlFor="variable-content">Content</Label>
                   <Textarea
+                    id="variable-content"
                     ref={setVariableTextareaRef}
                     value={variableContent}
                     onChange={(e) => setVariableContent(e.target.value)}
@@ -2202,7 +2254,7 @@ export default function ProjectDetailPage() {
                     rows={4}
                     required
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-xs text-muted-foreground">
                     Click variable badges below to insert them.
                   </p>
                 </div>
@@ -2402,15 +2454,16 @@ export default function ProjectDetailPage() {
         <DialogContent className="max-w-lg">
           <DialogTitle>{editingTrait ? "Edit Trait" : "New Trait"}</DialogTitle>
           <form onSubmit={handleTraitSubmit} className="space-y-4">
-            <div>
-              <label className="block mb-2 font-medium">Trait Name</label>
+            <div className="space-y-2">
+              <Label htmlFor="trait-name">Trait Name</Label>
               <Input
+                id="trait-name"
                 value={traitName}
                 onChange={(e) => setTraitName(e.target.value)}
                 placeholder="Enter trait name (e.g., 'Formal', 'Casual', 'Technical')"
                 required
               />
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground">
                 This trait will be available in the trait selector.
               </p>
             </div>
@@ -2459,15 +2512,16 @@ export default function ProjectDetailPage() {
         <DialogContent className="max-w-lg">
           <DialogTitle>{editingDimension ? "Edit Dimension" : "New Dimension"}</DialogTitle>
           <form onSubmit={handleDimensionSubmit} className="space-y-4">
-            <div>
-              <label className="block mb-2 font-medium">Dimension Name</label>
+            <div className="space-y-2">
+              <Label htmlFor="dimension-name">Dimension Name</Label>
               <Input
+                id="dimension-name"
                 value={dimensionName}
                 onChange={(e) => setDimensionName(e.target.value)}
                 placeholder="Enter dimension name (e.g., 'kind', 'event', 'category')"
                 required
               />
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground">
                 This dimension will be available when creating or editing strings.
               </p>
             </div>
@@ -2553,9 +2607,13 @@ export default function ProjectDetailPage() {
         <DialogContent className="max-w-md">
           <DialogTitle>New {createDialog}</DialogTitle>
           <form className="space-y-4">
-            <div>
-              <label className="block mb-1 font-medium">Name</label>
-              <Input placeholder={`Enter ${createDialog?.toLowerCase()} name`} required />
+            <div className="space-y-2">
+              <Label htmlFor="generic-name">Name</Label>
+              <Input 
+                id="generic-name"
+                placeholder={`Enter ${createDialog?.toLowerCase()} name`} 
+                required 
+              />
             </div>
             {/* Add more fields as needed for each type */}
             <div className="flex justify-end gap-2 mt-4">

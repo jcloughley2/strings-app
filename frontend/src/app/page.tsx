@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function Home() {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, loading: authLoading } = useAuth();
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,13 +26,13 @@ export default function Home() {
   const [createSaving, setCreateSaving] = useState(false);
 
   useEffect(() => {
-    if (!isLoggedIn) return;
+    if (authLoading || !isLoggedIn) return;
     setLoading(true);
     apiFetch("/api/projects/")
       .then(setProjects)
       .catch((err) => setError(err.message || "Failed to load projects"))
       .finally(() => setLoading(false));
-  }, [isLoggedIn]);
+  }, [isLoggedIn, authLoading]);
 
   function handleEdit(project: any) {
     setEditProject(project);
@@ -101,10 +101,10 @@ export default function Home() {
       <p className="text-lg text-muted-foreground text-center max-w-xl">
         Effortlessly manage, localize, and export your app strings with traits, variables, and conditionals. Built for teams who care about content and flexibility.
       </p>
-      <Button size="lg" className="mt-2" onClick={() => setCreateOpen(true)} disabled={!isLoggedIn}>
+      <Button size="lg" className="mt-2" onClick={() => setCreateOpen(true)} disabled={authLoading || !isLoggedIn}>
         Create project
       </Button>
-      {isLoggedIn && (
+      {!authLoading && isLoggedIn && (
         <section className="w-full max-w-4xl mt-12">
           <h2 className="text-2xl font-semibold mb-4">Your Projects</h2>
           {loading ? (

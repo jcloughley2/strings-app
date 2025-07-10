@@ -132,7 +132,7 @@ A project with string "The {{animal}} is {{color}}" and traits "Good"/"Evil":
 - `POST /api/auth/login/` - Login with username/password
 - `POST /api/auth/logout/` - Logout current user
 - `POST /api/auth/register/` - Register new user
-- `GET /api/auth/user/` - Get current user info
+- `GET /api/auth/me/` - Get current user info
 
 ### Projects
 - `GET /api/projects/` - List user's projects
@@ -196,17 +196,18 @@ A project with string "The {{animal}} is {{color}}" and traits "Good"/"Evil":
 The application uses a sophisticated three-panel layout system optimized for content management:
 
 #### Three-Panel Layout Structure:
-- **Left Panel (Filter Sidebar)**: Fixed 264px wide sidebar containing filtering controls
-- **Center Panel (Main Canvas)**: Flexible width area displaying project strings and main content
-- **Right Panel (Variables Sidebar)**: Collapsible 288px wide sidebar for variable management
+- **Left Panel (Filter Sidebar)**: Fixed 360px wide sidebar containing filtering controls with independent scrolling
+- **Center Panel (Main Canvas)**: Flexible width area displaying project strings and main content with independent scrolling
+- **Right Panel (Variables Sidebar)**: Collapsible 360px wide sidebar for variable management with independent scrolling
 
 #### Global Navigation
-- **App Header**: Full-width header with app name "Strings" and user authentication controls
+- **App Header**: Full-width header with app name "Strings" and user authentication controls (sticky at top)
 - **Project Header**: Full-width header beneath global navigation containing:
   - Project name (left side) with proper typography hierarchy
   - Action buttons (right side): "Download CSV", "Manage Variables", "Edit Project", and overflow menu with "Delete Project"
   - The "Download CSV" button opens a confirmation dialog for filtered export
   - The "Manage Variables" button toggles the collapsible variables sidebar
+  - **Sticky positioning**: Remains visible while scrolling content below
 
 ### Left Panel: Filter Sidebar
 
@@ -243,11 +244,12 @@ Dedicated filtering controls with semantic icon system and hover interactions:
 - **Behavior**: Selected conditionals show their content, unselected are hidden
 
 #### Visual Design Features:
-- Fixed width of 264px with `bg-muted/40` background
+- Fixed width of 360px with `bg-muted/40` background
 - Consistent spacing with ml-6 content indentation  
 - Hover interactions with `hover:bg-muted/50` for interactive elements
 - Edit buttons with smooth opacity transitions (opacity-0 to opacity-100 on group-hover)
 - Professional visual hierarchy with clear section separation
+- **Independent Scrolling**: Content area scrolls independently while "Filters" header remains sticky
 
 ### Center Panel: Main Canvas
 
@@ -260,6 +262,7 @@ Primary content area with streamlined controls and responsive design:
   2. **Highlight** (Yellow, `Highlighter` icon) - Controls plaintext vs badge mode 
   3. **Dimensions** (Blue, `Bookmark` icon) - Controls dimension tag visibility
 - **Action Button**: "+ New String" button positioned at far right for optimal layout
+- **Sticky positioning**: Header remains visible while scrolling through strings below
 
 #### String Display Area
 - **String Cards**: Clickable ShadCN Card components for each string
@@ -271,20 +274,22 @@ Primary content area with streamlined controls and responsive design:
   - Conditional line height: `leading-normal` for plaintext, `leading-loose` for badge mode
   - Proper spacing between cards and consistent padding (px-6 throughout)
 - **Empty States**: Intelligent messages for no strings vs no filtered matches
+- **Independent Scrolling**: String list scrolls independently while canvas header remains sticky
 
 ### Right Panel: Variables Sidebar (Collapsible)
 
 Dedicated variable management panel with streamlined focus:
 
 #### Sidebar Structure
-- **Header**: Contains "Variables" title and X close button
+- **Header**: Contains "Variables" title and X close button (sticky positioning)
 - **Content**: Variables-only management (removed multi-tab system)
 - **Footer**: "+ New Variable" button for creating variables
 - **Behavior**: 
   - Collapsible drawer that pushes main content (not overlay)
   - Closed by default when entering project
   - Toggled via "Manage Variables" button in project header
-  - Fixed width of 288px when open
+  - Fixed width of 360px when open
+- **Independent Scrolling**: Variables list scrolls independently while header remains sticky
 
 #### Variable Management
 - **Variable List**: All project variables with visual type indicators
@@ -578,9 +583,15 @@ String ID,Original Content,Processed Content,Created At
 - **String Cards**: Show dimension values as blue badges below content
 - **Multi-Value Format**: "DimensionName: value1, value2, value3" (comma-separated)
 - **Grouped Display**: Multiple values for same dimension combined into single badge
-- **Consistent Styling**: `bg-blue-50 text-blue-700 border-blue-200` theme
+- **Consistent Styling**: `bg-gray-50 text-gray-700 border-gray-200` theme
 
 ## Development Guidelines and Patterns
+
+### Authentication System Notes
+- **Critical**: Frontend uses `/api/auth/me/` endpoint, not `/api/auth/user/`
+- **Password Reset**: Uses `/api/auth/password/reset/` endpoint structure
+- **Session Management**: Django sessions with proper CSRF handling
+- **Error Handling**: Proper 404 handling for unauthenticated requests
 
 ### State Management Patterns
 - Use React useState for component-level state
@@ -618,9 +629,9 @@ String ID,Original Content,Processed Content,Created At
 ### Layout and Interaction Patterns
 
 #### Three-Panel Layout Management
-- **Filter Sidebar**: Fixed 264px width, never changes
+- **Filter Sidebar**: Fixed 360px width, never changes
 - **Main Canvas**: Flexible width, adjusts when variables sidebar opens/closes
-- **Variables Sidebar**: Fixed 288px when open, pushes content (no overlay)
+- **Variables Sidebar**: Fixed 360px when open, pushes content (no overlay)
 - **Responsive Behavior**: Ensure layout works across different screen sizes
 
 #### Hover Interaction System
@@ -669,7 +680,7 @@ npm run dev  # Runs on port 3000 (or next available port like 3001/3002)
 ### Fully Implemented Features ✅
 
 #### Core Functionality
-- ✅ **Authentication System**: Login, logout, registration with Django sessions
+- ✅ **Authentication System**: Login, logout, registration with Django sessions (fixed endpoint mapping)
 - ✅ **Project Management**: Full CRUD with overflow menus and project tiles
 - ✅ **String Management**: Create, edit, delete strings with automatic variable detection
 - ✅ **Variable System**: Both trait and string variables with proper type handling
@@ -685,7 +696,7 @@ npm run dev  # Runs on port 3000 (or next available port like 3001/3002)
 - ✅ **Real-time Updates**: Immediate UI response to all toggle and selection changes
 
 #### UI/UX Excellence
-- ✅ **Three-Panel Layout**: Professional filter/content/management layout
+- ✅ **Three-Panel Layout**: Professional filter/content/management layout with independent scrolling
 - ✅ **Semantic Toggle System**: Color-coded buttons with meaningful icons
 - ✅ **Filter Sidebar**: Comprehensive filtering with dimension/trait/conditional controls
 - ✅ **Variables Sidebar**: Collapsible management panel with push behavior
@@ -693,6 +704,7 @@ npm run dev  # Runs on port 3000 (or next available port like 3001/3002)
 - ✅ **Form Standardization**: Consistent spacing, validation, and accessibility
 - ✅ **Typography Hierarchy**: Clear visual distinction between content levels
 - ✅ **Consistent Padding**: Uniform 24px spacing throughout application
+- ✅ **Sticky Headers**: All section headers remain visible during content scrolling
 
 #### Advanced Features
 - ✅ **Multi-Select Dimension Values**: Multiple values per dimension per string

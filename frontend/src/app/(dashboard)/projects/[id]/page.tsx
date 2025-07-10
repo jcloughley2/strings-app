@@ -1443,8 +1443,8 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
-      {/* Project Header */}
-      <div className="flex items-center justify-between px-6 py-4 bg-background border-b">
+      {/* Project Header - Sticky */}
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b sticky top-0 z-10">
         <h1 className="text-xl font-semibold flex-1 truncate">{project.name}</h1>
         <div className="flex items-center gap-2">
           <Button
@@ -1488,13 +1488,15 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex flex-1">
+      <div className="flex flex-1 overflow-hidden">
         {/* Filter Sidebar (left) */}
-        <aside className="w-64 border-r bg-muted/40 flex flex-col">
-        <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background min-h-[65px]">
-          <h2 className="text-lg font-semibold">Filters</h2>
-        </div>
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <aside className="w-90 border-r bg-muted/40 flex flex-col">
+          {/* Filter Header - Sticky */}
+          <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background min-h-[65px] sticky top-0 z-10">
+            <h2 className="text-lg font-semibold">Filters</h2>
+          </div>
+          {/* Filter Content - Scrollable */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Dimensions Section */}
           <div className="space-y-3">
             <div className="group">
@@ -1525,22 +1527,6 @@ export default function ProjectDetailPage() {
                 >
                   <h3 className="font-medium text-sm">{dimension.name}</h3>
                   <div className="flex items-center gap-2">
-                    {selectedDimensionValues[dimension.id] && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedDimensionValues(prev => ({
-                            ...prev,
-                            [dimension.id]: null
-                          }));
-                        }}
-                        className="text-xs h-6 px-2"
-                      >
-                        Clear
-                      </Button>
-                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1556,23 +1542,46 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                {dimension.values && dimension.values.map((dimensionValue: any) => (
-                  <Badge
-                    key={dimensionValue.id}
-                    variant="outline"
-                    className={`cursor-pointer text-xs transition-colors ${
-                      selectedDimensionValues[dimension.id] === dimensionValue.value
-                        ? 'bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200'
-                        : 'hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 active:bg-blue-100'
-                    }`}
-                    onClick={() => setSelectedDimensionValues(prev => ({
-                      ...prev,
-                      [dimension.id]: prev[dimension.id] === dimensionValue.value ? null : dimensionValue.value
-                    }))}
-                  >
-                    {dimensionValue.value}
-                  </Badge>
-                ))}
+                {dimension.values && dimension.values.map((dimensionValue: any) => {
+                  const isSelected = selectedDimensionValues[dimension.id] === dimensionValue.value;
+                  
+                  if (isSelected) {
+                    // Selected badge with close button
+                    return (
+                      <div
+                        key={dimensionValue.id}
+                        className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200"
+                      >
+                        <span>{dimensionValue.value}</span>
+                        <button
+                          onClick={() => setSelectedDimensionValues(prev => ({
+                            ...prev,
+                            [dimension.id]: null
+                          }))}
+                          className="inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-300 transition-colors"
+                          aria-label={`Remove ${dimensionValue.value} filter`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  } else {
+                    // Unselected badge
+                    return (
+                      <Badge
+                        key={dimensionValue.id}
+                        variant="outline"
+                        className="text-xs transition-colors hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 active:bg-blue-100 cursor-pointer"
+                        onClick={() => setSelectedDimensionValues(prev => ({
+                          ...prev,
+                          [dimension.id]: dimensionValue.value
+                        }))}
+                      >
+                        {dimensionValue.value}
+                      </Badge>
+                    );
+                  }
+                })}
               </div>
             </div>
                 ))}
@@ -1702,7 +1711,8 @@ export default function ProjectDetailPage() {
 
         {/* Main Canvas */}
         <main className="flex-1 flex flex-col items-stretch min-w-0">
-          <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background">
+          {/* Canvas Header - Sticky */}
+          <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background sticky top-0 z-10">
             <h2 className="text-lg font-semibold">Project Strings</h2>
             <div className="flex items-center gap-2">
               {/* Display Mode Controls */}
@@ -1750,8 +1760,8 @@ export default function ProjectDetailPage() {
               </Button>
             </div>
           </div>
-        {/* Strings List */}
-        <div className="flex-1 overflow-y-auto p-6">
+          {/* Strings List - Scrollable */}
+          <div className="flex-1 overflow-y-auto p-6">
           {filteredStrings.length === 0 ? (
             <div className="text-muted-foreground text-center">
               {project.strings.length === 0 
@@ -1814,7 +1824,7 @@ export default function ProjectDetailPage() {
                           <Badge
                             key={dimensionId}
                             variant="outline"
-                            className="text-xs bg-blue-50 text-blue-700 border-blue-200"
+                            className="text-xs bg-gray-50 text-gray-700 border-gray-200"
                           >
                             <span className="font-medium">{group.name}</span>
                             <span className="mx-1">:</span>
@@ -1832,8 +1842,9 @@ export default function ProjectDetailPage() {
       </main>
       {/* Variables Management Sidebar (right) */}
       {isVariablesSidebarOpen && (
-        <aside className="w-72 border-l bg-muted/40 flex flex-col">
-          <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background">
+        <aside className="w-90 border-l bg-muted/40 flex flex-col">
+          {/* Variables Header - Sticky */}
+          <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background sticky top-0 z-10">
             <h2 className="text-lg font-semibold">Variables</h2>
             <div className="flex items-center gap-2">
               <Button
@@ -1855,7 +1866,8 @@ export default function ProjectDetailPage() {
               </Button>
             </div>
           </div>
-        <div className="flex-1 overflow-y-auto p-6">
+          {/* Variables Content - Scrollable */}
+          <div className="flex-1 overflow-y-auto p-6">
           {project.variables.length === 0 ? (
             <div className="text-muted-foreground text-sm">No variables found.</div>
           ) : (

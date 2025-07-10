@@ -17,7 +17,7 @@ function PasswordResetRequestForm({ onSuccess }: { onSuccess?: () => void }) {
     e.preventDefault();
     setLoading(true);
     try {
-      await apiFetch("/api/auth/password-reset/", {
+      await apiFetch("/api/auth/password/reset/", {
         method: "POST",
         body: JSON.stringify({ email }),
       });

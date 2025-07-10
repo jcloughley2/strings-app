@@ -185,16 +185,16 @@ This application is called 'Strings'. It allows users to define text strings tha
 ## UI Components & Patterns
 
 ### ShadCN Components Used
-- **Dialog**: For all create/edit forms (strings, traits, variables)
-- **Button**: Consistent styling with variants (default, secondary, destructive)
+- **Dialog**: For all create/edit forms (strings, traits, variables, dimensions)
+- **Button**: Consistent styling with variants (default, secondary, destructive, outline)
 - **Input/Label**: Form inputs with proper accessibility
 - **Select**: Trait selection with SelectSeparator for "Blank" option
-- **MultiSelect**: For conditional variables selection (custom component)
-- **Switch**: For plaintext mode and "Show String Variables" toggle
-- **Tabs**: Sidebar navigation between Variables and Traits
+- **MultiSelect**: For conditional variables and dimension values selection (custom component)
+- **Tabs**: Sidebar navigation between Variables, Traits, and Dimensions
 - **DropdownMenu**: Overflow menus for project actions
-- **Badge**: Variable and conditional indicators in strings
+- **Badge**: Variable indicators, dimension values, and type indicators
 - **Sonner**: Toast notifications for user feedback
+- **Popover**: Used within MultiSelect component for dropdown functionality
 
 ### Key UI Patterns
 1. **Overflow Menus**: Used on project tiles and project detail pages
@@ -218,19 +218,29 @@ This application is called 'Strings'. It allows users to define text strings tha
    - **Traits Tab**: View, edit, delete traits; create new ones  
    - **Dimensions Tab**: View, edit, delete dimensions; create new ones; shows dimension values as grey badges
 
+### Filter Sidebar (Left Panel)
+The left sidebar provides comprehensive filtering controls for the main canvas:
+
+1. **Dimension Filters**: Each dimension has its own section
+   - Section header shows dimension name
+   - Clickable badges for each dimension value (single selection per dimension)
+   - "Clear" button appears when a value is selected
+   - Only strings with matching dimension values are shown
+
+2. **Trait Filter**: Controls variable rendering mode
+   - All project traits plus "Blank" option as clickable badges
+   - Single selection (radio-like behavior)
+   - Determines how trait variables are rendered in strings
+
+3. **Conditional Filter**: Controls conditional content visibility
+   - Individual checkboxes for each conditional variable
+   - Multiple selection supported
+   - Selected conditionals show their content, unselected are hidden
+
 ### Main UI Controls (Project Detail Page Header)
-The project detail page header contains several important controls:
+The project detail page header contains display mode controls:
 
-1. **Trait Selector**: Dropdown to select which trait to view
-   - Includes all project traits plus "Blank" option
-   - Changes how trait variables are rendered in strings
-
-2. **Conditionals Selector**: MultiSelect for conditional variables
-   - Shows only variables where is_conditional=True
-   - Selected conditionals are "active" and show in strings
-   - Unselected conditionals are hidden from string rendering
-
-3. **Show String Variables Toggle**: Switch for string variable display mode ONLY
+1. **Show String Variables Toggle**: Switch for string variable display mode ONLY
    - **OFF (default)**: String variables show their actual string variable values (referenced string content)
    - **ON**: String variables show as their variable names in double brackets {{variableName}}
    - **IMPORTANT**: This toggle ONLY affects string variables, trait variables always show their trait-specific values
@@ -238,9 +248,13 @@ The project detail page header contains several important controls:
    - **In Styled Mode**: When ON, string variables appear as grey badges with {{variableName}} format; when OFF, string variables expand to their content
    - Trait variables are NOT affected by this toggle and always show their trait-specific values
 
-4. **Plaintext Toggle**: Switch between styled and plaintext modes
+2. **Highlight Toggle**: Switch between styled and plaintext modes
    - OFF: Variables show as colored/grey badges with interaction
    - ON: Variables are replaced with their actual values as plain text
+
+3. **Dimensions Toggle**: Controls dimension tag visibility
+   - OFF: Dimension tags are hidden from string display
+   - ON: Dimension tags show as blue badges below string content
 
 ### String Rendering System
 
@@ -370,22 +384,26 @@ The string rendering system uses a sophisticated key generation system to avoid 
 
 ### Dimension Management System
 - **Full CRUD Operations**: Create, read, update, delete dimensions with validation
-- **Dimension Values Management**: Each dimension can have predefined values that users can select
-- **String Assignment**: Strings can be assigned dimension values for categorization/filtering
+- **Multi-Select Dimension Values**: Strings can have MULTIPLE values per dimension for flexible categorization
+- **String Assignment**: Strings can be assigned multiple dimension values per dimension for comprehensive categorization/filtering
 - **Sidebar Display**: Dimensions in sidebar show their available values as grey badges
 - **String Display**: Strings show their assigned dimension values as blue badges below content
+  - **Multi-Value Display Format**: `DimensionName: value1, value2, value3` (comma-separated)
+  - **Grouped by Dimension**: Multiple values for same dimension are combined into single badge
 - **Validation Features**:
   - Prevents duplicate dimension names within a project (case-insensitive)
   - Prevents duplicate dimension values within the same dimension (case-insensitive)
   - Backend constraints enforce uniqueness via database models
 - **UI Features**:
-  - Dimension edit modal allows adding/editing/deleting dimension values
-  - String edit dialog shows dimension value selection with clickable badges
-  - Input fields allow custom values or editing of selected values
+  - **MultiSelect Component**: Dropdown with checkboxes for selecting multiple predefined values
+  - **Custom Value Entry**: Press Enter to add custom values not in predefined list
+  - **Dimension edit modal**: Allows adding/editing/deleting dimension values
+  - **String edit dialog**: Uses MultiSelect for dimension value selection
+  - **Clear All functionality**: Button to reset all selected values for a dimension
   - Real-time validation with toast notifications for duplicates
 - **Data Relationships**:
   - Dimension -> DimensionValue (one-to-many)
-  - String -> DimensionValue (many-to-many via StringDimensionValue)
+  - String -> DimensionValue (many-to-many via StringDimensionValue) - MULTIPLE relationships per dimension
   - Cascade updates when dimension values are modified
 
 ### CSV Export
@@ -398,6 +416,50 @@ The string rendering system uses a sophisticated key generation system to avoid 
 - **Consistent Key Generation**: Solved React key conflicts with sophisticated key generation system
 - **Toast Notifications**: User feedback for all actions
 - **Loading States**: Proper loading indicators for API operations
+
+### Recent UI/UX Enhancements
+
+#### Toggle Button System Redesign
+- **Replaced Switch Components**: Converted to consistent toggle button design using ShadCN Button component
+- **Three Toggle Buttons with Semantic Color Coding**:
+  1. **String Variables** (Green, `Spool` icon) - Controls string variable display mode
+  2. **Highlight** (Yellow, `Highlighter` icon) - Controls plaintext vs badge mode (renamed from "Plaintext")
+  3. **Dimensions** (Blue, `Bookmark` icon) - Controls dimension tag visibility
+- **Semantic Icons**: Each toggle uses meaningful Lucide icons for better visual recognition
+- **Color-Coded Themes**: Active states use semantic colors (green/yellow/blue) for clear visual feedback
+- **Consistent Styling**: All toggles use `variant="outline"` with custom active themes
+
+#### Sidebar Icon System
+- **Variable Type Icons**: Replaced text badges with semantic icons for space efficiency
+  - **String Variables**: Green `Spool` icon badge (consistent with toggle button theme)
+  - **Conditional Variables**: Purple `Signpost` icon badge
+- **Compact Design**: Icons save space while maintaining clear type identification
+- **Consistent Theming**: Icon colors match their respective toggle button themes
+
+#### Dialog System Improvements
+- **Height Constraint Fix**: Added `max-h-[calc(100vh-2rem)]` to prevent dialogs from overflowing viewport
+- **Scroll Behavior**: Added `overflow-y-auto` for content that exceeds available height
+- **Viewport Safety**: Ensures dialogs remain accessible with proper top/bottom margins
+- **Universal Application**: Fix applies to all dialog types (string, variable, trait, dimension, project)
+
+#### String Display Enhancements
+- **Conditional Line Height**: 
+  - `leading-normal` for plaintext mode (compact)
+  - `leading-loose` for badge mode (better spacing around badges)
+- **Button Layout Optimization**: Moved "New String" button to far right of canvas bar for better layout balance
+
+#### Filter Sidebar Implementation
+- **New Left Sidebar**: Dedicated 256px wide filter sidebar for comprehensive string filtering
+- **Three-Panel Layout**: Filter sidebar (left) → Main canvas (center) → Management sidebar (right)
+- **Moved Controls**: Trait and conditional selection relocated from header to filter sidebar
+- **Streamlined Header**: Header now focuses on display mode toggles and actions
+- **Real-Time Filtering**: String list updates immediately when filters change
+- **Comprehensive Filtering System**:
+  - **Dimension Filters**: Section per dimension with single-select clickable badges and clear functionality
+  - **Trait Filter**: All traits plus "Blank" option with single selection
+  - **Conditional Filter**: Individual checkboxes for multiple selection of conditional variables
+- **Smart Empty States**: Shows appropriate messages for no strings vs no matches
+- **Filter Logic**: AND operation across dimensions, strings without dimension values hidden when filters active
 
 ## Implementation Guidelines for Future Development
 
@@ -422,13 +484,19 @@ The string rendering system uses a sophisticated key generation system to avoid 
 ### Dimension Management Guidelines
 - **Dimension Creation**: Include validation for unique names within project scope
 - **Dimension Values**: Allow predefined values for consistency, but permit custom values for flexibility
-- **String Assignment**: Use StringDimensionValue model to link strings to dimension values
+- **Multi-Select Implementation**: Use arrays to handle multiple dimension values per dimension per string
+- **String Assignment**: Create multiple StringDimensionValue relationships for each selected dimension value
 - **Cascade Updates**: When updating dimension values, recreate all string-dimension-value relationships
 - **UI Display**: 
   - Show dimension values as blue badges on string cards (below content, above border)
-  - Display format: "DimensionName: Value" in badges
+  - **Multi-Value Format**: Group values by dimension and display as "DimensionName: value1, value2, value3"
   - Use `bg-blue-50 text-blue-700 border-blue-200` styling for consistency
-- **Form Handling**: Pre-populate dimension values when editing strings, allow clear/reset functionality
+- **Form Handling**: 
+  - Use MultiSelect component for predefined value selection
+  - Support custom value entry via Enter key in input field
+  - Pre-populate arrays of dimension values when editing strings
+  - Provide "Clear All" functionality to reset dimension selections
+- **State Management**: Use `{[dimensionId: number]: string[]}` format for dimension value state
 
 ### API Integration Best Practices
 - Use consistent error handling with try/catch blocks
@@ -503,10 +571,19 @@ npm run dev
 - ✅ Automatic variable detection in string content
 - ✅ React key conflict resolution
 - ✅ Full CRUD for all entity types (projects, strings, variables, traits, dimensions)
-- ✅ Dimension management with value assignment to strings
+- ✅ Multi-select dimension values (multiple values per dimension per string)
+- ✅ Dimension management with comprehensive value assignment
 - ✅ Validation for duplicate dimension names and values
-- ✅ Dimension value display on string cards as blue badges
+- ✅ Dimension value display on string cards as blue badges with comma-separated format
 - ✅ Real-time UI updates
+- ✅ Toggle button system with semantic icons and color coding
+- ✅ Sidebar icon system for variable types
+- ✅ Dialog height constraints and scroll behavior
+- ✅ Responsive string display with conditional line height
+- ✅ Filter sidebar with dimension, trait, and conditional filtering
+- ✅ Three-panel layout with dedicated filter controls
+- ✅ Real-time string filtering with AND logic across dimensions
+- ✅ Streamlined header with focus on display mode toggles
 
 ### Technical Notes
 - **Database migrations applied**: Variable model includes variable_type, referenced_string, is_conditional fields
@@ -545,11 +622,34 @@ npm run dev
 - Verify nested string variables render correctly without key conflicts
 - Test CSV export with various conditional and trait combinations
 - Ensure automatic variable detection works when typing in string content
-- Create dimensions with predefined values and assign them to strings
-- Test dimension value validation (no duplicates within same dimension)
-- Test dimension name validation (no duplicates within same project)
-- Verify dimension values display correctly on string cards as blue badges
-- Test dimension value updates cascade properly to all assigned strings
+- **Multi-Select Dimension Values**:
+  - Create dimensions with predefined values and assign multiple values per dimension to strings
+  - Test MultiSelect component functionality (select/deselect multiple values)
+  - Test custom value entry via Enter key in input field
+  - Verify "Clear All" functionality resets all selected values
+  - Test dimension value validation (no duplicates within same dimension)
+  - Test dimension name validation (no duplicates within same project)
+  - Verify multiple dimension values display correctly as comma-separated format on string cards
+  - Test dimension value updates cascade properly to all assigned strings
+- **UI/UX Enhancements**:
+  - Test toggle button functionality with semantic icons and color themes
+  - Verify sidebar variable type icons display correctly (Spool for string, Signpost for conditional)
+  - Test dialog height constraints with long content (should scroll, not overflow)
+  - Verify conditional line height changes between plaintext and badge modes
+- **Filter Sidebar Functionality**:
+  - Test dimension filtering with single selection per dimension
+  - Verify trait filtering affects variable rendering correctly
+  - Test conditional filtering with multiple selection
+  - Verify "Clear" buttons reset individual dimension filters
+  - Test combination filtering (dimension + trait + conditional)
+  - Verify empty states show correctly for no strings vs no matches
+  - Test filter sidebar responsiveness and layout
+- **Cross-Feature Integration**:
+  - Test strings with both variables and multiple dimension values
+  - Verify all toggle combinations work with multi-dimensional strings
+  - Test editing strings that have multiple dimension values assigned
+  - Test filter sidebar with all toggle combinations
+  - Verify filtered strings render correctly in both plaintext and styled modes
 
 ### Browser Compatibility
 - Ensure compatibility with modern browsers (Chrome, Firefox, Safari, Edge)

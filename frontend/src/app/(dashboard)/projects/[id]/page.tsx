@@ -7,11 +7,11 @@ import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectSeparator } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Edit2, Trash2, Highlighter } from "lucide-react";
+import { Edit2, Trash2, Highlighter, Bookmark, Spool, Signpost } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
@@ -26,7 +26,11 @@ export default function ProjectDetailPage() {
   const [traitId, setTraitId] = useState<string | null>("blank");
   const [selectedConditionalVariables, setSelectedConditionalVariables] = useState<string[]>([]);
   const [isHighlighterMode, setIsHighlighterMode] = useState(false);
+  const [showDimensions, setShowDimensions] = useState(true);
   const [showStringVariables, setShowStringVariables] = useState(false);
+  
+  // Filter sidebar state
+  const [selectedDimensionValues, setSelectedDimensionValues] = useState<{[dimensionId: number]: string | null}>({});
   const [createDialog, setCreateDialog] = useState<null | "Variable" | "Trait" | "Conditional" | "String" | "Dimension">(null);
   const [editingString, setEditingString] = useState<any>(null);
   
@@ -41,8 +45,8 @@ export default function ProjectDetailPage() {
   const [createStringVariable, setCreateStringVariable] = useState(false);
   const [stringVariableName, setStringVariableName] = useState("");
 
-  // String dimension values state
-  const [stringDimensionValues, setStringDimensionValues] = useState<{[dimensionId: number]: string}>({});
+  // String dimension values state - now supports multiple values per dimension
+  const [stringDimensionValues, setStringDimensionValues] = useState<{[dimensionId: number]: string[]}>({});
   
   // Variable form state
   const [variableName, setVariableName] = useState("");
@@ -115,11 +119,15 @@ export default function ProjectDetailPage() {
     setStringContent(str.content);
     setEditingString(str);
     
-    // Populate dimension values
-    const dimensionValues: {[dimensionId: number]: string} = {};
+    // Populate dimension values - now supporting multiple values per dimension
+    const dimensionValues: {[dimensionId: number]: string[]} = {};
     if (str.dimension_values) {
       str.dimension_values.forEach((dv: any) => {
-        dimensionValues[dv.dimension_value.dimension] = dv.dimension_value.value;
+        const dimensionId = dv.dimension_value.dimension;
+        if (!dimensionValues[dimensionId]) {
+          dimensionValues[dimensionId] = [];
+        }
+        dimensionValues[dimensionId].push(dv.dimension_value.value);
       });
     }
     setStringDimensionValues(dimensionValues);
@@ -914,35 +922,38 @@ export default function ProjectDetailPage() {
           });
         }
 
-        // Create new dimension values
-        for (const [dimensionId, value] of Object.entries(stringDimensionValues)) {
-          if (value.trim()) {
-            // First, find or create the dimension value
+        // Create new dimension values - now handling multiple values per dimension
+        for (const [dimensionId, values] of Object.entries(stringDimensionValues)) {
+          if (values && values.length > 0) {
             const dimension = project.dimensions?.find((d: any) => d.id.toString() === dimensionId);
             if (dimension) {
-              let dimensionValue = dimension.values?.find((dv: any) => dv.value === value.trim());
-              
-              if (!dimensionValue) {
-                // Create new dimension value
-                dimensionValue = await apiFetch('/api/dimension-values/', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    dimension: dimensionId,
-                    value: value.trim(),
-                  }),
-                });
-              }
+              for (const value of values) {
+                if (value.trim()) {
+                  let dimensionValue = dimension.values?.find((dv: any) => dv.value === value.trim());
+                  
+                  if (!dimensionValue) {
+                    // Create new dimension value
+                    dimensionValue = await apiFetch('/api/dimension-values/', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        dimension: dimensionId,
+                        value: value.trim(),
+                      }),
+                    });
+                  }
 
-              // Create string-dimension-value relationship
-              await apiFetch('/api/string-dimension-values/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  string: stringId,
-                  dimension_value: dimensionValue.id,
-                }),
-              });
+                  // Create string-dimension-value relationship
+                  await apiFetch('/api/string-dimension-values/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      string: stringId,
+                      dimension_value: dimensionValue.id,
+                    }),
+                  });
+                }
+              }
             }
           }
         }
@@ -1273,6 +1284,33 @@ export default function ProjectDetailPage() {
     return renderContentRecursively(content, 0, stringId ? `str-${stringId}-` : "");
   };
 
+  // Filter strings based on selected dimension values
+  const filterStringsByDimensions = (strings: any[]) => {
+    const selectedDimensions = Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null);
+    
+    if (selectedDimensions.length === 0) {
+      return strings; // No filters applied, show all strings
+    }
+    
+    return strings.filter((str: any) => {
+      // Check if string has dimension values
+      if (!str.dimension_values || str.dimension_values.length === 0) {
+        return false; // String has no dimension values, so it doesn't match any filter
+      }
+      
+      // Check if string matches ALL selected dimension filters
+      return selectedDimensions.every(([dimensionId, selectedValue]) => {
+        return str.dimension_values.some((dv: any) => {
+          return dv.dimension_value.dimension.toString() === dimensionId && 
+                 dv.dimension_value.value === selectedValue;
+        });
+      });
+    });
+  };
+
+  // Apply dimension filtering to strings
+  const filteredStrings = filterStringsByDimensions(project.strings);
+
   // Sidebar content
   let sidebarList = [];
   if (sidebarTab === "Variables") sidebarList = project.variables;
@@ -1282,61 +1320,149 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="flex h-[calc(100vh-64px)]">
+      {/* Filter Sidebar (left) */}
+      <aside className="w-64 border-r bg-muted/40 flex flex-col">
+        <div className="p-4 border-b">
+          <h2 className="font-semibold text-lg">Filters</h2>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          {/* Dimension Filters */}
+          {project.dimensions && project.dimensions.length > 0 && project.dimensions.map((dimension: any) => (
+            <div key={dimension.id} className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium text-sm">{dimension.name}</h3>
+                {selectedDimensionValues[dimension.id] && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedDimensionValues(prev => ({
+                      ...prev,
+                      [dimension.id]: null
+                    }))}
+                    className="text-xs h-6 px-2"
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {dimension.values && dimension.values.map((dimensionValue: any) => (
+                  <Badge
+                    key={dimensionValue.id}
+                    variant={selectedDimensionValues[dimension.id] === dimensionValue.value ? "default" : "outline"}
+                    className="cursor-pointer hover:bg-muted text-xs"
+                    onClick={() => setSelectedDimensionValues(prev => ({
+                      ...prev,
+                      [dimension.id]: prev[dimension.id] === dimensionValue.value ? null : dimensionValue.value
+                    }))}
+                  >
+                    {dimensionValue.value}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          ))}
+          
+          {/* Traits Filter */}
+          <div className="space-y-3">
+            <h3 className="font-medium text-sm">Traits</h3>
+            <div className="flex flex-wrap gap-2">
+              <Badge
+                variant={traitId === "blank" ? "default" : "outline"}
+                className="cursor-pointer hover:bg-muted text-xs"
+                onClick={() => setTraitId("blank")}
+              >
+                Blank
+              </Badge>
+              {project.traits.map((trait: any) => (
+                <Badge
+                  key={trait.id}
+                  variant={traitId === trait.id.toString() ? "default" : "outline"}
+                  className="cursor-pointer hover:bg-muted text-xs"
+                  onClick={() => setTraitId(trait.id.toString())}
+                >
+                  {trait.name}
+                </Badge>
+              ))}
+            </div>
+          </div>
+          
+          {/* Conditionals Filter */}
+          {project.variables.filter((variable: any) => variable.is_conditional).length > 0 && (
+            <div className="space-y-3">
+              <h3 className="font-medium text-sm">Conditionals</h3>
+              <div className="space-y-2">
+                {project.variables.filter((variable: any) => variable.is_conditional).map((variable: any) => (
+                  <div key={variable.id} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`conditional-${variable.id}`}
+                      checked={selectedConditionalVariables.includes(variable.id.toString())}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedConditionalVariables(prev => [...prev, variable.id.toString()]);
+                        } else {
+                          setSelectedConditionalVariables(prev => prev.filter(id => id !== variable.id.toString()));
+                        }
+                      }}
+                      className="rounded border-gray-300"
+                    />
+                    <Label htmlFor={`conditional-${variable.id}`} className="text-sm cursor-pointer">
+                      {variable.name}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </aside>
+
       {/* Main Canvas */}
       <main className="flex-1 flex flex-col items-stretch min-w-0">
         <div className="flex items-center gap-4 border-b px-8 py-4 bg-background">
           <h1 className="text-2xl font-bold flex-1 truncate">{project.name}</h1>
-          {/* Trait Selector, Conditionals Selector, and Plaintext Switch */}
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Trait:</span>
-              <Select value={traitId || "blank"} onValueChange={setTraitId}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Select trait" />
-                </SelectTrigger>
-                <SelectContent>
-                  {project.traits.map((trait: any) => (
-                    <SelectItem key={trait.id} value={trait.id.toString()}>{trait.name}</SelectItem>
-                  ))}
-                  <SelectSeparator />
-                  <SelectItem value="blank">Blank</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Conditionals:</span>
-              <MultiSelect
-                options={project.variables.filter((variable: any) => variable.is_conditional).map((variable: any) => ({
-                  label: variable.name,
-                  value: variable.id.toString(),
-                }))}
-                selected={selectedConditionalVariables}
-                onChange={setSelectedConditionalVariables}
-                placeholder="Select conditional variables..."
-                className="w-48"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="show-string-variables"
-                checked={showStringVariables}
-                onCheckedChange={setShowStringVariables}
-              />
-              <Label htmlFor="show-string-variables" className="text-sm text-muted-foreground">
-                Show String Variables
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant={isHighlighterMode ? "default" : "outline"}
-                size="sm"
-                onClick={() => setIsHighlighterMode(!isHighlighterMode)}
-                className="flex items-center gap-2"
-              >
-                <Highlighter className="h-4 w-4" />
-                Highlighter
-              </Button>
-            </div>
+          {/* Display Mode Controls */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowStringVariables(!showStringVariables)}
+              className={`flex items-center gap-2 transition-colors ${
+                showStringVariables 
+                  ? 'bg-green-50 border-green-200 text-green-800 hover:bg-green-100' 
+                  : 'hover:bg-muted'
+              }`}
+            >
+              <Spool className="h-4 w-4" />
+              String Variables
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsHighlighterMode(!isHighlighterMode)}
+              className={`flex items-center gap-2 transition-colors ${
+                isHighlighterMode 
+                  ? 'bg-yellow-50 border-yellow-200 text-yellow-800 hover:bg-yellow-100' 
+                  : 'hover:bg-muted'
+              }`}
+            >
+              <Highlighter className="h-4 w-4" />
+              Highlight
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDimensions(!showDimensions)}
+              className={`flex items-center gap-2 transition-colors ${
+                showDimensions 
+                  ? 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100' 
+                  : 'hover:bg-muted'
+              }`}
+            >
+              <Bookmark className="h-4 w-4" />
+              Dimensions
+            </Button>
           </div>
           <Button onClick={openCreateString} size="sm">
             + New String
@@ -1344,11 +1470,16 @@ export default function ProjectDetailPage() {
         </div>
         {/* Strings List */}
         <div className="flex-1 overflow-y-auto p-8">
-          {project.strings.length === 0 ? (
-            <div className="text-muted-foreground text-center">No strings found in this project.</div>
+          {filteredStrings.length === 0 ? (
+            <div className="text-muted-foreground text-center">
+              {project.strings.length === 0 
+                ? "No strings found in this project." 
+                : "No strings match the current filters."
+              }
+            </div>
           ) : (
             <ul className="space-y-4">
-              {project.strings.map((str: any) => (
+              {filteredStrings.map((str: any) => (
                 <Card key={str.id} className="p-4 flex flex-col gap-3 group">
                   <div className="flex items-start justify-between gap-2">
                     <div className={`font-medium text-base flex-1 ${!isHighlighterMode ? 'leading-normal' : 'leading-loose'}`}>
@@ -1376,23 +1507,39 @@ export default function ProjectDetailPage() {
                   </div>
                   
                   {/* Dimension Values */}
-                  {str.dimension_values && str.dimension_values.length > 0 && (
+                  {showDimensions && str.dimension_values && str.dimension_values.length > 0 && (
                     <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
-                      {str.dimension_values.map((dv: any) => {
-                        // Find the dimension name from the dimension_value
-                        const dimension = project.dimensions?.find((d: any) => d.id === dv.dimension_value.dimension);
-                        return (
+                      {(() => {
+                        // Group dimension values by dimension
+                        const groupedDimensions: {[dimensionId: number]: {name: string, values: string[]}} = {};
+                        
+                        str.dimension_values.forEach((dv: any) => {
+                          const dimension = project.dimensions?.find((d: any) => d.id === dv.dimension_value.dimension);
+                          const dimensionId = dv.dimension_value.dimension;
+                          
+                          if (!groupedDimensions[dimensionId]) {
+                            groupedDimensions[dimensionId] = {
+                              name: dimension?.name || 'Unknown',
+                              values: []
+                            };
+                          }
+                          
+                          groupedDimensions[dimensionId].values.push(dv.dimension_value.value);
+                        });
+                        
+                        // Render grouped dimension values
+                        return Object.entries(groupedDimensions).map(([dimensionId, group]) => (
                           <Badge
-                            key={dv.id}
+                            key={dimensionId}
                             variant="outline"
                             className="text-xs bg-blue-50 text-blue-700 border-blue-200"
                           >
-                            <span className="font-medium">{dimension?.name || 'Unknown'}</span>
+                            <span className="font-medium">{group.name}</span>
                             <span className="mx-1">:</span>
-                            <span>{dv.dimension_value.value}</span>
+                            <span>{group.values.join(', ')}</span>
                           </Badge>
-                        );
-                      })}
+                        ));
+                      })()}
                     </div>
                   )}
                 </Card>
@@ -1440,13 +1587,13 @@ export default function ProjectDetailPage() {
                     <span>{item.name || item.id}</span>
                     <div className="flex gap-1">
                       {sidebarTab === "Variables" && item.variable_type === 'string' && (
-                        <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
-                          String Ref
+                        <Badge variant="outline" className="text-xs bg-green-50 text-green-600 border-green-200 p-1">
+                          <Spool className="h-3 w-3" />
                         </Badge>
                       )}
                       {sidebarTab === "Variables" && item.is_conditional && (
-                        <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200">
-                          Conditional
+                        <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
+                          <Signpost className="h-3 w-3" />
                         </Badge>
                       )}
                     </div>
@@ -1604,56 +1751,60 @@ export default function ProjectDetailPage() {
                         {dimension.name}:
                       </label>
                       
-                      {/* Show existing values as clickable badges */}
-                      {dimension.values && dimension.values.length > 0 && (
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-2">
-                            Click to select existing values:
-                          </p>
-                          <div className="flex flex-wrap gap-2 mb-2">
-                            {dimension.values.map((dimensionValue: any) => (
-                              <Badge
-                                key={dimensionValue.id}
-                                variant={stringDimensionValues[dimension.id] === dimensionValue.value ? "default" : "outline"}
-                                className="cursor-pointer hover:bg-muted"
-                                onClick={() => setStringDimensionValues(prev => ({
-                                  ...prev,
-                                  [dimension.id]: dimensionValue.value
-                                }))}
-                              >
-                                {dimensionValue.value}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Input for custom value or editing selected value */}
-                      <Input
-                        value={stringDimensionValues[dimension.id] || ""}
-                        onChange={(e) => setStringDimensionValues(prev => ({
+                      {/* Multi-select for dimension values */}
+                      <MultiSelect
+                        options={dimension.values ? dimension.values.map((dv: any) => ({
+                          label: dv.value,
+                          value: dv.value
+                        })) : []}
+                        selected={stringDimensionValues[dimension.id] || []}
+                        onChange={(values: string[]) => setStringDimensionValues(prev => ({
                           ...prev,
-                          [dimension.id]: e.target.value
+                          [dimension.id]: values
                         }))}
-                        placeholder={dimension.values && dimension.values.length > 0 
-                          ? `Or enter custom value for ${dimension.name}` 
-                          : `Value for ${dimension.name}`}
+                        placeholder={`Select values for ${dimension.name}...`}
                         className="w-full"
                       />
                       
-                      {/* Clear button if value is selected */}
-                      {stringDimensionValues[dimension.id] && (
+                      {/* Input for custom values */}
+                      {dimension.values && dimension.values.length > 0 && (
+                        <div className="mt-2">
+                          <Input
+                            placeholder={`Or enter custom value for ${dimension.name}`}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const value = (e.target as HTMLInputElement).value.trim();
+                                if (value && !(stringDimensionValues[dimension.id] || []).includes(value)) {
+                                  setStringDimensionValues(prev => ({
+                                    ...prev,
+                                    [dimension.id]: [...(prev[dimension.id] || []), value]
+                                  }));
+                                  (e.target as HTMLInputElement).value = '';
+                                }
+                              }
+                            }}
+                            className="w-full"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Press Enter to add custom values
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* Clear button if values are selected */}
+                      {stringDimensionValues[dimension.id] && stringDimensionValues[dimension.id].length > 0 && (
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
                           onClick={() => setStringDimensionValues(prev => ({
                             ...prev,
-                            [dimension.id]: ""
+                            [dimension.id]: []
                           }))}
-                          className="text-xs"
+                          className="text-xs mt-2"
                         >
-                          Clear
+                          Clear All
                         </Button>
                       )}
                     </div>

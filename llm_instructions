@@ -204,8 +204,9 @@ The application uses a sophisticated three-panel layout system optimized for con
 - **App Header**: Full-width header with app name "Strings" and user authentication controls (sticky at top)
 - **Project Header**: Full-width header beneath global navigation containing:
   - Project name (left side) with proper typography hierarchy
-  - Action buttons (right side): "Download CSV", "Manage Variables", "Edit Project", and overflow menu with "Delete Project"
-  - The "Download CSV" button opens a confirmation dialog for filtered export
+  - Action buttons (right side): "Manage Variables", "Edit Project", and overflow menu
+  - **Overflow Menu**: Contains "Download CSV" (with Upload icon) and "Delete Project" separated by menu divider
+  - The "Download CSV" option opens a confirmation dialog for filtered export
   - The "Manage Variables" button toggles the collapsible variables sidebar
   - **Sticky positioning**: Remains visible while scrolling content below
 
@@ -307,6 +308,36 @@ Dedicated variable management panel with streamlined focus:
   - Hover-triggered delete icons (right side of each variable card) with opacity transitions
   - Proper event handling with `e.stopPropagation()` for delete buttons
 - **Visual Design**: Consistent with filter sidebar hover patterns and spacing
+
+### Bulk String Management System
+
+The application includes comprehensive bulk editing functionality for efficient string management:
+
+#### Bulk Selection Interface
+- **Individual Checkboxes**: Each string card has a checkbox on the left side for individual selection
+- **Secondary Header**: Appears above strings with "Select All" checkbox and selection count
+- **Floating Action Bar**: Positioned at bottom center when strings are selected, showing count and delete button
+- **Selection State**: Uses Set data structure for O(1) performance with helper functions
+
+#### Bulk Selection Behavior
+- **Smart Selection**: Selection automatically cleared when filters (traits/dimensions) change
+- **Individual Updates**: Deleted/converted strings automatically removed from selection
+- **Select All Logic**: Checkbox shows indeterminate state when partially selected
+- **Count Display**: Real-time count of selected strings in secondary header and floating bar
+
+#### Bulk Operations
+- **Bulk Delete**: 
+  - Confirmation dialog with selected string count
+  - Parallel deletion using Promise.all for performance
+  - Proper error handling with toast notifications
+  - Automatic project refresh after completion
+- **Selection Management**: Clear selection after operations or filter changes
+
+#### Technical Implementation
+- **State Management**: `selectedStringIds` Set, `bulkDeleteDialog` boolean state
+- **Helper Functions**: `handleSelectString`, `handleSelectAll`, `clearSelection`
+- **Event Handling**: Proper `stopPropagation()` for checkbox interactions
+- **React Hooks Compliance**: All hooks placed at component top following React rules
 
 ### UI Component System
 
@@ -446,8 +477,9 @@ The application provides a sophisticated filtered CSV export system that allows 
 - **Smart Processing**: Strings are rendered with the current trait/conditional selection
 
 #### Export Button Location
-- **Position**: Located in project header, positioned before "Manage Variables" button
-- **Icon**: Download icon from Lucide React
+- **Position**: Located in project header overflow menu as first option
+- **Icon**: Upload icon from Lucide React (within menu)
+- **Organization**: Separated from "Delete Project" option with menu separator
 - **Behavior**: Opens confirmation dialog showing current filter state and string count
 
 ### Export Dialog System
@@ -564,6 +596,107 @@ String ID,Original Content,Processed Content,Created At
 - **Scalability**: System remains usable even with large projects
 - **Maintainability**: Single rendering logic shared between UI and export
 - **User Experience**: Fast downloads with immediate feedback
+
+## CSV Import System
+
+The application provides comprehensive CSV import functionality for bulk string creation, complementing the export system.
+
+### Import Functionality Overview
+
+#### Bulk Import Approach
+- **CSV-Based**: Each cell in uploaded CSV becomes a separate string
+- **Variable Extraction**: Automatic detection and creation of variables using `{{variable}}` syntax
+- **Smart Processing**: Creates new variables if they don't exist, reuses existing ones
+- **File Validation**: CSV-only uploads with file size display
+
+#### Import Dialog Features
+- **Comprehensive Instructions**: Clear explanation of CSV format and variable handling
+- **Visual Examples**: Shows expected input format and resulting output
+- **Variable Syntax Guide**: Explains `{{variable}}` pattern for dynamic content
+- **File Selection**: Drag-and-drop or click to select CSV files
+- **Loading States**: Progress indicators during import processing
+
+### Import Processing Logic
+
+#### CSV Cell Processing
+- **Individual Strings**: Each non-empty CSV cell becomes a separate string
+- **Content Preservation**: Cell content used as-is for string content
+- **Row/Column Agnostic**: Position in CSV doesn't affect string creation
+- **Empty Cell Handling**: Skips empty cells during processing
+
+#### Variable Management During Import
+- **Automatic Detection**: Uses regex to find all `{{variable}}` patterns
+- **Smart Creation**: Creates new variables if they don't exist in project
+- **Variable Reuse**: Uses existing variables when names match
+- **Type Assignment**: All imported variables are trait variables by default
+- **Conditional Support**: Variables can be marked as conditional during creation
+
+#### API Integration
+- **Sequential Processing**: Creates variables first, then strings
+- **Parallel Operations**: Uses Promise.all for performance optimization
+- **Error Handling**: Specific error messages for different failure scenarios
+- **Success Feedback**: Shows exact counts of created variables and strings
+- **Project Refresh**: Automatic reload of project data after successful import
+
+### Import Dialog Interface
+
+#### File Selection Area
+- **Visual Upload Zone**: Clear drag-and-drop target with file size display
+- **File Validation**: Restricts to CSV files only with proper error messaging
+- **Size Information**: Shows selected file size for user awareness
+- **Replace Selection**: Can change file before confirming import
+
+#### Instructions Section
+- **Format Guidelines**: Explains CSV structure and processing behavior
+- **Variable Syntax**: Details `{{variable}}` pattern with examples
+- **Expected Outcomes**: Shows how CSV content becomes strings with variables
+- **Best Practices**: Guidance for optimal import results
+
+#### Processing Features
+- **Loading States**: Import button shows "Importing..." during processing
+- **Progress Feedback**: Real-time updates on creation progress
+- **Error Recovery**: Graceful handling of partial failures
+- **Completion Summary**: Detailed report of what was created
+
+### Technical Implementation
+
+#### Frontend Processing
+- **File Reading**: Uses FileReader API for CSV content access
+- **CSV Parsing**: Handles quoted values and various CSV formats
+- **Variable Extraction**: `extractVariablesFromContent` helper function
+- **State Management**: `importDialog`, `importFile`, `importLoading` states
+
+#### Backend Integration
+- **Variable Creation**: POST requests to `/api/variables/` endpoint
+- **String Creation**: POST requests to `/api/strings/` endpoint
+- **Transaction Safety**: Proper error handling prevents partial imports
+- **Authentication**: Uses Django session authentication
+
+#### Performance Considerations
+- **Batch Processing**: Groups API calls for efficiency
+- **Memory Management**: Processes large CSVs without overwhelming browser
+- **User Feedback**: Maintains responsive UI during long imports
+- **Error Boundaries**: Prevents crashes from malformed CSV files
+
+### Use Cases and Benefits
+
+#### Practical Import Scenarios
+1. **Content Migration**: Moving existing content from other systems
+2. **Bulk Content Creation**: Creating many strings at once from spreadsheets
+3. **Template Import**: Importing pre-defined content templates
+4. **Variable-Rich Content**: Content with many dynamic elements
+
+#### User Benefits
+- **Time Efficiency**: Create hundreds of strings in seconds
+- **Variable Automation**: Automatic variable detection and creation
+- **Flexible Input**: Standard CSV format works with any spreadsheet software
+- **Smart Processing**: Intelligent handling of existing vs new variables
+
+#### Technical Benefits
+- **Scalable Creation**: Handle large content imports efficiently
+- **Data Integrity**: Proper validation and error handling
+- **User Experience**: Clear feedback and progress indication
+- **Integration**: Seamless with existing project structure
 
 ## Form System and Data Management
 
@@ -696,6 +829,8 @@ The string content editor includes smart text selection functionality for enhanc
 - **Consistent Spacing**: `space-y-2` between form elements
 - **Proper Accessibility**: Label components with `htmlFor`/`id` attributes
 - **Tab Navigation**: String dialog uses ShadCN Tabs for Content/Dimensions separation
+- **Form Structure**: Form element wraps entire Tabs component to ensure Submit button works from any tab
+- **Critical Bug Fix**: Form must encompass both Content and Dimensions tab content for proper button functionality
 - **Auto-focus Behavior**: Content textarea receives immediate focus when string dialog opens
 - **Sort Order**: Strings display in newest-first order using `sortProjectStrings()` helper
 
@@ -761,15 +896,18 @@ npm run dev  # Runs on port 3000 (or next available port like 3001/3002)
 - ✅ **Sticky Headers**: All section headers remain visible during content scrolling
 
 #### Advanced Features
+- ✅ **Bulk String Management**: Complete bulk selection and deletion system with smart state management
+- ✅ **CSV Import System**: Comprehensive import functionality with automatic variable detection
 - ✅ **Tag-Based Dimension Selection**: Intuitive tag display with popover add menu and smart filtering
 - ✅ **Dimension Value Validation**: Prevents duplicates with real-time feedback
-- ✅ **Filtered CSV Export**: Smart export system with current filter state transparency
+- ✅ **Filtered CSV Export**: Smart export system with current filter state transparency via overflow menu
 - ✅ **Dialog Height Management**: Responsive `max-h-[80vh]` with content-adaptive sizing
-- ✅ **String Dialog Tabs**: Separate Content/Dimensions tabs with sticky navigation
+- ✅ **String Dialog Tabs**: Separate Content/Dimensions tabs with sticky navigation and proper form structure
 - ✅ **Text Selection Interface**: Smart variable replacement with visual feedback
 - ✅ **String Overflow Menus**: Always-visible menu with convert/delete actions and separators
 - ✅ **Chronological Ordering**: Newest-first string display with consistent sorting
 - ✅ **Auto-focus UX**: Immediate focus on content textarea when creating strings
+- ✅ **React Compliance**: Proper hooks order and state management following React best practices
 - ✅ **Responsive Design**: Works across different screen sizes and devices
 - ✅ **Professional Styling**: ShadCN components with custom enhancements
 
@@ -834,13 +972,37 @@ npm run dev  # Runs on port 3000 (or next available port like 3001/3002)
 3. **Real-time Updates**: UI reflects changes immediately
 4. **Error Handling**: Proper feedback for failed operations
 
+#### Bulk String Management Testing
+1. **Selection Interface**: Test individual checkboxes and select all functionality
+2. **Secondary Header**: Verify proper display of selection count and indeterminate states
+3. **Floating Action Bar**: Test positioning and visibility with selected strings
+4. **Smart Clearing**: Verify selection clears when filters change
+5. **Bulk Operations**: Test bulk delete with confirmation and error handling
+6. **State Management**: Ensure proper Set operations and React hooks compliance
+
+#### CSV Import Testing
+1. **File Upload**: Test CSV file selection and validation
+2. **Variable Detection**: Verify automatic `{{variable}}` pattern recognition
+3. **Variable Creation**: Test creation of new variables vs reusing existing ones
+4. **String Creation**: Verify each CSV cell becomes individual string
+5. **Error Handling**: Test malformed CSV files and API failures
+6. **Progress Feedback**: Verify loading states and completion summaries
+
 #### CSV Export Testing
 1. **Filter State Accuracy**: Verify export matches current UI filter state exactly
 2. **Dialog Functionality**: Test confirmation dialog with different filter combinations
-3. **File Download**: Verify proper CSV format and filename generation
-4. **Authentication**: Test export with proper session authentication
-5. **Error Handling**: Test network failures and invalid filter states
-6. **String Processing**: Verify conditional/trait/string variable processing matches UI rendering
+3. **Overflow Menu Access**: Verify proper placement and separation in menu
+4. **File Download**: Verify proper CSV format and filename generation
+5. **Authentication**: Test export with proper session authentication
+6. **Error Handling**: Test network failures and invalid filter states
+7. **String Processing**: Verify conditional/trait/string variable processing matches UI rendering
+
+#### String Dialog Form Testing
+1. **Tab Functionality**: Test both Content and Dimensions tabs
+2. **Form Structure**: Verify Submit button works from any tab
+3. **Form Scope**: Ensure form element wraps entire Tabs component
+4. **Bug Prevention**: Test that Update button responds from Dimensions tab
+5. **Data Persistence**: Verify data maintains across tab switches
 
 ### Browser Compatibility
 - **Modern Browsers**: Chrome, Firefox, Safari, Edge support

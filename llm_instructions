@@ -20,7 +20,7 @@
 ## Application Overview
 
 **Application Name**: Strings  
-**Purpose**: A web application for managing dynamic text content with conditional variables, traits, and organizational dimensions.
+**Purpose**: A web application for managing dynamic text content with conditional variables, traits, organizational dimensions, and advanced variable embedding capabilities.
 
 ### What the Strings App Does
 
@@ -28,18 +28,23 @@ The Strings application allows users to create and manage dynamic text content t
 
 - **Project Management**: Users create projects to organize their content
 - **String Management**: Define text strings that can contain variables (e.g., "The {{animal}} is {{color}}")
-- **Variable System**: Two types of variables:
-  - **Trait Variables**: Have different values for different traits (e.g., {{animal}} = "dog" for "Good" trait, "snake" for "Evil" trait)
-  - **String Variables**: Reference other strings in the project (e.g., {{footer}} references a footer string)
+- **Advanced Variable System**: Revolutionary string-as-variable system where every string is automatically a variable:
+  - **String Variables**: Every string is automatically a variable with either a 6-character random hash or custom name
+  - **Trait Variables**: Traditional variables with different values for different traits
+  - **Variable Embedding**: Variables can contain other variables using {{variableName}} format
 - **Trait System**: Define contexts like "Good" and "Evil" that determine how trait variables are rendered
-- **Conditional Variables**: Variables that can be toggled on/off to show/hide content dynamically
+- **Conditional Variables**: Both trait and string variables can be marked as conditional to show/hide content dynamically
 - **Dimension System**: Categorize strings with multiple values per dimension for organization and filtering
+- **Automatic Dimension Inheritance**: Strings automatically inherit dimension values from embedded variables
+- **Circular Reference Protection**: Advanced system prevents self-reference and circular chains
 - **Export Functionality**: Download filtered CSV files containing only strings that match current filter state
 
 ### Example Use Case
 A project with string "The {{animal}} is {{color}}" and traits "Good"/"Evil":
 - Good trait: {{animal}} = "gerbil", {{color}} = "blue" → "The gerbil is blue"
 - Evil trait: {{animal}} = "snake", {{color}} = "red" → "The snake is red"
+- String variables: {{greeting}} references another string "Hello {{userName}}"
+- Variable embedding: Variable dimension values can contain "{{companyName}} welcomes {{userName}}"
 
 ## Application Architecture
 
@@ -67,64 +72,146 @@ A project with string "The {{animal}} is {{color}}" and traits "Good"/"Evil":
 2. **Trait**: Different contexts/modes for variable values
    - Fields: name, project (foreign key), created_at, updated_at
    
-3. **Variable**: Reusable text placeholders with TWO TYPES:
-   - **Trait Variables**: Traditional variables with different values per trait
-   - **String Variables**: Variables that reference other strings in the project
-   - Fields: name, project (foreign key), variable_type ('trait' or 'string'), referenced_string (foreign key, nullable), is_conditional (boolean), created_at, updated_at
+3. **Variable**: Traditional trait variables
+   - Fields: name, project (foreign key), is_conditional (boolean), created_at, updated_at
    
-4. **VariableValue**: Trait-specific values for TRAIT variables only
+4. **VariableValue**: Trait-specific values for trait variables
    - Fields: variable (foreign key), trait (foreign key), value, created_at, updated_at
-   - Note: String variables don't use VariableValue - they reference strings directly
+   - Note: Can contain embedded variables using {{variableName}} format
    
-5. **String**: Main content with variables and conditionals
-   - Fields: content, project (foreign key), created_at, updated_at
+5. **String**: Revolutionary string-as-variable system
+   - **Every string is automatically a variable**: No more variable checkbox
+   - Fields: content, project (foreign key), variable_name (optional custom name), variable_hash (6-character auto-generated), is_conditional (boolean), created_at, updated_at
+   - **Effective Variable Name**: Returns variable_name if set, otherwise variable_hash
+   - **Auto-generated Hash**: Unique 6-character hash using uppercase letters and numbers
+   - **Conditional Support**: Strings can be marked as conditional and appear in conditionals sidebar
    
-6. **Conditional**: Named conditional blocks within strings (DEPRECATED - now uses conditional variables)
+6. **Dimension**: Categories for organizing/filtering strings
    - Fields: name, project (foreign key), created_at, updated_at
+   - Constraints: unique_together = ['name', 'project']
 
-7. **Dimension**: Categories for organizing/filtering strings
-   - Fields: name, project (foreign key), created_at, updated_at
-   - Constraints: unique_together = ['name', 'project'] (prevents duplicate dimension names within project)
-
-8. **DimensionValue**: Predefined values for each dimension
+7. **DimensionValue**: Predefined values for each dimension
    - Fields: dimension (foreign key), value, created_at, updated_at
-   - Constraints: unique_together = ['dimension', 'value'] (prevents duplicate values within same dimension)
+   - Constraints: unique_together = ['dimension', 'value']
 
-9. **StringDimensionValue**: Many-to-many relationship between strings and dimension values
+8. **StringDimensionValue**: Automatic dimension inheritance system
    - Fields: string (foreign key), dimension_value (foreign key), created_at
-   - Constraints: unique_together = ['string', 'dimension_value'] (prevents duplicate assignments)
+   - Constraints: unique_together = ['string', 'dimension_value']
+   - **Automatic Assignment**: Strings inherit dimension values from embedded variables
+   - **Visual Protection**: Inherited values shown with blue dashed borders and dots, cannot be manually deleted
 
-### Variable Types Explained
+9. **VariableDimensionValue**: Dimension-specific values for trait variables
+   - Fields: variable (foreign key), dimension_value (foreign key), value, created_at, updated_at
+   - Constraints: unique_together = ['variable', 'dimension_value']
+   - **Variable Embedding Support**: Values can contain {{variableName}} format for advanced compositions
 
-1. **Trait Variables** (variable_type='trait'):
-   - Have different values for each trait via VariableValue model
-   - Traditional behavior: {{animal}} shows "dog" for trait A, "cat" for trait B
-   
-2. **String Variables** (variable_type='string'):
-   - Reference another string in the project via referenced_string field
-   - When rendered, they show the content of the referenced string
-   - Can be created during string creation/editing with checkbox option
-   - Example: {{footer}} might reference a string containing "Copyright 2024"
+### Revolutionary String Variable System
 
-### Conditional Variables System
+#### Every String is a Variable
+- **No Variable Checkbox**: Removed - every string is automatically a variable
+- **Dual Naming System**: 
+  - **Auto Hash**: 6-character unique hash (e.g., "A7B2K9") generated automatically
+  - **Custom Name**: Optional user-defined name for easier reference
+- **Effective Variable Name**: Property that returns custom name or hash
+- **Purple Badges**: All strings display purple badges showing {{effectiveVariableName}} with copy functionality
+- **Variable Sidebar Removal**: String variables no longer appear in variables sidebar dialog
 
-- Variables can be marked as conditional (is_conditional=True)
-- Conditional variables appear in a special selector in the UI
-- Users can toggle which conditional variables are "active"
-- When a conditional variable is not selected, it's completely removed from string rendering
-- This replaced the old [[conditional]] ... [[/]] block system
+#### Variable Usage and Reference
+- **Double Bracket Format**: Copy button provides `{{variableName}}` format ready for pasting
+- **Universal Reference**: Can be referenced by either custom name or hash
+- **Conditional Support**: String variables can be marked as conditional
+- **Conditional Sidebar**: Conditional string variables appear with purple Spool icon
+
+### Variable Embedding System
+
+#### Embedding Variables in Variable Values
+**CRITICAL FEATURE**: Both trait variable values and dimension values can contain embedded variables:
+
+- **Syntax**: Use `{{variableName}}` format within variable values
+- **Recursive Processing**: Supports nested variables (Variable A contains Variable B contains Variable C)
+- **Infinite Recursion Protection**: Backend and frontend limit depth to 10 levels
+- **Support for All Variable Types**: Can embed both trait variables and string variables
+- **Real-time Processing**: Embedded variables are processed during rendering with current filter context
+
+#### Implementation Details
+- **Backend Processing**: `_process_variable_content()` method handles recursive variable expansion
+- **Frontend Processing**: `processVariableContent()` function provides consistent client-side rendering
+- **Depth Tracking**: Both backend and frontend track recursion depth to prevent infinite loops
+- **Filter Context**: Embedded variables respect current trait and dimension filter selections
+
+#### Use Cases
+- **Trait Variable Dimension Values**: `"Welcome to {{companyName}}, {{userName}}"`
+- **Trait Variable Values**: `"Hello {{firstName}} {{lastName}}"`  
+- **Complex Compositions**: Variables can reference other variables that contain variables
+
+### Automatic Dimension Inheritance System
+
+#### How It Works
+Strings automatically inherit dimension values from variables used in their content:
+
+1. **Variable Detection**: System scans string content for `{{variableName}}` patterns
+2. **Dimension Collection**: Gathers all dimension values from referenced variables (both trait and string variables)
+3. **Automatic Assignment**: Creates StringDimensionValue relationships for inherited values
+4. **Real-time Updates**: Django signals trigger updates when variable dimension values change
+5. **Visual Protection**: Inherited values shown with blue dashed borders and dots, cannot be manually deleted
+
+#### Technical Implementation
+- **Backend Method**: `update_dimension_values_from_variables()` handles inheritance logic
+- **Django Signals**: Automatic updates when VariableDimensionValue or StringDimensionValue changes
+- **Recursive Support**: String variables inherit from their embedded string variables
+- **Frontend Protection**: `isDimensionValueInheritedFromVariables()` prevents deletion of inherited values
+
+#### Example Flow
+1. Variable A has dimension value "Email" for dimension "Type"
+2. String B contains "{{VariableA}} footer"
+3. String B automatically gets "Email" dimension value
+4. When Variable A's dimension values change, String B updates automatically
+
+### Circular Reference Protection
+
+#### Prevention System
+Comprehensive protection against self-reference and circular chains:
+
+- **Self-Reference Detection**: Prevents strings from referencing themselves
+- **Circular Chain Detection**: Prevents A → B → A patterns
+- **Visited Set Tracking**: Uses Set data structure to track reference chains
+- **Frontend Validation**: `detectCircularReferences()` validates before submission
+- **Backend Validation**: `_detect_circular_references()` in StringSerializer
+- **Clear Error Messages**: Specific messages identify the problematic variable
+
+#### Implementation
+- **Frontend Function**: `detectCircularReferences(content, currentStringId)`
+- **Backend Method**: `_detect_circular_references(content, project, currentStringId, visited)`
+- **Error Handling**: Prevents submission with clear user feedback
+- **Depth Tracking**: Protects against complex multi-level circular references
+
+### Variable Detection and Creation System
+
+#### Automatic Variable Detection
+When creating/editing strings, system automatically detects new variables:
+
+- **Pattern Matching**: Regex finds all `{{variableName}}` patterns in content
+- **Duplicate Prevention**: Checks both trait variables and string variables before creating
+- **Smart Creation**: Only creates trait variables for truly new variable names
+- **Reference Resolution**: Handles effective_variable_name, variable_name, and variable_hash
+
+#### Fixed Variable Detection Bug
+**CRITICAL FIX**: System previously incorrectly detected existing string variables as new trait variables:
+
+- **Root Cause**: Variable detection only checked `project.variables` (trait variables) 
+- **Solution**: Updated `closeStringDialog()` to check both trait and string variables
+- **Implementation**: Added proper checks for all string variable reference methods
+- **Result**: Eliminates duplicate variable creation and improves data integrity
 
 ### Key Relationships
 
-- Projects contain Traits, Variables, Strings, Conditionals, and Dimensions
-- VariableValues link Variables to Traits with specific values (trait variables only)
-- String variables link to other Strings via referenced_string field
-- Strings can reference Variables via {{variable_name}} syntax
-- Variables can be conditional and are toggled via UI selector
-- Dimensions contain DimensionValues (one-to-many)
-- Strings can be assigned DimensionValues via StringDimensionValue (many-to-many)
-- Dimension names must be unique within a project
-- DimensionValues must be unique within a dimension
+- Projects contain Traits, Variables, Strings, and Dimensions
+- VariableValues link Variables to Traits with specific values (can contain embedded variables)
+- VariableDimensionValues link Variables to DimensionValues with values (can contain embedded variables)
+- Strings automatically inherit dimension values from embedded variables via Django signals
+- Every String is automatically a variable with either custom name or generated hash
+- Circular reference protection prevents infinite loops in variable chains
+- Variable embedding allows complex compositions within variable values
 
 ## API Endpoints
 
@@ -143,51 +230,51 @@ A project with string "The {{animal}} is {{color}}" and traits "Good"/"Evil":
 - `POST /api/projects/{id}/download-csv/` - Download filtered CSV with current filter parameters
 
 ### Traits
-- `GET /api/projects/{project_id}/traits/` - List project traits
 - `POST /api/traits/` - Create new trait
 - `PATCH /api/traits/{id}/` - Update trait
 - `DELETE /api/traits/{id}/` - Delete trait
 
-### Variables
-- `GET /api/projects/{project_id}/variables/` - List project variables
-- `POST /api/variables/` - Create new variable
-  - Required: name, project, variable_type ('trait' or 'string')
-  - Optional: referenced_string (for string variables), is_conditional (boolean)
+### Variables (Trait Variables Only)
+- `POST /api/variables/` - Create new trait variable
+  - Required: name, project
+  - Optional: is_conditional (boolean)
 - `PATCH /api/variables/{id}/` - Update variable
 - `DELETE /api/variables/{id}/` - Delete variable
 
-### Variable Values
-- `GET /api/variables/{variable_id}/values/` - List variable values by trait
+### Variable Values (Support Variable Embedding)
 - `POST /api/variable-values/` - Create variable value for trait
+  - Note: value field can contain {{variableName}} patterns
 - `PATCH /api/variable-values/{id}/` - Update variable value
 - `DELETE /api/variable-values/{id}/` - Delete variable value
 
-### Strings
-- `GET /api/projects/{project_id}/strings/` - List project strings
+### Variable Dimension Values (Support Variable Embedding)
+- `POST /api/variable-dimension-values/` - Create variable dimension value
+  - Note: value field can contain {{variableName}} patterns
+- `PATCH /api/variable-dimension-values/{id}/` - Update variable dimension value
+- `DELETE /api/variable-dimension-values/{id}/` - Delete variable dimension value
+
+### Strings (String Variables)
 - `POST /api/strings/` - Create new string
+  - Required: content, project
+  - Optional: variable_name (custom name), is_conditional (boolean)
+  - Auto-generated: variable_hash (6-character unique hash)
 - `PATCH /api/strings/{id}/` - Update string
 - `DELETE /api/strings/{id}/` - Delete string
 
 ### Dimensions
-- `GET /api/dimensions/` - List user's dimensions (filtered by project access)
 - `POST /api/dimensions/` - Create new dimension
-  - Required: name, project
 - `PATCH /api/dimensions/{id}/` - Update dimension
 - `DELETE /api/dimensions/{id}/` - Delete dimension
 
 ### Dimension Values
-- `GET /api/dimension-values/` - List dimension values (filtered by user access)
 - `POST /api/dimension-values/` - Create new dimension value
-  - Required: dimension, value
 - `PATCH /api/dimension-values/{id}/` - Update dimension value
 - `DELETE /api/dimension-values/{id}/` - Delete dimension value
 
-### String Dimension Values
+### String Dimension Values (Automatic Inheritance)
 - `GET /api/string-dimension-values/` - List string-dimension-value relationships
-  - Optional query param: `?string={string_id}` to filter by string
-- `POST /api/string-dimension-values/` - Create new string-dimension-value relationship
-  - Required: string, dimension_value
-- `DELETE /api/string-dimension-values/{id}/` - Delete relationship
+- `POST /api/string-dimension-values/` - Create manual assignment
+- `DELETE /api/string-dimension-values/{id}/` - Delete manual assignment (inherited values protected)
 
 ## User Interface Design
 
@@ -198,7 +285,7 @@ The application uses a sophisticated three-panel layout system optimized for con
 #### Three-Panel Layout Structure:
 - **Left Panel (Filter Sidebar)**: Fixed 360px wide sidebar containing filtering controls with independent scrolling
 - **Center Panel (Main Canvas)**: Flexible width area displaying project strings and main content with independent scrolling
-- **Right Panel (Variables Sidebar)**: Collapsible 360px wide sidebar for variable management with independent scrolling
+- **Right Panel (Variables Sidebar)**: Collapsible 360px wide sidebar for trait variable management with independent scrolling
 
 #### Global Navigation
 - **App Header**: Full-width header with app name "Strings" and user authentication controls (sticky at top)
@@ -207,12 +294,10 @@ The application uses a sophisticated three-panel layout system optimized for con
   - Action buttons (right side): "Manage Variables", "Edit Project", and overflow menu
   - **Overflow Menu**: Contains "Download CSV" (with Upload icon) and "Delete Project" separated by menu divider
   - The "Download CSV" option opens a confirmation dialog for filtered export
-  - The "Manage Variables" button toggles the collapsible variables sidebar
+  - The "Manage Variables" button toggles the collapsible variables sidebar (trait variables only)
   - **Sticky positioning**: Remains visible while scrolling content below
 
 ### Left Panel: Filter Sidebar
-
-Dedicated filtering controls with semantic icon system and hover interactions:
 
 #### Dimensions Section
 - **Purpose**: Filter strings by dimension values
@@ -238,7 +323,9 @@ Dedicated filtering controls with semantic icon system and hover interactions:
 - **Purpose**: Control conditional content visibility  
 - **Icon**: Signpost icon with semantic meaning
 - **Functionality**:
-  - Individual checkboxes for each conditional variable
+  - Individual checkboxes for each conditional variable (both trait and string variables)
+  - **String Variables**: Show with purple Spool icon for visual distinction
+  - **Trait Variables**: Show with purple Signpost icon
   - Edit buttons appear on hover for conditional variable management
   - Multiple selection supported
   - Section only appears if conditional variables exist
@@ -254,8 +341,6 @@ Dedicated filtering controls with semantic icon system and hover interactions:
 
 ### Center Panel: Main Canvas
 
-Primary content area with streamlined controls and responsive design:
-
 #### Canvas Header
 - **Title**: "Project Strings" with proper typography hierarchy
 - **Display Mode Controls**: Three toggle buttons with semantic color coding:
@@ -267,47 +352,67 @@ Primary content area with streamlined controls and responsive design:
 
 #### String Display Area
 - **String Cards**: Clickable ShadCN Card components for each string
+- **Purple Variable Badges**: Every string shows purple badge with {{effectiveVariableName}} and copy icon
+- **Copy Functionality**: Copy button provides `{{variableName}}` format ready for pasting
 - **Interactive Elements**: 
   - Entire card is clickable to edit string content
-  - **Always-visible overflow menu** (MoreHorizontal icon) with "Convert to string variable" and "Delete" options
-  - Menu separator divides convert and delete actions for visual hierarchy
+  - **Always-visible overflow menu** (MoreHorizontal icon) with "Delete" option
   - Variable badges in highlight mode with click prevention
   - Proper event handling (e.stopPropagation()) for nested interactions
-- **String Conversion**: Overflow menu provides access to convert strings to string variables
-  - Opens dedicated conversion dialog with variable name input
-  - Shows string preview and conversion warnings
-  - Deletes original string and creates new string variable upon confirmation
-- **Responsive Design**: 
-  - Conditional line height: `leading-normal` for plaintext, `leading-loose` for badge mode
-  - Proper spacing between cards and consistent padding (px-6 throughout)
-- **Empty States**: Intelligent messages for no strings vs no filtered matches
-- **Independent Scrolling**: String list scrolls independently while canvas header remains sticky
-- **Sort Order**: Newest strings appear at top, maintained across all operations
+- **Dimension Inheritance Display**: 
+  - **Manual Values**: Gray borders with X button for removal
+  - **Inherited Values**: Blue dashed borders with dots, no X button (cannot be removed)
+  - **Visual Legend**: Shows inheritance indicators and meanings
 
-### Right Panel: Variables Sidebar (Collapsible)
-
-Dedicated variable management panel with streamlined focus:
+### Right Panel: Variables Sidebar (Trait Variables Only)
 
 #### Sidebar Structure
 - **Header**: Contains "Variables" title and X close button (sticky positioning)
-- **Content**: Variables-only management (removed multi-tab system)
-- **Footer**: "+ New Variable" button for creating variables
+- **Content**: Trait variables management only (string variables removed from sidebar)
+- **Footer**: "+ New Variable" button for creating trait variables
 - **Behavior**: 
   - Collapsible drawer that pushes main content (not overlay)
   - Closed by default when entering project
   - Toggled via "Manage Variables" button in project header
   - Fixed width of 360px when open
-- **Independent Scrolling**: Variables list scrolls independently while header remains sticky
 
 #### Variable Management
-- **Variable List**: All project variables with visual type indicators
-  - **String Variables**: Green `Spool` icon badge
+- **Variable List**: All project trait variables with visual type indicators
   - **Conditional Variables**: Purple `Signpost` icon badge
 - **Interactions**: 
   - All variables clickable for editing
-  - Hover-triggered delete icons (right side of each variable card) with opacity transitions
+  - Hover-triggered delete icons with opacity transitions
   - Proper event handling with `e.stopPropagation()` for delete buttons
-- **Visual Design**: Consistent with filter sidebar hover patterns and spacing
+
+### String Dialog System
+
+#### Two-Tab Interface
+- **Content Tab**: String content editing with textarea and variable insertion
+- **Advanced Tab**: Conditional checkbox and custom variable name input
+
+#### Content Tab Features
+- **Auto-focus**: Content textarea automatically receives focus when dialog opens
+- **Variable List**: Shows trait variables only (string variables accessible by typing/pasting)
+- **Text Selection**: Smart text replacement functionality with visual feedback
+- **Circular Reference Protection**: Validates content before submission
+
+#### Advanced Tab Features
+- **Conditional Checkbox**: Mark string as conditional to appear in conditionals sidebar
+- **Custom Variable Name**: Optional custom name instead of auto-generated hash
+- **Variable Name Validation**: Prevents duplicates within project
+
+### Variable Dialog System (Trait Variables)
+
+#### Three-Tab Interface
+- **Overview Tab**: Variable name and conditional settings
+- **Traits Tab**: Values for each trait in the project
+- **Dimensions Tab**: Values for each dimension value with variable embedding support
+
+#### Variable Embedding in Dimensions Tab
+- **Embedded Variables Support**: Input fields accept {{variableName}} format
+- **Clear Documentation**: Helper text explains variable embedding capability
+- **Enhanced Placeholders**: Inputs show "(can include {{variables}})" hint
+- **Processing**: Both frontend and backend process embedded variables during rendering
 
 ### Bulk String Management System
 
@@ -393,7 +498,7 @@ The application includes comprehensive bulk editing functionality for efficient 
 
 ## String Rendering System
 
-The application features a sophisticated string rendering system that handles multiple display modes and variable types.
+The application features a sophisticated string rendering system that handles multiple display modes, variable types, and embedded variables.
 
 ### Display Mode Controls
 
@@ -416,593 +521,334 @@ The application features a sophisticated string rendering system that handles mu
 - **OFF**: Dimension tags are hidden from string display
 - **ON**: Dimension tags show as blue badges below string content
 
+### Variable Embedding Processing
+
+#### Recursive Variable Expansion
+When variables contain embedded variables, the system processes them recursively:
+
+1. **Pattern Detection**: Finds all {{variableName}} patterns in variable values
+2. **Context-Aware Processing**: Uses current trait and dimension filter selections
+3. **Recursive Resolution**: Handles variables that reference other variables
+4. **Infinite Loop Protection**: Limits recursion depth to 10 levels
+5. **Mixed Variable Types**: Supports embedding both trait and string variables
+
+#### Frontend Processing
+- **Function**: `processVariableContent(content, depth)` with recursion protection
+- **Integration**: Works with `getVariableValueWithDimensionPrecedence()` for consistent rendering
+- **Real-time Updates**: Processes embedded variables as user changes filters
+
+#### Backend Processing
+- **Method**: `_process_variable_content()` with depth tracking
+- **API Integration**: Processes embedded variables in `_get_variable_replacement()`
+- **Export Consistency**: CSV exports include processed embedded variables
+
 ### Rendering Behavior by Mode
 
 #### Styled Mode (Highlight ON, Default):
-- **Trait Variables**: Show as colored badges (green=has value, red=no value)
+- **Trait Variables**: Show as colored badges (green=has value, red=no value) with embedded variable processing
 - **String Variables**: 
-  - When showStringVariables=OFF: Show referenced string content
+  - When showStringVariables=OFF: Show referenced string content with recursive processing
   - When showStringVariables=ON: Show as grey {{variable}} badges
 - **Conditional Variables**: Only show if selected in conditionals selector
 
 #### Plaintext Mode (Highlight OFF):
-- **Trait Variables**: Replaced with trait-specific values or variable name if no value
+- **Trait Variables**: Replaced with trait-specific values (processed for embedded variables) or variable name if no value
 - **String Variables**:
-  - When showStringVariables=OFF: Show referenced string content
+  - When showStringVariables=OFF: Show referenced string content with recursive processing
   - When showStringVariables=ON: Show as {{variable}} text
 - **Conditional Variables**: Only show if selected in conditionals selector
 
-#### Special Trait Selection Cases:
-- **Blank Trait + showStringVariables=OFF**: String variables expand, trait variables show as {{variable}}
-- **Blank Trait + showStringVariables=ON**: All variables show as {{variable}}
-- **Selected Trait + showStringVariables=OFF**: String variables expand, trait variables show values
-- **Selected Trait + showStringVariables=ON**: String variables show as badges, trait variables show values
+## Automatic Dimension Inheritance System
+
+### How Inheritance Works
+
+#### Inheritance Flow
+1. **String Analysis**: System scans string content for {{variableName}} patterns
+2. **Variable Lookup**: Finds referenced trait and string variables
+3. **Dimension Collection**: Gathers dimension values from all referenced variables
+4. **Recursive Processing**: For string variables, recursively processes their content
+5. **Automatic Assignment**: Creates StringDimensionValue relationships for inherited values
+6. **Signal Updates**: Django signals trigger updates when source variables change
+
+#### Visual Distinction System
+- **Manual Values**: 
+  - Gray borders with X button for removal
+  - User-assigned dimension values
+  - Can be deleted by clicking X
+- **Inherited Values**: 
+  - Blue dashed borders with dots pattern
+  - No X button (cannot be manually deleted)
+  - Automatically managed by system
+- **Visual Legend**: UI provides legend explaining the difference
+
+#### Real-time Updates
+- **Variable Changes**: When a variable's dimension values change, all strings using that variable update automatically
+- **String Variable Changes**: When a string variable's dimension values change, strings referencing it update
+- **Immediate Feedback**: Changes reflect immediately in the UI
 
 ### Technical Implementation
 
-#### React Key Management
-The system uses sophisticated key generation to avoid React conflicts:
-- **Base Keys**: Include string ID, depth, index, and variable name
-- **Nested Content**: Uses keyPrefix parameter to ensure uniqueness
-- **Format**: `str-${stringId}-${depth}-${type}-${index}-${variableName}`
+#### Backend Signals
+- **VariableDimensionValue Changes**: Updates all strings containing the affected variable
+- **StringDimensionValue Changes**: Updates all strings referencing the affected string variable
+- **String Content Changes**: Updates dimension inheritance when string content changes
 
-#### Rendering Functions
-- **renderContentRecursively**: For styled mode with proper keyPrefix for uniqueness
-- **processStringContent**: For plaintext mode
-- **Recursive Handling**: Supports nested string variables by passing unique keyPrefix
+#### Frontend Protection
+- **Inheritance Detection**: `isDimensionValueInheritedFromVariables()` with recursion protection
+- **Deletion Prevention**: Inherited values cannot be manually deleted
+- **Visual Feedback**: Clear indicators show which values are inherited vs manual
 
-## Filtering System
+## Circular Reference Protection
 
-### Filter Logic
-- **AND Operation**: All active filters must match for a string to be displayed
-- **Dimension Filtering**: Single selection per dimension, strings without dimension values are hidden when filters active
-- **Trait Filtering**: Affects variable rendering but doesn't filter strings
-- **Conditional Filtering**: Multiple selection, affects content visibility within strings
+### Protection Mechanisms
 
-### Empty States
-- **No Strings**: "No strings created yet" when project has no strings
-- **No Matches**: "No strings match the current filters" when filters eliminate all results
-- **Smart Messaging**: Contextual messages based on filter state
+#### Frontend Validation
+- **Function**: `detectCircularReferences(content, currentStringId)`
+- **Validation Point**: Before string submission
+- **Error Prevention**: Stops submission with clear error message
+- **User Feedback**: Toast notifications explain the circular reference issue
+
+#### Backend Validation
+- **Method**: `_detect_circular_references()` in StringSerializer
+- **Validation Point**: During string creation/update
+- **Server-side Safety**: Prevents circular references even if frontend validation fails
+- **Detailed Errors**: Specific messages identify problematic variable chains
+
+#### Detection Algorithm
+1. **Initialize Visited Set**: Track visited strings in current chain
+2. **Parse Variables**: Extract {{variableName}} patterns from content
+3. **Follow References**: Recursively check referenced string variables
+4. **Detect Loops**: Identify when a string appears twice in chain
+5. **Report Specific Error**: Clear message shows which variable causes the issue
+
+### Error Handling
+- **Self-Reference**: "String cannot reference itself through variable {{variableName}}"
+- **Circular Chain**: "Circular reference detected involving variable {{variableName}}"
+- **Prevention**: System blocks creation/update of problematic references
 
 ## CSV Export System
-
-The application provides a sophisticated filtered CSV export system that allows users to download only the strings that match their current filter state, rather than generating massive files with every possible combination.
 
 ### Export Functionality Overview
 
 #### Filtered Export Approach
 - **User-Controlled**: Only exports strings matching current UI filter state
+- **Variable Processing**: Exported strings include processed embedded variables
 - **Manageable Files**: Avoids massive exports by respecting active filters
 - **Transparent Process**: Users see exactly what will be exported before confirming
-- **Smart Processing**: Strings are rendered with the current trait/conditional selection
 
-#### Export Button Location
-- **Position**: Located in project header overflow menu as first option
-- **Icon**: Upload icon from Lucide React (within menu)
-- **Organization**: Separated from "Delete Project" option with menu separator
-- **Behavior**: Opens confirmation dialog showing current filter state and string count
-
-### Export Dialog System
-
-#### Confirmation Dialog Features
-- **Clear Communication**: Explains that export will contain only filtered strings
-- **Current Filter Display**: Shows active dimension filters, trait selection, and conditional variables
-- **String Count**: Displays exact number of strings to be exported
-- **Smart Messaging**: Context-aware descriptions based on filter state
-- **Cancel/Confirm**: Clear action buttons with loading states
-
-#### Filter State Transparency
-The dialog displays current filter state including:
-- **Selected Trait**: Shows which trait is selected or "Blank (Variables)" mode
-- **Dimension Filters**: Lists active dimension filters (e.g., "Type: Email, Platform: Web")
-- **Conditional Variables**: Shows which conditional variables are enabled
-- **Unfiltered State**: Clear messaging when no filters are active
-
-#### User Experience Features
-- **Loading States**: Button shows "Downloading..." during export process
-- **Error Handling**: Proper error messages and toast notifications
-- **File Naming**: Automatic filename format: `{ProjectName}_filtered_strings.csv`
-- **Browser Download**: Standard browser download with proper headers
+#### Export Processing with Variable Embedding
+- **Backend Method**: `_process_string_content()` handles embedded variables during export
+- **Context Preservation**: Uses current trait and dimension filter selections
+- **Recursive Processing**: Handles nested variable references
+- **Consistency**: Export output matches UI display exactly
 
 ### Backend Export Processing
 
-#### API Endpoint
-- **Method**: `POST /api/projects/{id}/download-csv/`
-- **Authentication**: Requires user authentication and project access
-- **Parameters**: Accepts current filter state from frontend
-
-#### Filter Parameters Accepted
-```
-{
-  "trait_id": number|null,  // Selected trait ID or null for blank
-  "selected_conditional_variables": number[],  // Array of conditional variable IDs
-  "selected_dimension_values": number[]  // Array of selected dimension value IDs
-}
-```
-
 #### String Processing Logic
-The backend mirrors the frontend rendering logic exactly:
+1. **Conditional Variable Processing**: Remove unselected conditional variables
+2. **Trait Variable Processing**: Use trait-specific values with embedded variable expansion
+3. **String Variable Processing**: Recursively expand string variables with embedded processing
+4. **Dimension Filtering**: Only include strings matching all selected dimension filters
 
-1. **Conditional Variable Processing**:
-   - Variables not in `selected_conditional_variables` are completely removed from content
-   - Selected conditional variables are processed normally
-
-2. **Trait Variable Processing**:
-   - If trait_id is provided: Show trait-specific values from VariableValue
-   - If trait_id is null: Show variable names in {{variable}} format
-   - If no value exists for trait: Show {{variable}} format
-
-3. **String Variable Processing**:
-   - Always expand string variables to their referenced content
-   - Recursive processing for nested string variables
-
-4. **Dimension Filtering**:
-   - Only include strings that have ALL selected dimension values
-   - Uses AND logic across all dimension filters
-   - Strings without dimension assignments are excluded when filters are active
-
-#### CSV Output Format
-```
-String ID,Original Content,Processed Content,Created At
-1,"Hello {{name}}","Hello John","2024-01-01 12:00:00"
-2,"The {{animal}} is {{color}}","The dog is blue","2024-01-01 12:05:00"
-```
-
-- **String ID**: Unique identifier for the string
-- **Original Content**: Raw string content with variable placeholders
-- **Processed Content**: String rendered with current filter state
-- **Created At**: Timestamp when string was created
-
-#### Technical Implementation
-- **HTTP Response**: Proper CSV content-type headers
-- **File Download**: Browser-compatible attachment headers
-- **CSRF Protection**: Proper CSRF token handling in POST request
-- **Error Handling**: Appropriate HTTP status codes and error messages
-
-### Integration with Frontend State
-
-#### Filter State Synchronization
-- **Real-time Updates**: Export reflects current UI filter state
-- **State Capture**: All filter values captured at time of export request
-- **Consistency**: Backend processing matches frontend rendering exactly
-
-#### Authentication Handling
-- **Session Cookies**: Uses Django session authentication
-- **CSRF Tokens**: Proper CSRF token transmission in POST headers
-- **Permission Checks**: Verifies user access to project before export
-
-#### Error Scenarios
-- **Network Errors**: Proper error handling with user feedback
-- **Authentication Issues**: Clear messaging for auth failures
-- **Server Errors**: Graceful handling of backend processing failures
-- **Empty Results**: Informative messaging when no strings match filters
-
-### Use Cases and Benefits
-
-#### Practical Export Scenarios
-1. **Dimension-Specific Export**: Export only strings for specific platforms or types
-2. **Trait-Specific Export**: Export strings rendered for specific trait context
-3. **Conditional Content Export**: Export with specific conditional variables enabled
-4. **Combined Filtering**: Multiple filter types for precise content selection
-
-#### User Benefits
-- **Relevant Content**: Only export needed strings, not every permutation
-- **Manageable Files**: Avoid overwhelming CSV files with thousands of combinations
-- **Predictable Output**: See exactly what will be exported before confirming
-- **Flexible Filtering**: Use existing UI filters to control export scope
-
-#### Technical Benefits
-- **Performance**: Reduced server processing and file sizes
-- **Scalability**: System remains usable even with large projects
-- **Maintainability**: Single rendering logic shared between UI and export
-- **User Experience**: Fast downloads with immediate feedback
-
-## CSV Import System
-
-The application provides comprehensive CSV import functionality for bulk string creation, complementing the export system.
-
-### Import Functionality Overview
-
-#### Bulk Import Approach
-- **CSV-Based**: Each cell in uploaded CSV becomes a separate string
-- **Variable Extraction**: Automatic detection and creation of variables using `{{variable}}` syntax
-- **Smart Processing**: Creates new variables if they don't exist, reuses existing ones
-- **File Validation**: CSV-only uploads with file size display
-
-#### Import Dialog Features
-- **Comprehensive Instructions**: Clear explanation of CSV format and variable handling
-- **Visual Examples**: Shows expected input format and resulting output
-- **Variable Syntax Guide**: Explains `{{variable}}` pattern for dynamic content
-- **File Selection**: Drag-and-drop or click to select CSV files
-- **Loading States**: Progress indicators during import processing
-
-### Import Processing Logic
-
-#### CSV Cell Processing
-- **Individual Strings**: Each non-empty CSV cell becomes a separate string
-- **Content Preservation**: Cell content used as-is for string content
-- **Row/Column Agnostic**: Position in CSV doesn't affect string creation
-- **Empty Cell Handling**: Skips empty cells during processing
-
-#### Variable Management During Import
-- **Automatic Detection**: Uses regex to find all `{{variable}}` patterns
-- **Smart Creation**: Creates new variables if they don't exist in project
-- **Variable Reuse**: Uses existing variables when names match
-- **Type Assignment**: All imported variables are trait variables by default
-- **Conditional Support**: Variables can be marked as conditional during creation
-
-#### API Integration
-- **Sequential Processing**: Creates variables first, then strings
-- **Parallel Operations**: Uses Promise.all for performance optimization
-- **Error Handling**: Specific error messages for different failure scenarios
-- **Success Feedback**: Shows exact counts of created variables and strings
-- **Project Refresh**: Automatic reload of project data after successful import
-
-### Import Dialog Interface
-
-#### File Selection Area
-- **Visual Upload Zone**: Clear drag-and-drop target with file size display
-- **File Validation**: Restricts to CSV files only with proper error messaging
-- **Size Information**: Shows selected file size for user awareness
-- **Replace Selection**: Can change file before confirming import
-
-#### Instructions Section
-- **Format Guidelines**: Explains CSV structure and processing behavior
-- **Variable Syntax**: Details `{{variable}}` pattern with examples
-- **Expected Outcomes**: Shows how CSV content becomes strings with variables
-- **Best Practices**: Guidance for optimal import results
-
-#### Processing Features
-- **Loading States**: Import button shows "Importing..." during processing
-- **Progress Feedback**: Real-time updates on creation progress
-- **Error Recovery**: Graceful handling of partial failures
-- **Completion Summary**: Detailed report of what was created
-
-### Technical Implementation
-
-#### Frontend Processing
-- **File Reading**: Uses FileReader API for CSV content access
-- **CSV Parsing**: Handles quoted values and various CSV formats
-- **Variable Extraction**: `extractVariablesFromContent` helper function
-- **State Management**: `importDialog`, `importFile`, `importLoading` states
-
-#### Backend Integration
-- **Variable Creation**: POST requests to `/api/variables/` endpoint
-- **String Creation**: POST requests to `/api/strings/` endpoint
-- **Transaction Safety**: Proper error handling prevents partial imports
-- **Authentication**: Uses Django session authentication
-
-#### Performance Considerations
-- **Batch Processing**: Groups API calls for efficiency
-- **Memory Management**: Processes large CSVs without overwhelming browser
-- **User Feedback**: Maintains responsive UI during long imports
-- **Error Boundaries**: Prevents crashes from malformed CSV files
-
-### Use Cases and Benefits
-
-#### Practical Import Scenarios
-1. **Content Migration**: Moving existing content from other systems
-2. **Bulk Content Creation**: Creating many strings at once from spreadsheets
-3. **Template Import**: Importing pre-defined content templates
-4. **Variable-Rich Content**: Content with many dynamic elements
-
-#### User Benefits
-- **Time Efficiency**: Create hundreds of strings in seconds
-- **Variable Automation**: Automatic variable detection and creation
-- **Flexible Input**: Standard CSV format works with any spreadsheet software
-- **Smart Processing**: Intelligent handling of existing vs new variables
-
-#### Technical Benefits
-- **Scalable Creation**: Handle large content imports efficiently
-- **Data Integrity**: Proper validation and error handling
-- **User Experience**: Clear feedback and progress indication
-- **Integration**: Seamless with existing project structure
-
-## Form System and Data Management
-
-### Variable Creation Workflows
-
-1. **Manual Creation**: Via sidebar "New Variable" button with type selection
-2. **Auto-Creation from Strings**: When {{newVariable}} is typed in string content
-3. **String Conversion**: Via overflow menu on existing string cards
-   - "Convert to string variable" option in string card overflow menu
-   - Opens dedicated conversion dialog with variable name input
-   - Shows string preview with conversion warnings
-   - Creates string variable and deletes original string upon confirmation
-
-### Text Selection and Variable Replacement
-
-The string content editor includes smart text selection functionality for enhanced variable workflow:
-
-#### Text Selection Detection
-- **Real-time Monitoring**: Listens for text selection in string content textarea via `onSelect`, `onMouseUp`, and `onKeyUp` events
-- **Selection State**: Tracks `selectedText`, `selectionStart`, and `selectionEnd` for replacement operations
-- **Visual Feedback**: Blue notification box appears above variables section when text is selected
-
-#### Selection Notification System
-- **Message Display**: Shows selected text with truncation (up to 50 characters) in blue notification box
-- **Clear Instructions**: Provides user guidance "Click a variable below to replace the selected text with that variable"
-- **Dynamic Visibility**: Notification appears/disappears based on selection state
-
-#### Variable Replacement Behavior
-- **Smart Insertion Logic**: 
-  - When text is selected: Replace selected text with chosen variable
-  - When no selection: Insert variable at cursor position (existing behavior)
-- **State Cleanup**: Clears selection state after replacement to prevent unintended operations
-- **Cursor Management**: Positions cursor after inserted variable for continued editing
-
-#### Technical Implementation
-- **Event Handling**: Uses multiple event types to capture all selection methods (mouse, keyboard, programmatic)
-- **State Management**: Maintains selection boundaries for precise text replacement
-- **User Experience**: Seamless integration with existing variable insertion workflow
-
-### Dimension Management System
-
-#### Comprehensive CRUD Operations
-- **Create**: New dimensions with validation for unique names within project
-- **Read**: Display dimensions with their predefined values as grey badges in sidebar
-- **Update**: Edit dimension names and manage dimension values
-- **Delete**: Remove dimensions with proper cascade handling
-
-#### Tag-Based Dimension Value Selection
-- **Multiple Values per Dimension**: Strings can have multiple values for each dimension
-- **Tag Display**: Selected values shown as removable gray badges with always-visible X buttons
-- **Plus Button Interface**: Dashed-border plus button opens popover menu for adding values
-- **Smart Filter Menu**: 
-  - Auto-focused search input for filtering existing values or typing new ones
-  - Scrollable list of available (unselected) dimension values
-  - Dynamic "Create xyz" footer option when typing new values
-  - One-click selection closes menu and applies value
-- **Data Storage**: Multiple StringDimensionValue relationships per string per dimension
-
-#### Validation Features
-- **Unique Dimension Names**: Prevents duplicate dimension names within project (case-insensitive)
-- **Unique Dimension Values**: Prevents duplicate values within same dimension (case-insensitive)
-- **Database Constraints**: Backend enforces uniqueness via model constraints
-- **Real-time Validation**: Toast notifications for validation errors
-
-#### Display Features
-- **String Cards**: Show dimension values as blue badges below content
-- **Multi-Value Format**: "DimensionName: value1, value2, value3" (comma-separated)
-- **Grouped Display**: Multiple values for same dimension combined into single badge
-- **Consistent Styling**: `bg-gray-50 text-gray-700 border-gray-200` theme
+#### Variable Embedding in Export
+- **Embedded Variable Expansion**: Variables containing {{otherVariable}} are fully processed
+- **Filter Context**: Embedded variables use current trait and dimension selections
+- **Recursive Support**: Handles multiple levels of variable nesting
+- **Performance**: Optimized processing with recursion limits
 
 ## Development Guidelines and Patterns
 
-### Authentication System Notes
-- **Critical**: Frontend uses `/api/auth/me/` endpoint, not `/api/auth/user/`
-- **Password Reset**: Uses `/api/auth/password/reset/` endpoint structure
-- **Session Management**: Django sessions with proper CSRF handling
-- **Error Handling**: Proper 404 handling for unauthenticated requests
+### String Variable System Guidelines
+- **Every String is a Variable**: No variable checkbox, automatic hash generation
+- **Effective Variable Name**: Use property that returns custom name or hash
+- **Purple Badge Display**: Always show purple {{variableName}} badges on strings
+- **Copy Functionality**: Provide copy button with double bracket format
+- **Conditional Support**: Strings can be marked conditional and appear in sidebar
+
+### Variable Embedding Guidelines
+- **Embedding Syntax**: Use {{variableName}} format in variable values
+- **Recursive Support**: Support nested variables with depth limits
+- **Context Awareness**: Process embedded variables with current filter context
+- **Both Variable Types**: Support embedding trait and string variables
+- **Validation**: Check for circular references in embedded variables
+
+### Dimension Inheritance Guidelines
+- **Automatic Processing**: Use Django signals for real-time inheritance updates
+- **Visual Protection**: Show inherited values with blue dashed borders
+- **Manual vs Inherited**: Clear distinction between user-assigned and inherited values
+- **Recursive Inheritance**: Support inheritance through string variable chains
+- **Signal Efficiency**: Only update affected strings when variables change
+
+### Circular Reference Guidelines
+- **Dual Validation**: Implement both frontend and backend validation
+- **Clear Messaging**: Provide specific error messages identifying problematic variables
+- **Prevention First**: Block problematic submissions rather than cleanup after
+- **Visited Tracking**: Use Set data structure for efficient cycle detection
 
 ### State Management Patterns
 - Use React useState for component-level state
 - Implement proper cleanup in useEffect hooks
 - Follow established pattern of separate handlers for create vs edit operations
 - Always reset form state when closing dialogs
-
-### Variable System Guidelines
-- **Always specify variable_type** when creating variables ('trait' or 'string')
-- **String variables** should reference another string via referenced_string field
-- **Trait variables** use VariableValue model for trait-specific values
-- **Conditional variables** can be either type, marked with is_conditional=True
-
-### String Rendering Guidelines
-- **Use renderContentRecursively** for styled mode with proper keyPrefix for uniqueness
-- **Use processStringContent** for plaintext mode
-- **Respect toggle states**: showStringVariables, isPlaintext, selectedConditionalVariables
-- **Handle nested string variables** by passing unique keyPrefix to prevent React key conflicts
+- **Always refresh project data** after creating variables or strings to get updated relationships
 
 ### API Integration Best Practices
 - Use consistent error handling with try/catch blocks
 - Implement proper loading states for user feedback
 - Follow RESTful conventions for endpoint design
 - Use PATCH for updates, POST for creation, DELETE for removal
-- **Always refresh project data** after creating variables or strings to get updated relationships
-- **CSV Export**: Use POST method with filter parameters, include CSRF tokens for authentication
+- Include variable embedding in API request/response processing
 
 ### Form Handling Patterns
 - Pre-populate edit forms with existing data
 - Implement proper validation before API calls
 - Use controlled components for all form inputs
 - Provide clear user feedback via toast notifications
-- **Handle string variable creation** via checkbox in string dialogs
-
-### Layout and Interaction Patterns
-
-#### Three-Panel Layout Management
-- **Filter Sidebar**: Fixed 360px width, never changes
-- **Main Canvas**: Flexible width, adjusts when variables sidebar opens/closes
-- **Variables Sidebar**: Fixed 360px when open, pushes content (no overlay)
-- **Responsive Behavior**: Ensure layout works across different screen sizes
-
-#### Hover Interaction System
-- **Edit Button Pattern**: Opacity transitions (opacity-0 to opacity-100 on group-hover)
-- **Consistent Application**: Used throughout filter sidebar and management interfaces
-- **Semantic Icons**: Globe (Dimensions), SwatchBook (Traits), Signpost (Conditionals)
-
-#### Dialog and Form Standards
-- **Responsive Height Structure**: Major dialogs use `max-h-[80vh]` with three-section layout (header/content/footer) that adapts to content
-- **Sticky Headers/Footers**: Use `DialogHeader` and `DialogFooter` with `px-6 py-4 border-b/border-t` styling
-- **Scrollable Content**: Content section uses `flex-1 overflow-y-auto px-6 py-4` for independent scrolling
-- **Form Integration**: Forms in content area with `form` attribute on submit buttons in footer
-- **Consistent Spacing**: `space-y-2` between form elements
-- **Proper Accessibility**: Label components with `htmlFor`/`id` attributes
-- **Tab Navigation**: String dialog uses ShadCN Tabs for Content/Dimensions separation
-- **Form Structure**: Form element wraps entire Tabs component to ensure Submit button works from any tab
-- **Critical Bug Fix**: Form must encompass both Content and Dimensions tab content for proper button functionality
-- **Auto-focus Behavior**: Content textarea receives immediate focus when string dialog opens
-- **Sort Order**: Strings display in newest-first order using `sortProjectStrings()` helper
-
-## Development Setup & Commands
-
-### Backend Setup
-```bash
-cd backend
-source venv/bin/activate  # Activate Python virtual environment
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver  # Runs on port 8000
-```
-
-### Frontend Setup
-```bash
-cd frontend
-npm install
-npm run dev  # Runs on port 3000 (or next available port like 3001/3002)
-```
-
-### Common Development Tasks
-- **Database Migrations**: `python manage.py makemigrations` then `python manage.py migrate`
-- **Create Superuser**: `python manage.py createsuperuser`
-- **Install Frontend Dependencies**: `npm install <package-name>`
-- **Add ShadCN Components**: `npx shadcn@latest add <component-name>`
-
-### Development Server Notes
-- Backend runs on port 8000 by default
-- Frontend auto-detects available ports (3000, 3001, 3002, etc.)
-- CORS is configured for cross-origin requests between frontend and backend
-- Hot reloading enabled for both frontend and backend development
+- Support variable embedding in dimension value inputs
 
 ## Current State & Features
 
 ### Fully Implemented Features ✅
 
+#### Revolutionary String Variable System
+- ✅ **Every String is a Variable**: Automatic variable creation with hash generation
+- ✅ **Dual Naming System**: Custom names or auto-generated 6-character hashes
+- ✅ **Purple Badge Display**: Visual {{variableName}} badges with copy functionality
+- ✅ **Conditional String Variables**: Strings can be marked conditional and appear in sidebar
+- ✅ **Sidebar Cleanup**: String variables removed from variables sidebar dialog
+
+#### Advanced Variable Embedding System
+- ✅ **Embedded Variables in Dimension Values**: Variables can contain {{otherVariable}} patterns
+- ✅ **Embedded Variables in Trait Values**: Trait variable values support embedding
+- ✅ **Recursive Processing**: Multi-level variable nesting with infinite loop protection
+- ✅ **Context-Aware Rendering**: Embedded variables use current trait/dimension filters
+- ✅ **Backend Processing**: Server-side variable expansion for exports and API responses
+- ✅ **Frontend Processing**: Client-side variable expansion for UI consistency
+
+#### Automatic Dimension Inheritance
+- ✅ **Inheritance Engine**: Strings automatically inherit dimension values from embedded variables
+- ✅ **Real-time Updates**: Django signals trigger inheritance updates when variables change
+- ✅ **Visual Protection System**: Inherited values shown with blue dashed borders and dots
+- ✅ **Manual vs Inherited**: Clear distinction between user-assigned and inherited values
+- ✅ **Recursive Inheritance**: Support inheritance through string variable chains
+- ✅ **Deletion Prevention**: Inherited values cannot be manually deleted
+
+#### Circular Reference Protection
+- ✅ **Frontend Validation**: Pre-submission circular reference detection
+- ✅ **Backend Validation**: Server-side protection with detailed error messages
+- ✅ **Self-Reference Prevention**: Blocks strings from referencing themselves
+- ✅ **Chain Detection**: Identifies complex A→B→C→A circular patterns
+- ✅ **Clear Error Messages**: Specific feedback identifying problematic variables
+
+#### Variable Detection and Creation
+- ✅ **Fixed Detection Bug**: Proper handling of existing string variables vs new trait variables
+- ✅ **Dual Variable System**: Correctly distinguishes trait and string variables
+- ✅ **Smart Creation**: Only creates new variables when truly needed
+- ✅ **Reference Resolution**: Handles effective_variable_name, variable_name, and variable_hash
+
 #### Core Functionality
-- ✅ **Authentication System**: Login, logout, registration with Django sessions (fixed endpoint mapping)
+- ✅ **Authentication System**: Login, logout, registration with Django sessions
 - ✅ **Project Management**: Full CRUD with overflow menus and project tiles
-- ✅ **String Management**: Create, edit, delete strings with automatic variable detection
-- ✅ **Variable System**: Both trait and string variables with proper type handling
-- ✅ **Conditional Variables**: Replace old conditional blocks with toggle-based system
-- ✅ **Trait Management**: Full CRUD with variable value management
-- ✅ **Dimension System**: Complete implementation with multi-value assignment
+- ✅ **String Management**: Create, edit, delete strings with automatic variable creation
+- ✅ **Trait Management**: Full CRUD with variable value management (supports embedding)
+- ✅ **Dimension System**: Complete implementation with automatic inheritance
 
 #### Advanced String Rendering
 - ✅ **Show String Variables Toggle**: Controls string variable display mode independently
-- ✅ **Highlight/Plaintext Modes**: Badge vs text rendering with conditional line heights
+- ✅ **Highlight/Plaintext Modes**: Badge vs text rendering with embedded variable processing
 - ✅ **Dimensions Toggle**: Show/hide dimension tags on strings
 - ✅ **Nested Variable Support**: Recursive rendering with React key conflict resolution
-- ✅ **Real-time Updates**: Immediate UI response to all toggle and selection changes
+- ✅ **Embedded Variable Processing**: Real-time processing of variables within variables
 
 #### UI/UX Excellence
 - ✅ **Three-Panel Layout**: Professional filter/content/management layout with independent scrolling
 - ✅ **Semantic Toggle System**: Color-coded buttons with meaningful icons
 - ✅ **Filter Sidebar**: Comprehensive filtering with dimension/trait/conditional controls
-- ✅ **Variables Sidebar**: Collapsible management panel with push behavior
-- ✅ **Clickable Interface**: Fully interactive cards and tiles with proper event handling
+- ✅ **Variables Sidebar**: Collapsible trait variable management panel
+- ✅ **Conditional Sidebar Enhancement**: Shows both trait and string variables with visual distinction
+- ✅ **Purple Badge System**: Consistent {{variableName}} display with copy functionality
 - ✅ **Form Standardization**: Consistent spacing, validation, and accessibility
-- ✅ **Typography Hierarchy**: Clear visual distinction between content levels
-- ✅ **Consistent Padding**: Uniform 24px spacing throughout application
-- ✅ **Sticky Headers**: All section headers remain visible during content scrolling
 
 #### Advanced Features
-- ✅ **Bulk String Management**: Complete bulk selection and deletion system with smart state management
+- ✅ **Bulk String Management**: Complete bulk selection and deletion system
 - ✅ **CSV Import System**: Comprehensive import functionality with automatic variable detection
-- ✅ **Tag-Based Dimension Selection**: Intuitive tag display with popover add menu and smart filtering
-- ✅ **Dimension Value Validation**: Prevents duplicates with real-time feedback
-- ✅ **Filtered CSV Export**: Smart export system with current filter state transparency via overflow menu
-- ✅ **Dialog Height Management**: Responsive `max-h-[80vh]` with content-adaptive sizing
-- ✅ **String Dialog Tabs**: Separate Content/Dimensions tabs with sticky navigation and proper form structure
-- ✅ **Text Selection Interface**: Smart variable replacement with visual feedback
-- ✅ **String Overflow Menus**: Always-visible menu with convert/delete actions and separators
-- ✅ **Chronological Ordering**: Newest-first string display with consistent sorting
-- ✅ **Auto-focus UX**: Immediate focus on content textarea when creating strings
-- ✅ **React Compliance**: Proper hooks order and state management following React best practices
-- ✅ **Responsive Design**: Works across different screen sizes and devices
-- ✅ **Professional Styling**: ShadCN components with custom enhancements
+- ✅ **Tag-Based Dimension Selection**: Intuitive tag display with inheritance protection
+- ✅ **Filtered CSV Export**: Smart export system with embedded variable processing
+- ✅ **Dialog Height Management**: Responsive design with content-adaptive sizing
+- ✅ **String Dialog Tabs**: Content and Advanced tabs with proper form structure
+- ✅ **Variable Embedding UI**: Input hints and documentation for embedding syntax
 
 ### Technical Achievements ✅
 
-#### Database and API
-- ✅ **Complete Data Model**: All entities with proper relationships and constraints
-- ✅ **RESTful API**: Comprehensive endpoints with proper CORS and authentication
-- ✅ **Database Migrations**: Properly versioned schema with constraint validation
-- ✅ **Cascade Operations**: Proper handling of related data deletion and updates
+#### Backend Architecture
+- ✅ **Django Signals**: Automatic dimension inheritance with real-time updates
+- ✅ **Variable Embedding Processing**: Recursive variable expansion with depth limits
+- ✅ **Circular Reference Validation**: Server-side protection with detailed errors
+- ✅ **Automatic Hash Generation**: Unique 6-character hash creation for strings
+- ✅ **Mixed Variable Support**: Unified handling of trait and string variables
 
 #### Frontend Architecture  
-- ✅ **Component System**: Reusable ShadCN components with custom modifications
-- ✅ **State Management**: Proper React patterns with controlled components
-- ✅ **Error Handling**: Comprehensive try/catch with user-friendly notifications
-- ✅ **Performance**: Optimized rendering with proper key management
+- ✅ **Variable Embedding Processing**: Client-side recursive variable expansion
+- ✅ **Inheritance Visualization**: Blue dashed borders for inherited dimension values
+- ✅ **Circular Reference Detection**: Pre-submission validation with user feedback
+- ✅ **Smart Variable Creation**: Fixed detection bug preventing duplicates
+- ✅ **Conditional Variable Display**: Enhanced sidebar with visual type indicators
+
+#### Data Integrity
+- ✅ **Constraint Validation**: Database-level uniqueness for names and values
+- ✅ **Cascade Operations**: Proper handling of related data deletion and updates
+- ✅ **Infinite Loop Protection**: Recursion limits in both backend and frontend
+- ✅ **Reference Validation**: Comprehensive checks for variable existence and circularity
 
 ## Testing Guidelines
 
 ### Critical Test Areas
 
-#### Authentication and Project Flow
-1. **User Registration/Login**: Test complete authentication flow
-2. **Project CRUD**: Create, edit, delete projects with proper navigation
-3. **Project Tiles**: Clickable navigation and overflow menu functionality
+#### Variable Embedding System Testing
+1. **Basic Embedding**: Test variables containing {{otherVariable}} in dimension values
+2. **Recursive Embedding**: Test A contains B contains C chains
+3. **Mixed Variable Types**: Test trait variables embedding string variables and vice versa
+4. **Filter Context**: Verify embedded variables use current trait/dimension selections
+5. **Infinite Loop Protection**: Test deeply nested chains reach recursion limits safely
+6. **Export Consistency**: Verify CSV exports match UI display with embedded variables
 
-#### Variable System Testing
-1. **String Variables**: Creation via checkbox and manual creation
-2. **Trait Variables**: Value assignment across different traits
-3. **Conditional Variables**: Toggle functionality and content visibility
-4. **Variable Type Icons**: Proper display of Spool and Signpost indicators
+#### Automatic Dimension Inheritance Testing
+1. **Basic Inheritance**: String with {{variable}} inherits variable's dimension values
+2. **Multiple Variables**: String with multiple variables inherits from all
+3. **Real-time Updates**: Changes to variable dimension values update dependent strings
+4. **String Variable Inheritance**: String variables inherit from their referenced strings
+5. **Visual Protection**: Inherited values show blue dashed borders, cannot be deleted
+6. **Manual vs Inherited**: User can add manual values alongside inherited ones
 
-#### String Rendering Combinations
-1. **Toggle Combinations**: Test all combinations of three toggle buttons
-2. **Trait Selection**: Verify rendering changes with different trait selections
-3. **Conditional Selection**: Multiple conditional variable combinations
-4. **Nested Variables**: String variables referencing strings with variables
+#### Circular Reference Protection Testing
+1. **Self-Reference**: String cannot reference itself via {{selfName}}
+2. **Simple Loops**: A→B→A pattern detection and prevention
+3. **Complex Chains**: Multi-level A→B→C→A pattern detection
+4. **Frontend Validation**: Pre-submission blocking with clear error messages
+5. **Backend Validation**: Server-side protection as fallback
+6. **Edit Operations**: Validation works for both new strings and edits
 
-#### Text Selection and Variable Replacement Testing
-1. **Selection Detection**: Test text selection via mouse, keyboard, and programmatic methods
-2. **Notification Display**: Verify blue notification box appears/disappears correctly
-3. **Variable Replacement**: Test replacing selected text with variables vs inserting at cursor
-4. **State Management**: Ensure selection state clears after replacement
-5. **Edge Cases**: Test with partial selections, multi-line selections, and empty selections
+#### String Variable System Testing
+1. **Automatic Variable Creation**: Every string becomes variable with hash
+2. **Custom Names**: Optional custom variable names with validation
+3. **Purple Badge Display**: {{effectiveName}} badges with copy functionality
+4. **Conditional Strings**: String variables can be marked conditional
+5. **Sidebar Removal**: String variables don't appear in variables sidebar
+6. **Reference Resolution**: Strings can be referenced by name or hash
 
-#### Dimension System Testing
-1. **Multi-Value Assignment**: Assign multiple values per dimension to strings
-2. **Validation**: Test duplicate prevention for names and values
-3. **Filtering**: Single selection per dimension with AND logic
-4. **Display**: Verify comma-separated format on string cards
+#### Variable Detection Bug Fix Testing
+1. **Existing Variables**: System doesn't create duplicates for existing string variables
+2. **New Variables**: System correctly creates trait variables for new variable names
+3. **Mixed Detection**: Proper handling when content has both existing and new variables
+4. **Reference Methods**: Handles variable_name, variable_hash, and effective_variable_name
+5. **Creation Flow**: closeStringDialog() properly distinguishes variable types
 
-#### Layout and Interaction Testing
-1. **Three-Panel Layout**: Test with variables sidebar open/closed
-2. **Filter Sidebar**: All filtering combinations and clear functionality
-3. **Hover Interactions**: Edit buttons throughout filter sidebar
-4. **Dialog Management**: Height constraints and scroll behavior
-5. **Clickable Elements**: Cards, tiles, buttons with proper event handling
-
-#### Form and Dialog Testing
-1. **Pre-population**: Edit dialogs load existing data correctly
-2. **Validation**: Required fields and duplicate prevention
-3. **Real-time Updates**: UI reflects changes immediately
-4. **Error Handling**: Proper feedback for failed operations
-
-#### Bulk String Management Testing
-1. **Selection Interface**: Test individual checkboxes and select all functionality
-2. **Secondary Header**: Verify proper display of selection count and indeterminate states
-3. **Floating Action Bar**: Test positioning and visibility with selected strings
-4. **Smart Clearing**: Verify selection clears when filters change
-5. **Bulk Operations**: Test bulk delete with confirmation and error handling
-6. **State Management**: Ensure proper Set operations and React hooks compliance
-
-#### CSV Import Testing
-1. **File Upload**: Test CSV file selection and validation
-2. **Variable Detection**: Verify automatic `{{variable}}` pattern recognition
-3. **Variable Creation**: Test creation of new variables vs reusing existing ones
-4. **String Creation**: Verify each CSV cell becomes individual string
-5. **Error Handling**: Test malformed CSV files and API failures
-6. **Progress Feedback**: Verify loading states and completion summaries
-
-#### CSV Export Testing
-1. **Filter State Accuracy**: Verify export matches current UI filter state exactly
-2. **Dialog Functionality**: Test confirmation dialog with different filter combinations
-3. **Overflow Menu Access**: Verify proper placement and separation in menu
-4. **File Download**: Verify proper CSV format and filename generation
-5. **Authentication**: Test export with proper session authentication
-6. **Error Handling**: Test network failures and invalid filter states
-7. **String Processing**: Verify conditional/trait/string variable processing matches UI rendering
-
-#### String Dialog Form Testing
-1. **Tab Functionality**: Test both Content and Dimensions tabs
-2. **Form Structure**: Verify Submit button works from any tab
-3. **Form Scope**: Ensure form element wraps entire Tabs component
-4. **Bug Prevention**: Test that Update button responds from Dimensions tab
-5. **Data Persistence**: Verify data maintains across tab switches
+#### Enhanced Conditional System Testing
+1. **Dual Variable Types**: Both trait and string variables can be conditional
+2. **Sidebar Display**: Conditional variables show with appropriate icons (Signpost/Spool)
+3. **Visual Distinction**: Purple icons distinguish string vs trait conditionals
+4. **Toggle Functionality**: Conditional variables can be enabled/disabled
+5. **Content Removal**: Unselected conditionals are removed from rendered content
 
 ### Browser Compatibility
 - **Modern Browsers**: Chrome, Firefox, Safari, Edge support
@@ -1012,23 +858,28 @@ npm run dev  # Runs on port 3000 (or next available port like 3001/3002)
 ## Future Enhancement Areas
 
 ### Performance Optimization
-- Bulk operations for variables and strings
-- Lazy loading for large projects
-- Optimized rendering for complex nested variables
+- Bulk operations for variable embedding processing
+- Lazy loading for large projects with complex variable chains
+- Optimized inheritance calculations for projects with many variables
 
-### Feature Extensions
-- Export formats beyond CSV (JSON, XML)
-- Advanced conditional logic (AND/OR operations)
+### Advanced Variable Features
 - Variable categories or namespacing
-- Undo/redo functionality
-- Project templates and cloning
+- Advanced embedding syntax (conditionals within embeddings)
+- Variable templates and reusable patterns
+- Global variables across projects
+
+### Enhanced Protection Systems
+- Advanced circular reference detection (semantic analysis)
+- Performance monitoring for complex variable chains
+- User warnings for deeply nested variable structures
+- Automatic optimization suggestions
 
 ### User Experience
-- Keyboard shortcuts for common actions
-- Advanced search and filtering
-- Drag-and-drop reordering
-- Collaborative editing features
+- Visual variable relationship mapping
+- Advanced search across embedded variables
+- Drag-and-drop variable organization
+- Real-time collaboration on variable-rich projects
 
 ---
 
-**REMEMBER**: Keep this document updated with any changes made to the application. Future developers depend on accurate documentation to maintain and enhance the application effectively.
+**REMEMBER**: Keep this document updated with any changes made to the application. The revolutionary string variable system, automatic dimension inheritance, variable embedding capabilities, and circular reference protection represent major architectural achievements that future developers must understand and maintain properly.

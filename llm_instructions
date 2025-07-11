@@ -268,13 +268,20 @@ Primary content area with streamlined controls and responsive design:
 - **String Cards**: Clickable ShadCN Card components for each string
 - **Interactive Elements**: 
   - Entire card is clickable to edit string content
-  - Delete buttons with proper event handling (e.stopPropagation())
+  - **Always-visible overflow menu** (MoreHorizontal icon) with "Convert to string variable" and "Delete" options
+  - Menu separator divides convert and delete actions for visual hierarchy
   - Variable badges in highlight mode with click prevention
+  - Proper event handling (e.stopPropagation()) for nested interactions
+- **String Conversion**: Overflow menu provides access to convert strings to string variables
+  - Opens dedicated conversion dialog with variable name input
+  - Shows string preview and conversion warnings
+  - Deletes original string and creates new string variable upon confirmation
 - **Responsive Design**: 
   - Conditional line height: `leading-normal` for plaintext, `leading-loose` for badge mode
   - Proper spacing between cards and consistent padding (px-6 throughout)
 - **Empty States**: Intelligent messages for no strings vs no filtered matches
 - **Independent Scrolling**: String list scrolls independently while canvas header remains sticky
+- **Sort Order**: Newest strings appear at top, maintained across all operations
 
 ### Right Panel: Variables Sidebar (Collapsible)
 
@@ -295,7 +302,10 @@ Dedicated variable management panel with streamlined focus:
 - **Variable List**: All project variables with visual type indicators
   - **String Variables**: Green `Spool` icon badge
   - **Conditional Variables**: Purple `Signpost` icon badge
-- **Interactions**: All variables clickable for editing
+- **Interactions**: 
+  - All variables clickable for editing
+  - Hover-triggered delete icons (right side of each variable card) with opacity transitions
+  - Proper event handling with `e.stopPropagation()` for delete buttons
 - **Visual Design**: Consistent with filter sidebar hover patterns and spacing
 
 ### UI Component System
@@ -320,13 +330,20 @@ Dedicated variable management panel with streamlined focus:
 
 2. **Clickable Interface Elements**:
    - Project tiles and string cards are fully clickable surfaces
+   - Variable cards in sidebar are fully clickable for editing
    - Proper event handling for nested interactive elements
-   - Stop propagation for delete buttons and variable badges
+   - Stop propagation for delete buttons on strings and variables
+   - Hover-triggered delete icons on both string cards and variable cards
 
 3. **Dialog System Enhancements**:
-   - Height constraints with `max-h-[calc(100vh-2rem)]` to prevent viewport overflow
-   - Scroll behavior with `overflow-y-auto` for long content
-   - Pre-populated forms for edit operations with proper validation
+   - **Responsive Height Layout**: All major dialogs (strings, variables, dimensions) use `max-h-[80vh]` to adapt to content while preventing overflow
+   - **Sticky Header/Footer**: Headers and footers remain fixed while content scrolls independently
+        - **Structured Layout**: Fixed header (`px-6 py-4 border-b`), scrollable content (`flex-1 overflow-y-auto px-6 py-4`), fixed footer (`px-6 py-4 border-t`)
+     - **String Dialog Tabs**: Uses ShadCN Tabs component in header for "Content" and "Dimensions" tabs, maintaining sticky navigation
+     - **Auto-focus**: Content textarea automatically receives focus when string dialog opens
+        - **Form Integration**: Submit buttons in footer use `form` attribute to work with forms in scrollable content
+     - **Pre-populated forms** for edit operations with proper validation
+     - **String Sorting**: All strings are sorted by creation date (newest first) using `sortProjectStrings()` helper function
 
 4. **Form Standardization**:
    - Consistent `space-y-2` spacing between form elements
@@ -554,10 +571,37 @@ String ID,Original Content,Processed Content,Created At
 
 1. **Manual Creation**: Via sidebar "New Variable" button with type selection
 2. **Auto-Creation from Strings**: When {{newVariable}} is typed in string content
-3. **String Variable Creation**: Via checkbox in string create/edit dialog
-   - Checkbox: "Create a variable to reference this string"
-   - Creates a string variable that references the current string
-   - Works for both new strings and edited strings
+3. **String Conversion**: Via overflow menu on existing string cards
+   - "Convert to string variable" option in string card overflow menu
+   - Opens dedicated conversion dialog with variable name input
+   - Shows string preview with conversion warnings
+   - Creates string variable and deletes original string upon confirmation
+
+### Text Selection and Variable Replacement
+
+The string content editor includes smart text selection functionality for enhanced variable workflow:
+
+#### Text Selection Detection
+- **Real-time Monitoring**: Listens for text selection in string content textarea via `onSelect`, `onMouseUp`, and `onKeyUp` events
+- **Selection State**: Tracks `selectedText`, `selectionStart`, and `selectionEnd` for replacement operations
+- **Visual Feedback**: Blue notification box appears above variables section when text is selected
+
+#### Selection Notification System
+- **Message Display**: Shows selected text with truncation (up to 50 characters) in blue notification box
+- **Clear Instructions**: Provides user guidance "Click a variable below to replace the selected text with that variable"
+- **Dynamic Visibility**: Notification appears/disappears based on selection state
+
+#### Variable Replacement Behavior
+- **Smart Insertion Logic**: 
+  - When text is selected: Replace selected text with chosen variable
+  - When no selection: Insert variable at cursor position (existing behavior)
+- **State Cleanup**: Clears selection state after replacement to prevent unintended operations
+- **Cursor Management**: Positions cursor after inserted variable for continued editing
+
+#### Technical Implementation
+- **Event Handling**: Uses multiple event types to capture all selection methods (mouse, keyboard, programmatic)
+- **State Management**: Maintains selection boundaries for precise text replacement
+- **User Experience**: Seamless integration with existing variable insertion workflow
 
 ### Dimension Management System
 
@@ -567,10 +611,15 @@ String ID,Original Content,Processed Content,Created At
 - **Update**: Edit dimension names and manage dimension values
 - **Delete**: Remove dimensions with proper cascade handling
 
-#### Multi-Select Dimension Values
+#### Tag-Based Dimension Value Selection
 - **Multiple Values per Dimension**: Strings can have multiple values for each dimension
-- **Flexible Assignment**: Mix of predefined and custom values supported
-- **UI Implementation**: MultiSelect component with checkboxes and custom value entry
+- **Tag Display**: Selected values shown as removable gray badges with always-visible X buttons
+- **Plus Button Interface**: Dashed-border plus button opens popover menu for adding values
+- **Smart Filter Menu**: 
+  - Auto-focused search input for filtering existing values or typing new ones
+  - Scrollable list of available (unselected) dimension values
+  - Dynamic "Create xyz" footer option when typing new values
+  - One-click selection closes menu and applies value
 - **Data Storage**: Multiple StringDimensionValue relationships per string per dimension
 
 #### Validation Features
@@ -640,10 +689,15 @@ String ID,Original Content,Processed Content,Created At
 - **Semantic Icons**: Globe (Dimensions), SwatchBook (Traits), Signpost (Conditionals)
 
 #### Dialog and Form Standards
-- **Height Constraints**: `max-h-[calc(100vh-2rem)]` prevents viewport overflow
-- **Scroll Behavior**: `overflow-y-auto` for content exceeding available height
+- **Responsive Height Structure**: Major dialogs use `max-h-[80vh]` with three-section layout (header/content/footer) that adapts to content
+- **Sticky Headers/Footers**: Use `DialogHeader` and `DialogFooter` with `px-6 py-4 border-b/border-t` styling
+- **Scrollable Content**: Content section uses `flex-1 overflow-y-auto px-6 py-4` for independent scrolling
+- **Form Integration**: Forms in content area with `form` attribute on submit buttons in footer
 - **Consistent Spacing**: `space-y-2` between form elements
 - **Proper Accessibility**: Label components with `htmlFor`/`id` attributes
+- **Tab Navigation**: String dialog uses ShadCN Tabs for Content/Dimensions separation
+- **Auto-focus Behavior**: Content textarea receives immediate focus when string dialog opens
+- **Sort Order**: Strings display in newest-first order using `sortProjectStrings()` helper
 
 ## Development Setup & Commands
 
@@ -707,10 +761,15 @@ npm run dev  # Runs on port 3000 (or next available port like 3001/3002)
 - ✅ **Sticky Headers**: All section headers remain visible during content scrolling
 
 #### Advanced Features
-- ✅ **Multi-Select Dimension Values**: Multiple values per dimension per string
+- ✅ **Tag-Based Dimension Selection**: Intuitive tag display with popover add menu and smart filtering
 - ✅ **Dimension Value Validation**: Prevents duplicates with real-time feedback
 - ✅ **Filtered CSV Export**: Smart export system with current filter state transparency
-- ✅ **Dialog Height Management**: Proper viewport handling with scroll behavior
+- ✅ **Dialog Height Management**: Responsive `max-h-[80vh]` with content-adaptive sizing
+- ✅ **String Dialog Tabs**: Separate Content/Dimensions tabs with sticky navigation
+- ✅ **Text Selection Interface**: Smart variable replacement with visual feedback
+- ✅ **String Overflow Menus**: Always-visible menu with convert/delete actions and separators
+- ✅ **Chronological Ordering**: Newest-first string display with consistent sorting
+- ✅ **Auto-focus UX**: Immediate focus on content textarea when creating strings
 - ✅ **Responsive Design**: Works across different screen sizes and devices
 - ✅ **Professional Styling**: ShadCN components with custom enhancements
 
@@ -748,6 +807,13 @@ npm run dev  # Runs on port 3000 (or next available port like 3001/3002)
 2. **Trait Selection**: Verify rendering changes with different trait selections
 3. **Conditional Selection**: Multiple conditional variable combinations
 4. **Nested Variables**: String variables referencing strings with variables
+
+#### Text Selection and Variable Replacement Testing
+1. **Selection Detection**: Test text selection via mouse, keyboard, and programmatic methods
+2. **Notification Display**: Verify blue notification box appears/disappears correctly
+3. **Variable Replacement**: Test replacing selected text with variables vs inserting at cursor
+4. **State Management**: Ensure selection state clears after replacement
+5. **Edge Cases**: Test with partial selections, multi-line selections, and empty selections
 
 #### Dimension System Testing
 1. **Multi-Value Assignment**: Assign multiple values per dimension to strings

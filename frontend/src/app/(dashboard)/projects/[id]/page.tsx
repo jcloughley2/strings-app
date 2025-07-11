@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -10,9 +10,11 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectSe
 
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { MultiSelect } from "@/components/ui/multi-select";
+
 import { Edit2, Trash2, Type, Bookmark, Spool, Signpost, Plus, X, Globe, SwatchBook, MoreHorizontal, Download } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
@@ -53,6 +55,10 @@ export default function ProjectDetailPage() {
   // String dimension values state - now supports multiple values per dimension
   const [stringDimensionValues, setStringDimensionValues] = useState<{[dimensionId: number]: string[]}>({});
   
+  // Dimension value selector state
+  const [openDimensionPopover, setOpenDimensionPopover] = useState<number | null>(null);
+  const [dimensionFilterText, setDimensionFilterText] = useState<{[dimensionId: number]: string}>({});
+  
   // Variable form state
   const [variableName, setVariableName] = useState("");
   const [variableType, setVariableType] = useState<'trait' | 'string'>('trait');
@@ -83,16 +89,45 @@ export default function ProjectDetailPage() {
   const [downloadDialog, setDownloadDialog] = useState(false);
   const [downloadLoading, setDownloadLoading] = useState(false);
 
+  // String conversion state
+  const [convertStringDialog, setConvertStringDialog] = useState<any>(null);
+  const [convertVariableName, setConvertVariableName] = useState("");
+
+  // String dialog tab state
+  const [stringDialogTab, setStringDialogTab] = useState("content");
+
   useEffect(() => {
     setLoading(true);
     apiFetch(`/api/projects/${id}/`)
       .then((data) => {
-        setProject(data);
+        setProject(sortProjectStrings(data));
         // Keep traitId as "blank" by default, don't auto-select first trait
       })
       .catch((err) => setError(err.message || "Failed to load project"))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Auto-focus content textarea when string dialog opens
+  useEffect(() => {
+    if ((createDialog === "String" || editingString) && textareaRef) {
+      // Small delay to ensure dialog is fully rendered
+      setTimeout(() => {
+        textareaRef.focus();
+      }, 100);
+    }
+  }, [createDialog, editingString, textareaRef]);
+
+  // Helper function to sort strings by creation date (newest first)
+  const sortProjectStrings = (projectData: any) => {
+    if (projectData && projectData.strings) {
+      projectData.strings.sort((a: any, b: any) => {
+        const dateA = new Date(a.created_at || a.id);
+        const dateB = new Date(b.created_at || b.id);
+        return dateB.getTime() - dateA.getTime();
+      });
+    }
+    return projectData;
+  };
 
   if (loading) return <div className="p-8 text-center">Loading...</div>;
   if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
@@ -200,6 +235,9 @@ export default function ProjectDetailPage() {
     setCreateStringVariable(false);
     setStringVariableName("");
     setStringDimensionValues({});
+    setOpenDimensionPopover(null);
+    setDimensionFilterText({});
+    setStringDialogTab("content");
   };
 
   // Handle text selection in textarea
@@ -215,29 +253,94 @@ export default function ProjectDetailPage() {
     setSelectionEnd(end);
   };
 
-  // Insert variable at cursor position
+  // Helper functions for dimension value management
+  const addDimensionValueToString = (dimensionId: number, value: string) => {
+    setStringDimensionValues(prev => ({
+      ...prev,
+      [dimensionId]: [...(prev[dimensionId] || []), value]
+    }));
+    setOpenDimensionPopover(null);
+    setDimensionFilterText(prev => ({ ...prev, [dimensionId]: '' }));
+  };
+
+  const getAvailableDimensionValues = (dimension: any, filterText: string = '') => {
+    const allValues = dimension.values ? dimension.values.map((dv: any) => dv.value) : [];
+    const selectedValues = stringDimensionValues[dimension.id] || [];
+    const availableValues = allValues.filter((value: string) => !selectedValues.includes(value));
+    
+    if (!filterText) return availableValues;
+    
+    return availableValues.filter((value: string) => 
+      value.toLowerCase().includes(filterText.toLowerCase())
+    );
+  };
+
+  const getFilterText = (dimensionId: number) => dimensionFilterText[dimensionId] || '';
+
+  const shouldShowCreateOption = (dimensionId: number) => {
+    const filterText = getFilterText(dimensionId);
+    if (!filterText.trim()) return false;
+    
+    const dimension = project.dimensions?.find((d: any) => d.id === dimensionId);
+    if (!dimension) return false;
+    
+    const allValues = dimension.values ? dimension.values.map((dv: any) => dv.value) : [];
+    const selectedValues = stringDimensionValues[dimensionId] || [];
+    
+    return !allValues.includes(filterText.trim()) && !selectedValues.includes(filterText.trim());
+  };
+
+  // Insert variable at cursor position or replace selected text
   const insertVariable = (variableName: string) => {
     if (!textareaRef) return;
     
-    const cursorPosition = textareaRef.selectionStart;
     const variableText = `{{${variableName}}}`;
-    const newContent = 
-      stringContent.substring(0, cursorPosition) + 
-      variableText + 
-      stringContent.substring(cursorPosition);
     
-    setStringContent(newContent);
-    
-    // Focus back to textarea and set cursor after inserted variable
-    setTimeout(() => {
-      if (textareaRef) {
-        textareaRef.focus();
-        textareaRef.setSelectionRange(
-          cursorPosition + variableText.length,
-          cursorPosition + variableText.length
-        );
-      }
-    }, 0);
+    if (selectedText && selectedText.length > 0) {
+      // Replace selected text with variable
+      const newContent = 
+        stringContent.substring(0, selectionStart) + 
+        variableText + 
+        stringContent.substring(selectionEnd);
+      
+      setStringContent(newContent);
+      
+      // Clear selection state
+      setSelectedText("");
+      setSelectionStart(0);
+      setSelectionEnd(0);
+      
+      // Focus back to textarea and set cursor after inserted variable
+      setTimeout(() => {
+        if (textareaRef) {
+          textareaRef.focus();
+          textareaRef.setSelectionRange(
+            selectionStart + variableText.length,
+            selectionStart + variableText.length
+          );
+        }
+      }, 0);
+    } else {
+      // Insert at cursor position (existing behavior)
+      const cursorPosition = textareaRef.selectionStart;
+      const newContent = 
+        stringContent.substring(0, cursorPosition) + 
+        variableText + 
+        stringContent.substring(cursorPosition);
+      
+      setStringContent(newContent);
+      
+      // Focus back to textarea and set cursor after inserted variable
+      setTimeout(() => {
+        if (textareaRef) {
+          textareaRef.focus();
+          textareaRef.setSelectionRange(
+            cursorPosition + variableText.length,
+            cursorPosition + variableText.length
+          );
+        }
+      }, 0);
+    }
   };
 
   // Wrap selected text with conditional
@@ -272,6 +375,51 @@ export default function ProjectDetailPage() {
 
   const closeDeleteStringDialog = () => {
     setDeleteStringDialog(null);
+  };
+
+  // String conversion handlers
+  const openConvertStringDialog = (str: any) => {
+    setConvertStringDialog(str);
+    setConvertVariableName("");
+  };
+
+  const closeConvertStringDialog = () => {
+    setConvertStringDialog(null);
+    setConvertVariableName("");
+  };
+
+  const handleConvertString = async () => {
+    if (!convertStringDialog || !convertVariableName.trim()) return;
+
+    try {
+      // Create the string variable with the content directly
+      await apiFetch('/api/variables/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: convertVariableName.trim(),
+          project: id,
+          variable_type: 'string',
+          content: convertStringDialog.content,
+        }),
+      });
+      
+      // Delete the original string since it's now a variable
+      await apiFetch(`/api/strings/${convertStringDialog.id}/`, {
+        method: 'DELETE',
+      });
+      
+      toast.success(`String converted to variable "${convertVariableName}" successfully!`);
+      
+      // Refresh project data to reflect the changes
+      const updatedProject = await apiFetch(`/api/projects/${id}/`);
+      setProject(sortProjectStrings(updatedProject));
+      
+      closeConvertStringDialog();
+    } catch (err) {
+      console.error('Failed to convert string to variable:', err);
+      toast.error('Failed to convert string. Please try again.');
+    }
   };
 
   const checkStringUsage = (stringId: number) => {
@@ -310,7 +458,7 @@ export default function ProjectDetailPage() {
       
       // Refresh project data to reflect the deletion
       const updatedProject = await apiFetch(`/api/projects/${id}/`);
-      setProject(updatedProject);
+      setProject(sortProjectStrings(updatedProject));
       
       closeDeleteStringDialog();
     } catch (err) {
@@ -387,9 +535,34 @@ export default function ProjectDetailPage() {
         
         // Refresh project data to reflect the deletion
         const updatedProject = await apiFetch(`/api/projects/${id}/`);
-        setProject(updatedProject);
+        setProject(sortProjectStrings(updatedProject));
         
         closeVariableDialog();
+      } catch (err) {
+        console.error('Failed to delete variable:', err);
+        toast.error('Failed to delete variable. Please try again.');
+      }
+    };
+
+    const handleDeleteVariableFromCard = async (variable: any) => {
+      // Check if variable is being used in any strings
+      const isUsed = checkVariableUsage(variable.name);
+      
+      if (isUsed) {
+        toast.error(`Cannot delete variable "${variable.name}" because it's being used in one or more strings. Please remove it from all strings first.`);
+        return;
+      }
+
+      try {
+        await apiFetch(`/api/variables/${variable.id}/`, {
+          method: 'DELETE',
+        });
+        
+        toast.success(`Variable "${variable.name}" deleted successfully!`);
+        
+        // Refresh project data to reflect the deletion
+        const updatedProject = await apiFetch(`/api/projects/${id}/`);
+        setProject(sortProjectStrings(updatedProject));
       } catch (err) {
         console.error('Failed to delete variable:', err);
         toast.error('Failed to delete variable. Please try again.');
@@ -669,7 +842,7 @@ export default function ProjectDetailPage() {
 
        // Refresh project data
        const updatedProject = await apiFetch(`/api/projects/${id}/`);
-       setProject(updatedProject);
+       setProject(sortProjectStrings(updatedProject));
        
        // Show success toast
        const action = editingVariable ? 'updated' : 'created';
@@ -776,7 +949,7 @@ export default function ProjectDetailPage() {
 
        // Refresh project data
        const updatedProject = await apiFetch(`/api/projects/${id}/`);
-       setProject(updatedProject);
+       setProject(sortProjectStrings(updatedProject));
 
        closeTraitDialog();
      } catch (err) {
@@ -866,7 +1039,7 @@ export default function ProjectDetailPage() {
 
        // Refresh project data
        const updatedProject = await apiFetch(`/api/projects/${id}/`);
-       setProject(updatedProject);
+       setProject(sortProjectStrings(updatedProject));
 
        closeDimensionDialog();
      } catch (err: any) {
@@ -968,36 +1141,11 @@ export default function ProjectDetailPage() {
         }
       }
 
-      // Handle conversion to string variable if checkbox is checked (only in edit mode)
-      if (editingString && createStringVariable && stringVariableName.trim()) {
-        try {
-          // Create the string variable with the content directly
-          await apiFetch('/api/variables/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: stringVariableName.trim(),
-              project: id,
-              variable_type: 'string',
-              content: stringContent, // Store content directly in the variable
-            }),
-          });
-          
-          // Delete the original string since it's now a variable
-          await apiFetch(`/api/strings/${editingString.id}/`, {
-            method: 'DELETE',
-          });
-          
-          toast.success(`String converted to variable "${stringVariableName}" successfully!`);
-        } catch (err) {
-          console.error('Failed to convert to string variable:', err);
-          toast.error('String updated but failed to convert to variable. Please try again.');
-        }
-      }
+
 
       // Refresh project data
       const updatedProject = await apiFetch(`/api/projects/${id}/`);
-      setProject(updatedProject);
+      setProject(sortProjectStrings(updatedProject));
       await closeStringDialog();
     } catch (err) {
       console.error('Failed to save string:', err);
@@ -1784,17 +1932,38 @@ export default function ProjectDetailPage() {
                         : renderStyledContent(str.content, str.variables || [], str.id)
                       }
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openDeleteStringDialog(str);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                    <div className="flex gap-1 shrink-0">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openConvertStringDialog(str);
+                            }}
+                          >
+                            Convert to string variable
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openDeleteStringDialog(str);
+                            }}
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            Delete string
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                   
@@ -1875,14 +2044,14 @@ export default function ProjectDetailPage() {
               {project.variables.map((variable: any) => (
                 <Card 
                   key={variable.id} 
-                  className="p-3 text-sm transition-colors cursor-pointer hover:bg-muted/50"
+                  className="p-3 text-sm transition-colors cursor-pointer hover:bg-muted/50 group"
                   onClick={() => openEditVariable(variable)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
                         <span>{variable.name}</span>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 items-center">
                           {variable.variable_type === 'string' && (
                             <Badge variant="outline" className="text-xs bg-green-50 text-green-600 border-green-200 p-1">
                               <Spool className="h-3 w-3" />
@@ -1893,6 +2062,17 @@ export default function ProjectDetailPage() {
                               <Signpost className="h-3 w-3" />
                             </Badge>
                           )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0 ml-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteVariableFromCard(variable);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                       {(() => {
@@ -1982,6 +2162,62 @@ export default function ProjectDetailPage() {
                 disabled={deleteStringDialog && checkStringUsage(deleteStringDialog.id)}
               >
                 Delete String
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Convert String to Variable Dialog */}
+      <Dialog open={!!convertStringDialog} onOpenChange={v => !v && closeConvertStringDialog()}>
+        <DialogContent className="max-w-md">
+          <DialogTitle>Convert to String Variable</DialogTitle>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Convert this string to a reusable string variable.
+            </p>
+            {convertStringDialog && (
+              <div className="p-3 bg-muted rounded-md">
+                <p className="text-sm font-medium">String to convert:</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {convertStringDialog.content.length > 100 
+                    ? `${convertStringDialog.content.substring(0, 100)}...` 
+                    : convertStringDialog.content
+                  }
+                </p>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="convert-variable-name">Variable Name</Label>
+              <Input
+                id="convert-variable-name"
+                value={convertVariableName}
+                onChange={(e) => setConvertVariableName(e.target.value)}
+                placeholder="Enter variable name (e.g., 'greeting', 'footer')"
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">
+                This will be used as {`{{${convertVariableName || 'variableName'}}}`} in other strings.
+              </p>
+            </div>
+            
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-xs text-yellow-800">
+                <strong>Note:</strong> Converting will remove this string from the strings list and create a new string variable. This action cannot be undone.
+              </p>
+            </div>
+            
+            <div className="flex justify-end gap-2 mt-6">
+              <Button type="button" variant="secondary" onClick={closeConvertStringDialog}>
+                Cancel
+              </Button>
+              <Button 
+                type="button" 
+                onClick={handleConvertString}
+                disabled={!convertVariableName.trim()}
+              >
+                Convert to Variable
               </Button>
             </div>
           </div>
@@ -2133,29 +2369,53 @@ export default function ProjectDetailPage() {
 
       {/* Create/Edit String Dialog */}
       <Dialog open={createDialog === "String" || !!editingString} onOpenChange={v => !v && closeStringDialog()}>
-        <DialogContent className="max-w-2xl">
-          <DialogTitle>{editingString ? "Edit String" : "New String"}</DialogTitle>
-          <form onSubmit={handleStringSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="string-content">Content</Label>
-              <Textarea
-                id="string-content"
-                ref={setTextareaRef}
-                value={stringContent}
-                onChange={(e) => setStringContent(e.target.value)}
-                onSelect={handleTextSelection}
-                onMouseUp={handleTextSelection}
-                onKeyUp={handleTextSelection}
-                placeholder="Enter string content. Click variables below to insert them."
-                rows={4}
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Click variable badges below to insert them.
-              </p>
-            </div>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col p-0">
+          {/* Fixed Header with Tabs */}
+          <DialogHeader className="px-6 py-4 border-b bg-background">
+            <DialogTitle>{editingString ? "Edit String" : "New String"}</DialogTitle>
+            <Tabs value={stringDialogTab} onValueChange={setStringDialogTab} className="w-full mt-4">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="content">Content</TabsTrigger>
+                <TabsTrigger value="dimensions">Dimensions</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </DialogHeader>
+          
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <Tabs value={stringDialogTab} onValueChange={setStringDialogTab} className="w-full">
+              <TabsContent value="content" className="mt-0">
+                <form id="string-form" onSubmit={handleStringSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="string-content">Content</Label>
+                <Textarea
+                  id="string-content"
+                  ref={setTextareaRef}
+                  value={stringContent}
+                  onChange={(e) => setStringContent(e.target.value)}
+                  onSelect={handleTextSelection}
+                  onMouseUp={handleTextSelection}
+                  onKeyUp={handleTextSelection}
+                  placeholder="Enter string content. Click variables below to insert them."
+                  rows={4}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Click variable badges below to insert them.
+                </p>
+              </div>
             <div>
               <h3 className="font-medium mb-2">Variables</h3>
+              {selectedText && selectedText.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-3 mb-3">
+                  <p className="text-sm text-blue-800">
+                    <strong>Text selected:</strong> "{selectedText.length > 50 ? `${selectedText.substring(0, 50)}...` : selectedText}"
+                  </p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    Click a variable below to replace the selected text with that variable.
+                  </p>
+                </div>
+              )}
               {(() => {
                 // Detect variables from current string content
                 const variableMatches = stringContent.match(/{{([^}]+)}}/g) || [];
@@ -2229,138 +2489,174 @@ export default function ProjectDetailPage() {
             </div>
 
             {/* Dimension Values Section */}
-            {project.dimensions && project.dimensions.length > 0 && (
-              <div>
-                <h3 className="font-medium mb-2">Dimension Values</h3>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Optional: Assign values for each dimension to categorize this string.
-                </p>
-                <div className="space-y-4">
-                  {project.dimensions.map((dimension: any) => (
-                    <div key={dimension.id} className="space-y-2">
-                      <label className="text-sm font-medium">
-                        {dimension.name}:
-                      </label>
-                      
-                      {/* Multi-select for dimension values */}
-                      <MultiSelect
-                        options={dimension.values ? dimension.values.map((dv: any) => ({
-                          label: dv.value,
-                          value: dv.value
-                        })) : []}
-                        selected={stringDimensionValues[dimension.id] || []}
-                        onChange={(values: string[]) => setStringDimensionValues(prev => ({
-                          ...prev,
-                          [dimension.id]: values
-                        }))}
-                        placeholder={`Select values for ${dimension.name}...`}
-                        className="w-full"
-                      />
-                      
-                      {/* Input for custom values */}
-                      {dimension.values && dimension.values.length > 0 && (
-                        <div className="mt-2">
-                          <Input
-                            placeholder={`Or enter custom value for ${dimension.name}`}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                const value = (e.target as HTMLInputElement).value.trim();
-                                if (value && !(stringDimensionValues[dimension.id] || []).includes(value)) {
-                                  setStringDimensionValues(prev => ({
-                                    ...prev,
-                                    [dimension.id]: [...(prev[dimension.id] || []), value]
-                                  }));
-                                  (e.target as HTMLInputElement).value = '';
-                                }
-                              }
-                            }}
-                            className="w-full"
-                          />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Press Enter to add custom values
-                          </p>
-                        </div>
-                      )}
-                      
-                      {/* Clear button if values are selected */}
-                      {stringDimensionValues[dimension.id] && stringDimensionValues[dimension.id].length > 0 && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setStringDimensionValues(prev => ({
-                            ...prev,
-                            [dimension.id]: []
-                          }))}
-                          className="text-xs mt-2"
-                        >
-                          Clear All
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Convert to String Variable Section - Only in Edit Mode */}
-            {editingString && (
-              <div className="border-t pt-4">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="convertToStringVariable"
-                    checked={createStringVariable}
-                    onChange={(e) => setCreateStringVariable(e.target.checked)}
-                    className="rounded border-gray-300"
-                  />
-                  <Label htmlFor="convertToStringVariable" className="text-sm font-medium">
-                    Convert this string to a string variable
-                  </Label>
-                </div>
-                {createStringVariable && (
-                  <div className="mt-3">
-                    <Label htmlFor="stringVariableName" className="block text-sm font-medium mb-1">
-                      Variable Name
-                    </Label>
-                    <Input
-                      id="stringVariableName"
-                      value={stringVariableName}
-                      onChange={(e) => setStringVariableName(e.target.value)}
-                      placeholder="Enter variable name (e.g., 'greeting', 'footer')"
-                      required={createStringVariable}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      This will be used as {`{{${stringVariableName || 'variableName'}}}`} in other strings.
+                </form>
+              </TabsContent>
+              
+              <TabsContent value="dimensions" className="mt-0">
+                {project.dimensions && project.dimensions.length > 0 ? (
+                  <div>
+                    <h3 className="font-medium mb-2">Dimension Values</h3>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Optional: Assign values for each dimension to categorize this string.
                     </p>
-                    <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-md">
-                      <p className="text-xs text-yellow-800">
-                        <strong>Note:</strong> Converting will remove this string from the strings list and create a new string variable. This action cannot be undone.
-                      </p>
+                    <div className="space-y-4">
+                      {project.dimensions.map((dimension: any) => (
+                        <div key={dimension.id} className="space-y-2">
+                          <label className="text-sm font-medium">
+                            {dimension.name}:
+                          </label>
+                          
+                          {/* Selected dimension values as removable tags and add button */}
+                          <div className="flex flex-wrap gap-2 items-center">
+                            {stringDimensionValues[dimension.id] && stringDimensionValues[dimension.id].length > 0 && 
+                              stringDimensionValues[dimension.id].map((value: string, index: number) => (
+                                <div
+                                  key={`${dimension.id}-${value}-${index}`}
+                                  className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                                >
+                                  <span>{value}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setStringDimensionValues(prev => ({
+                                        ...prev,
+                                        [dimension.id]: prev[dimension.id]?.filter((v: string) => v !== value) || []
+                                      }));
+                                    }}
+                                    className="inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-gray-300 transition-colors"
+                                    aria-label={`Remove ${value}`}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              ))
+                            }
+                            
+                            {/* Plus button to add values */}
+                            <Popover 
+                              open={openDimensionPopover === dimension.id} 
+                              onOpenChange={(open) => {
+                                if (open) {
+                                  setOpenDimensionPopover(dimension.id);
+                                  setDimensionFilterText(prev => ({ ...prev, [dimension.id]: '' }));
+                                } else {
+                                  setOpenDimensionPopover(null);
+                                }
+                              }}
+                            >
+                              <PopoverTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 rounded-md border-dashed"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-64 p-0" align="start">
+                                <div className="flex flex-col">
+                                  {/* Filter input */}
+                                  <div className="p-3 border-b">
+                                    <Input
+                                      placeholder={`Search or add ${dimension.name.toLowerCase()} value...`}
+                                      value={getFilterText(dimension.id)}
+                                      onChange={(e) => setDimensionFilterText(prev => ({
+                                        ...prev,
+                                        [dimension.id]: e.target.value
+                                      }))}
+                                      autoFocus
+                                      className="text-sm"
+                                    />
+                                  </div>
+                                  
+                                  {/* Available values list */}
+                                  <div className="max-h-48 overflow-y-auto">
+                                    {(() => {
+                                      const availableValues = getAvailableDimensionValues(dimension, getFilterText(dimension.id));
+                                      
+                                      if (availableValues.length === 0 && !shouldShowCreateOption(dimension.id)) {
+                                        return (
+                                          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                                            {getFilterText(dimension.id) ? 'No matching values found' : 'No available values'}
+                                          </div>
+                                        );
+                                      }
+                                      
+                                      return availableValues.map((value: string) => (
+                                        <button
+                                          key={value}
+                                          type="button"
+                                          onClick={() => addDimensionValueToString(dimension.id, value)}
+                                          className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors"
+                                        >
+                                          {value}
+                                        </button>
+                                      ));
+                                    })()}
+                                  </div>
+                                  
+                                  {/* Create new value footer */}
+                                  {shouldShowCreateOption(dimension.id) && (
+                                    <div className="border-t">
+                                      <button
+                                        type="button"
+                                        onClick={() => addDimensionValueToString(dimension.id, getFilterText(dimension.id).trim())}
+                                        className="w-full px-3 py-2 text-left text-sm bg-muted/50 hover:bg-muted transition-colors flex items-center gap-2"
+                                      >
+                                        <Plus className="h-3 w-3" />
+                                        Create "{getFilterText(dimension.id).trim()}"
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                          
+                          {/* Show a message when no values are selected */}
+                          {(!stringDimensionValues[dimension.id] || stringDimensionValues[dimension.id].length === 0) && (
+                            <div className="text-sm text-muted-foreground">
+                              No values selected for {dimension.name}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
+                ) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    <p>No dimensions found in this project.</p>
+                    <p className="text-sm mt-2">Create dimensions in the filter sidebar to categorize your strings.</p>
+                  </div>
                 )}
-              </div>
-            )}
-            
-            <div className="flex justify-end gap-2 mt-6">
-              <Button type="button" variant="secondary" onClick={closeStringDialog}>
-                Cancel
-              </Button>
-              <Button type="submit">
-                {editingString ? "Update" : "Create"} String
-              </Button>
-            </div>
-          </form>
+              </TabsContent>
+            </Tabs>
+          </div>
+          
+          {/* Fixed Footer */}
+          <DialogFooter className="px-6 py-4 border-t bg-background">
+            <Button type="button" variant="secondary" onClick={closeStringDialog}>
+              Cancel
+            </Button>
+            <Button type="submit" form="string-form">
+              {editingString ? "Update" : "Create"} String
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Create/Edit Variable Dialog */}
       <Dialog open={createDialog === "Variable" || !!editingVariable} onOpenChange={v => !v && closeVariableDialog()}>
-        <DialogContent className="max-w-lg">
-          <DialogTitle>{editingVariable ? "Edit Variable" : "New Variable"}</DialogTitle>
-          <form onSubmit={handleVariableSubmit} className="space-y-4">
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col p-0">
+          {/* Fixed Header */}
+          <DialogHeader className="px-6 py-4 border-b bg-background">
+            <DialogTitle>{editingVariable ? "Edit Variable" : "New Variable"}</DialogTitle>
+          </DialogHeader>
+          
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <form id="variable-form" onSubmit={handleVariableSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="variable-name">Variable Name</Label>
               <Input
@@ -2576,35 +2872,27 @@ export default function ProjectDetailPage() {
               </p>
             </div>
 
-            <div className="flex justify-between items-center mt-6">
-              {editingVariable ? (
-                <Button 
-                  type="button" 
-                  variant="destructive" 
-                  onClick={handleDeleteVariable}
-                  className="mr-auto"
-                >
-                  Delete Variable
-                </Button>
-              ) : (
-                <div />
-              )}
-              <div className="flex gap-2">
-                <Button type="button" variant="secondary" onClick={closeVariableDialog}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={!variableName.trim()}>
-                  {editingVariable ? "Update" : "Create"} Variable
-                </Button>
-              </div>
+            </form>
+          </div>
+          
+          {/* Fixed Footer */}
+          <DialogFooter className="px-6 py-4 border-t bg-background flex justify-between">
+            <div />
+            <div className="flex gap-2">
+              <Button type="button" variant="secondary" onClick={closeVariableDialog}>
+                Cancel
+              </Button>
+              <Button type="submit" form="variable-form" disabled={!variableName.trim()}>
+                {editingVariable ? "Update" : "Create"} Variable
+              </Button>
             </div>
-          </form>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Create/Edit Trait Dialog */}
       <Dialog open={createDialog === "Trait" || !!editingTrait} onOpenChange={v => !v && closeTraitDialog()}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[80vh]">
           <DialogTitle>{editingTrait ? "Edit Trait" : "New Trait"}</DialogTitle>
           <form onSubmit={handleTraitSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -2662,9 +2950,15 @@ export default function ProjectDetailPage() {
 
       {/* Create/Edit Dimension Dialog */}
       <Dialog open={createDialog === "Dimension" || !!editingDimension} onOpenChange={v => !v && closeDimensionDialog()}>
-        <DialogContent className="max-w-lg">
-          <DialogTitle>{editingDimension ? "Edit Dimension" : "New Dimension"}</DialogTitle>
-          <form onSubmit={handleDimensionSubmit} className="space-y-4">
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col p-0">
+          {/* Fixed Header */}
+          <DialogHeader className="px-6 py-4 border-b bg-background">
+            <DialogTitle>{editingDimension ? "Edit Dimension" : "New Dimension"}</DialogTitle>
+          </DialogHeader>
+          
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <form id="dimension-form" onSubmit={handleDimensionSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="dimension-name">Dimension Name</Label>
               <Input
@@ -2743,15 +3037,18 @@ export default function ProjectDetailPage() {
               )}
             </div>
             
-            <div className="flex justify-end gap-2 mt-6">
-              <Button type="button" variant="secondary" onClick={closeDimensionDialog}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={!dimensionName.trim()}>
-                {editingDimension ? "Update" : "Create"} Dimension
-              </Button>
-            </div>
-          </form>
+            </form>
+          </div>
+          
+          {/* Fixed Footer */}
+          <DialogFooter className="px-6 py-4 border-t bg-background">
+            <Button type="button" variant="secondary" onClick={closeDimensionDialog}>
+              Cancel
+            </Button>
+            <Button type="submit" form="dimension-form" disabled={!dimensionName.trim()}>
+              {editingDimension ? "Update" : "Create"} Dimension
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

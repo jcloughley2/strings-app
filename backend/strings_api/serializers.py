@@ -1,64 +1,107 @@
 from rest_framework import serializers
-from .models import Project, String, Trait, Variable, VariableValue, Conditional, Dimension, DimensionValue, StringDimensionValue
+from .models import Project, String, Conditional, Dimension, DimensionValue, StringDimensionValue
+import re
+from django.db import models
 
-class VariableValueSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = VariableValue
-        fields = ['id', 'value', 'trait', 'variable']
-
-class VariableSerializer(serializers.ModelSerializer):
-    values = VariableValueSerializer(many=True, read_only=True)
+class StringSerializer(serializers.ModelSerializer):
+    dimension_values = serializers.SerializerMethodField()
+    effective_variable_name = serializers.ReadOnlyField()
     
     class Meta:
-        model = Variable
-        fields = ['id', 'name', 'variable_type', 'referenced_string', 'content', 'is_conditional', 'values', 'created_at', 'updated_at']
+        model = String
+        fields = ['id', 'content', 'project', 'variable_name', 'variable_hash', 'effective_variable_name', 'is_conditional', 'is_split_variable', 'dimension_values', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'variable_hash', 'effective_variable_name', 'created_at', 'updated_at']
     
+    def get_dimension_values(self, obj):
+        return StringDimensionValueSerializer(obj.dimension_values.all(), many=True).data
+
     def validate(self, data):
-        # Check for duplicate variable names within the same project
-        name = data.get('name')
+        # Check for duplicate variable names within the same project if variable_name is provided
+        variable_name = data.get('variable_name')
         project = data.get('project')
+        content = data.get('content', '')
         
-        if name and project:
+        if variable_name and project:
             # For updates, exclude the current instance
-            queryset = Variable.objects.filter(name=name, project=project)
+            queryset = String.objects.filter(variable_name=variable_name, project=project)
             if self.instance:
                 queryset = queryset.exclude(id=self.instance.id)
             
             if queryset.exists():
                 raise serializers.ValidationError({
-                    'name': f'A variable with the name "{name}" already exists in this project.'
+                    'variable_name': f'A string variable with the name "{variable_name}" already exists in this project.'
+                })
+        
+        # Check for circular references in string variables
+        if content and project:
+            circular_error = self._detect_circular_references(content, project, self.instance.id if self.instance else None)
+            if circular_error:
+                raise serializers.ValidationError({
+                    'content': circular_error
                 })
         
         return data
-
-class TraitSerializer(serializers.ModelSerializer):
-    variable_values = VariableValueSerializer(many=True, read_only=True)
     
-    class Meta:
-        model = Trait
-        fields = ['id', 'name', 'project', 'variable_values', 'created_at', 'updated_at']
-        extra_kwargs = {
-            'project': {'write_only': True}
-        }
-
-class StringSerializer(serializers.ModelSerializer):
-    variables = VariableSerializer(many=True, read_only=True)
-    dimension_values = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = String
-        fields = ['id', 'content', 'project', 'variables', 'dimension_values', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
-    
-    def get_dimension_values(self, obj):
-        return StringDimensionValueSerializer(obj.dimension_values.all(), many=True).data
+    def _detect_circular_references(self, content, project, current_string_id=None, visited=None):
+        """
+        Detect circular references in string variables.
+        Returns error message if circular reference found, None otherwise.
+        """
+        if visited is None:
+            visited = set()
+        
+        # Extract variable names from content
+        variable_pattern = re.compile(r'{{([^}]+)}}')
+        variable_names = variable_pattern.findall(content)
+        
+        for variable_name in variable_names:
+            # Find the string variable that matches this variable name
+            string_variable = project.strings.filter(
+                models.Q(variable_name=variable_name) | models.Q(variable_hash=variable_name)
+            ).first()
+            
+            # Calculate effective variable name for comparison
+            if string_variable:
+                effective_name = string_variable.variable_name if string_variable.variable_name else string_variable.variable_hash
+                if effective_name == variable_name:
+                    # Check if this would create a self-reference
+                    if current_string_id and string_variable.id == current_string_id:
+                        return f'String cannot reference itself through variable "{{{{ {variable_name} }}}}"'
+                    
+                    # Check if we've already visited this string (circular reference)
+                    if string_variable.id in visited:
+                        return f'Circular reference detected involving variable "{{{{ {variable_name} }}}}"'
+                    
+                    # Add current string to visited set and recursively check
+                    new_visited = visited.copy()
+                    if current_string_id:
+                        new_visited.add(current_string_id)
+                    new_visited.add(string_variable.id)
+                    
+                    nested_error = self._detect_circular_references(
+                        string_variable.content, project, string_variable.id, new_visited
+                    )
+                    if nested_error:
+                        return nested_error
+        
+        return None
 
     def create(self, validated_data):
-        variables = self.context['request'].data.get('variables', [])
         string = String.objects.create(**validated_data)
-        if variables:
-            string.variables.set(variables)
+        
+        # Automatically assign dimension values based on variables in content
+        string.update_dimension_values_from_variables()
         return string
+
+    def update(self, instance, validated_data):
+        # Update the string
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Automatically update dimension values based on variables in content
+        instance.update_dimension_values_from_variables()
+        return instance
 
 class ConditionalSerializer(serializers.ModelSerializer):
     class Meta:
@@ -123,20 +166,22 @@ class StringDimensionValueSerializer(serializers.ModelSerializer):
     class Meta:
         model = StringDimensionValue
         fields = ['id', 'string', 'dimension_value', 'created_at']
-        
+    
     def to_representation(self, instance):
-        data = super().to_representation(instance)
-        # For reading, include the full dimension value details
-        data['dimension_value'] = DimensionValueSerializer(instance.dimension_value).data
-        return data
+        representation = super().to_representation(instance)
+        # Include dimension value details
+        representation['dimension_value_detail'] = {
+            'id': instance.dimension_value.id,
+            'value': instance.dimension_value.value,
+            'dimension': instance.dimension_value.dimension.id
+        }
+        return representation
 
 class ProjectSerializer(serializers.ModelSerializer):
     strings = StringSerializer(many=True, read_only=True)
-    traits = TraitSerializer(many=True, read_only=True)
-    variables = VariableSerializer(many=True, read_only=True)
     conditionals = ConditionalSerializer(many=True, read_only=True)
     dimensions = DimensionSerializer(many=True, read_only=True)
     
     class Meta:
         model = Project
-        fields = ['id', 'name', 'description', 'strings', 'traits', 'variables', 'conditionals', 'dimensions', 'created_at', 'updated_at'] 
+        fields = ['id', 'name', 'description', 'strings', 'conditionals', 'dimensions', 'created_at', 'updated_at'] 

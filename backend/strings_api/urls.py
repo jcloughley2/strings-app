@@ -5,9 +5,7 @@ from . import views
 router = DefaultRouter()
 router.register(r'projects', views.ProjectViewSet, basename='project')
 router.register(r'strings', views.StringViewSet, basename='string')
-router.register(r'traits', views.TraitViewSet, basename='trait')
-router.register(r'variables', views.VariableViewSet, basename='variable')
-router.register(r'variable-values', views.VariableValueViewSet, basename='variable-value')
+
 router.register(r'conditionals', views.ConditionalViewSet, basename='conditional')
 router.register(r'dimensions', views.DimensionViewSet, basename='dimension')
 router.register(r'dimension-values', views.DimensionValueViewSet, basename='dimension-value')

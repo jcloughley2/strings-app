@@ -11,13 +11,11 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.template.loader import render_to_string
 from django.views.decorators.csrf import ensure_csrf_cookie
-from .models import Project, String, Trait, Variable, VariableValue, Conditional, Dimension, DimensionValue, StringDimensionValue
+from django.db import models
+from .models import Project, String, Conditional, Dimension, DimensionValue, StringDimensionValue
 from .serializers import (
     ProjectSerializer,
     StringSerializer,
-    TraitSerializer,
-    VariableSerializer,
-    VariableValueSerializer,
     ConditionalSerializer,
     DimensionSerializer,
     DimensionValueSerializer,
@@ -199,7 +197,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
         project = self.get_object()
         
         # Get filter parameters from request
-        trait_id = request.data.get('trait_id', 'blank')
         selected_conditional_variables = request.data.get('selected_conditional_variables', [])
         selected_dimension_values = request.data.get('selected_dimension_values', {})
         
@@ -241,8 +238,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
             processed_content = self._process_string_content(
                 string.content, 
                 project, 
-                trait_id, 
-                selected_conditional_variables
+                selected_conditional_variables,
+                selected_dimension_values
             )
             processed_strings.append({
                 'id': string.id,
@@ -274,79 +271,60 @@ class ProjectViewSet(viewsets.ModelViewSet):
         
         return response
     
-    def _process_string_content(self, content, project, trait_id, selected_conditional_variables):
+    def _process_string_content(self, content, project, selected_conditional_variables, selected_dimension_values=None):
         """
-        Process string content based on trait and conditional selections.
-        Mirrors the frontend string processing logic.
+        Process string content based on conditional and dimension selections.
         """
         # First, process conditional variables - remove unselected conditionals
         processed_content = self._process_conditional_variables(content, project, selected_conditional_variables)
         
-        # Then process trait and string variables
+        # Then process string variables
         variable_pattern = re.compile(r'{{([^}]+)}}')
         variables_in_content = variable_pattern.findall(processed_content)
         
         for variable_name in variables_in_content:
-            try:
-                variable = project.variables.get(name=variable_name)
-                replacement_value = self._get_variable_replacement(variable, trait_id, project)
-                
-                if replacement_value is not None:
-                    processed_content = processed_content.replace(f'{{{{{variable_name}}}}}', replacement_value)
-                
-            except Variable.DoesNotExist:
-                # Variable not found, leave as is
-                continue
+            # Try string variable (match by name or hash)
+            string_variable = project.strings.filter(
+                models.Q(variable_name=variable_name) | models.Q(variable_hash=variable_name)
+            ).first()
+            
+            if string_variable:
+                # Recursively process string variable content
+                replacement_value = self._process_string_content(
+                    string_variable.content, 
+                    project, 
+                    selected_conditional_variables, 
+                    selected_dimension_values
+                )
+                processed_content = processed_content.replace(f'{{{{{variable_name}}}}}', replacement_value)
         
         return processed_content
     
     def _process_conditional_variables(self, content, project, selected_conditional_variables):
         """
         Remove conditional variables that are not selected.
+        This includes only string variables now.
         """
         variable_pattern = re.compile(r'{{([^}]+)}}')
         variables_in_content = variable_pattern.findall(content)
         processed_content = content
         
         for variable_name in variables_in_content:
-            try:
-                variable = project.variables.get(name=variable_name)
-                if variable.is_conditional and str(variable.id) not in selected_conditional_variables:
-                    # Remove this conditional variable from content
-                    processed_content = processed_content.replace(f'{{{{{variable_name}}}}}', '')
-                    
-            except Variable.DoesNotExist:
-                continue
+            # Check string variables
+            string_variable = project.strings.filter(
+                models.Q(variable_name=variable_name) | models.Q(variable_hash=variable_name)
+            ).first()
+            
+            if string_variable:
+                effective_name = string_variable.variable_name if string_variable.variable_name else string_variable.variable_hash
+                if effective_name == variable_name and string_variable.is_conditional:
+                    # Create a unique ID for string variables using 's' prefix and string ID
+                    string_var_id = f"s{string_variable.id}"
+                    if string_var_id not in selected_conditional_variables:
+                        # Remove this conditional string variable from content
+                        processed_content = processed_content.replace(f'{{{{{variable_name}}}}}', '')
         
         return processed_content
-    
-    def _get_variable_replacement(self, variable, trait_id, project):
-        """
-        Get the replacement value for a variable based on trait selection.
-        """
-        if variable.variable_type == 'string':
-            # For string variables, get the referenced string content
-            if variable.referenced_string:
-                return variable.referenced_string.content
-            elif variable.content:
-                return variable.content
-            else:
-                return f'{{{{{variable.name}}}}}'  # Return original if no content
-        
-        elif variable.variable_type == 'trait':
-            if trait_id == 'blank':
-                # When blank trait is selected, show variable name
-                return f'{{{{{variable.name}}}}}'
-            else:
-                # Get value for specific trait
-                try:
-                    trait = project.traits.get(id=trait_id)
-                    variable_value = variable.values.get(trait=trait)
-                    return variable_value.value
-                except (Trait.DoesNotExist, VariableValue.DoesNotExist):
-                    return f'{{{{{variable.name}}}}}'  # Return original if no value
-        
-        return f'{{{{{variable.name}}}}}'  # Default fallback
 
 class StringViewSet(viewsets.ModelViewSet):
     serializer_class = StringSerializer
@@ -366,40 +344,7 @@ class StringViewSet(viewsets.ModelViewSet):
             raise serializers.ValidationError({'project': 'Project not found or you do not have permission to add strings to it.'})
         serializer.save()
 
-class TraitViewSet(viewsets.ModelViewSet):
-    serializer_class = TraitSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
-        return Trait.objects.filter(project__user=self.request.user)
-
-    def perform_create(self, serializer):
-        project_id = self.request.data.get('project')
-        project = Project.objects.filter(id=project_id, user=self.request.user).first()
-        if not project:
-            raise serializers.ValidationError({'project': 'Project not found or you do not have permission to add traits to it.'})
-        serializer.save(project=project)
-
-class VariableViewSet(viewsets.ModelViewSet):
-    serializer_class = VariableSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return Variable.objects.filter(project__user=self.request.user)
-
-    def perform_create(self, serializer):
-        project_id = self.request.data.get('project')
-        project = Project.objects.filter(id=project_id, user=self.request.user).first()
-        if not project:
-            raise serializers.ValidationError({'project': 'Project not found or you do not have permission to add variables to it.'})
-        serializer.save(project=project)
-
-class VariableValueViewSet(viewsets.ModelViewSet):
-    serializer_class = VariableValueSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return VariableValue.objects.filter(variable__project__user=self.request.user)
 
 class ConditionalViewSet(viewsets.ModelViewSet):
     serializer_class = ConditionalSerializer

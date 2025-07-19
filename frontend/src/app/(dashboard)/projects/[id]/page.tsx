@@ -28,6 +28,7 @@ export default function ProjectDetailPage() {
   const [isPlaintextMode, setIsPlaintextMode] = useState(false);
   const [showDimensions, setShowDimensions] = useState(true);
   const [showStringVariables, setShowStringVariables] = useState(false);
+  const [isStringDrawerOpen, setIsStringDrawerOpen] = useState(false);
   
   // Filter sidebar state
   const [selectedDimensionValues, setSelectedDimensionValues] = useState<{[dimensionId: number]: string | null}>({});
@@ -79,6 +80,7 @@ export default function ProjectDetailPage() {
 
   // String dialog tab state
   const [stringDialogTab, setStringDialogTab] = useState("content");
+  const [contentSubTab, setContentSubTab] = useState<"string" | "variable">("string");
 
   // Variable dialog tab state
   const [variableDialogTab, setVariableDialogTab] = useState("overview");
@@ -108,6 +110,53 @@ export default function ProjectDetailPage() {
   // Split variable editing state
   const [editingSplitVariable, setEditingSplitVariable] = useState(false);
   const [splitVariableSpawns, setSplitVariableSpawns] = useState<any[]>([]);
+
+  // Nested drawer system
+  const [drawerStack, setDrawerStack] = useState<Array<{
+    id: string;
+    title: string;
+    component: 'string-edit' | 'spawn-edit';
+    data?: any;
+  }>>([]);
+  const [currentDrawerLevel, setCurrentDrawerLevel] = useState(0);
+  const [editingSpawn, setEditingSpawn] = useState<any>(null);
+
+  // Conversion confirmation modal state
+  const [conversionConfirmDialog, setConversionConfirmDialog] = useState(false);
+  const [pendingConversionType, setPendingConversionType] = useState<'string' | 'variable' | null>(null);
+
+  // Handle content sub-tab changes
+  useEffect(() => {
+    if (contentSubTab === "variable" && !editingSplitVariable) {
+      // Switching to variable tab - initialize split variable mode
+      setEditingSplitVariable(true);
+      if (editingString && !editingString.is_split_variable) {
+        // If editing a regular string, initialize with one default spawn for split variable creation
+        const defaultSpawn = {
+          id: Date.now(), // Temporary ID for new spawn
+          content: stringContent || "Default content",
+          effective_variable_name: `${(stringVariableName || "variable").toLowerCase().replace(/\s+/g, '_')}_1`,
+          variable_hash: `${(stringVariableName || "variable").toLowerCase().replace(/\s+/g, '_')}_1`,
+          is_split_variable: false
+        };
+        setSplitVariableSpawns([defaultSpawn]);
+      } else if (!editingString) {
+        // Creating a new split variable - start with one default spawn
+        const defaultSpawn = {
+          id: Date.now(), // Temporary ID for new spawn
+          content: "Default content",
+          effective_variable_name: "new_variable_1",
+          variable_hash: "new_variable_1",
+          is_split_variable: false
+        };
+        setSplitVariableSpawns([defaultSpawn]);
+      }
+    } else if (contentSubTab === "string" && editingSplitVariable) {
+      // Switching to string tab - disable split variable mode
+      setEditingSplitVariable(false);
+      setSplitVariableSpawns([]);
+    }
+  }, [contentSubTab, editingSplitVariable, editingString, stringContent, stringVariableName]);
   
   // Pending string variables state - for variables detected in content but not yet created
   const [pendingStringVariables, setPendingStringVariables] = useState<{[name: string]: {content: string, is_conditional: boolean}}>({});
@@ -165,9 +214,9 @@ export default function ProjectDetailPage() {
       
       // Add new variables as pending
       newVariableNames.forEach(variableName => {
-        // Keep existing pending variable data if it exists, otherwise create default
+        // Keep existing pending variable data if it exists, otherwise create empty
         newPending[variableName] = prev[variableName] || {
-          content: `Content for ${variableName}`,  // Default placeholder content
+          content: "",  // Start with empty content
           is_conditional: false
         };
       });
@@ -228,15 +277,53 @@ export default function ProjectDetailPage() {
     setStringVariableName("");
     setStringIsConditional(false);
     setPendingStringVariables({});
+    setContentSubTab("string");
+    setEditingSplitVariable(false);
+    setSplitVariableSpawns([]);
     setCreateDialog("String");
+    setIsStringDrawerOpen(true);
   };
 
   const openEditString = (str: any) => {
+    const isSplitVariable = str.is_split_variable;
+    
+    // Set up basic editing state
     setStringContent(str.content);
     setEditingString(str);
     setStringVariableName(str.variable_name || "");
     setStringIsConditional(str.is_conditional || false);
     setPendingStringVariables({});
+    setIsStringDrawerOpen(true);
+    
+    // Set the content sub-tab based on whether it's a split variable
+    if (isSplitVariable) {
+      setContentSubTab("variable");
+      // Load all its spawns for split variable editing
+      const splitVariableName = str.effective_variable_name || str.variable_hash;
+      const spawns = project.strings?.filter((s: any) => {
+        const effectiveName = s.effective_variable_name || s.variable_hash;
+        return effectiveName.startsWith(`${splitVariableName}_`) && 
+               /^.+_\d+$/.test(effectiveName); // Matches pattern like "name_1", "name_2", etc.
+      }) || [];
+      
+      // Sort spawns by their number
+      spawns.sort((a: any, b: any) => {
+        const aName = a.effective_variable_name || a.variable_hash;
+        const bName = b.effective_variable_name || b.variable_hash;
+        const aMatch = aName.match(/_(\d+)$/);
+        const bMatch = bName.match(/_(\d+)$/);
+        const aNum = aMatch ? parseInt(aMatch[1]) : 0;
+        const bNum = bMatch ? parseInt(bMatch[1]) : 0;
+        return aNum - bNum;
+      });
+      
+      setSplitVariableSpawns(spawns);
+      setEditingSplitVariable(true);
+    } else {
+      setContentSubTab("string");
+      setEditingSplitVariable(false);
+      setSplitVariableSpawns([]);
+    }
     
     // Populate dimension values - now supporting multiple values per dimension
     const dimensionValues: {[dimensionId: number]: string[]} = {};
@@ -295,7 +382,167 @@ export default function ProjectDetailPage() {
     setOpenDimensionPopover(null);
     setDimensionFilterText({});
     setStringDialogTab("content");
+    setContentSubTab("string");
     setPendingStringVariables({});
+    setEditingSplitVariable(false);
+    setSplitVariableSpawns([]);
+    setIsStringDrawerOpen(false);
+    
+    // Reset drawer stack
+    setDrawerStack([]);
+    setCurrentDrawerLevel(0);
+    setEditingSpawn(null);
+  };
+
+  // Conversion handler
+  const handleConversion = async () => {
+    if (!editingString || !pendingConversionType) return;
+
+    try {
+      if (pendingConversionType === 'string') {
+        // Converting split variable to normal string
+        // Use the content of the first spawn or a default message
+        let newContent = stringContent;
+        if (splitVariableSpawns.length > 0) {
+          newContent = splitVariableSpawns[0].content || stringContent;
+        }
+        
+        // Update the main string to be a normal string
+        await apiFetch(`/api/strings/${editingString.id}/`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: newContent,
+            variable_name: stringVariableName,
+            is_conditional: stringIsConditional,
+            is_split_variable: false,
+          }),
+        });
+
+        // Delete all spawn strings
+        for (const spawn of splitVariableSpawns) {
+          if (spawn.id !== editingString.id) { // Don't delete the main string
+            try {
+              await apiFetch(`/api/strings/${spawn.id}/`, {
+                method: 'DELETE',
+              });
+            } catch (err) {
+              console.error('Failed to delete spawn:', err);
+            }
+          }
+        }
+
+        // Update local state
+        setStringContent(newContent);
+        setEditingSplitVariable(false);
+        setSplitVariableSpawns([]);
+        
+        toast.success('Converted to normal string successfully');
+      } else {
+        // Converting normal string to split variable
+        // Create a default spawn with the current content
+        const splitVariableName = stringVariableName || editingString.effective_variable_name || editingString.variable_hash;
+        const firstSpawnName = `${splitVariableName}_1`;
+        
+        // Create the first spawn
+        const spawnResponse = await apiFetch('/api/strings/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: stringContent,
+            variable_name: firstSpawnName,
+            is_conditional: stringIsConditional,
+            project: id,
+            is_split_variable: false,
+          }),
+        });
+
+        // Update the main string to be a split variable
+        await apiFetch(`/api/strings/${editingString.id}/`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: `[Split Variable: ${splitVariableName}]`,
+            variable_name: stringVariableName,
+            is_conditional: false, // Split variables themselves are not conditional
+            is_split_variable: true,
+          }),
+        });
+
+        // Update local state
+        setEditingSplitVariable(true);
+        setSplitVariableSpawns([spawnResponse]);
+        
+        toast.success('Converted to split variable successfully');
+      }
+
+      // Refresh project data
+      const updatedProject = await apiFetch(`/api/projects/${id}/`);
+      setProject(sortProjectStrings(updatedProject));
+
+      // Close confirmation dialog
+      setConversionConfirmDialog(false);
+      setPendingConversionType(null);
+
+    } catch (error) {
+      console.error('Error during conversion:', error);
+      toast.error('Failed to convert string. Please try again.');
+    }
+  };
+
+  // Nested drawer management functions
+  const pushDrawer = (id: string, title: string, component: 'string-edit' | 'spawn-edit', data?: any) => {
+    setDrawerStack(prev => [...prev, { id, title, component, data }]);
+    setCurrentDrawerLevel(prev => prev + 1);
+  };
+
+  const popDrawer = () => {
+    if (currentDrawerLevel > 0) {
+      setDrawerStack(prev => prev.slice(0, -1));
+      setCurrentDrawerLevel(prev => prev - 1);
+      if (currentDrawerLevel === 1) {
+        setEditingSpawn(null);
+      }
+    }
+  };
+
+  const getCurrentDrawer = () => {
+    if (drawerStack.length === 0) return null;
+    return drawerStack[drawerStack.length - 1];
+  };
+
+  // Spawn editing handlers
+  const openEditSpawn = (spawn: any) => {
+    // Set up spawn as if it's a regular string being edited
+    setEditingSpawn(spawn);
+    
+    // Set up all string editing state for the spawn
+    setStringContent(spawn.content || '');
+    setStringVariableName(spawn.variable_name || '');
+    setStringIsConditional(spawn.is_conditional || false);
+    setStringDialogTab("content");
+    setContentSubTab("string");
+    setPendingStringVariables({});
+    
+    // Populate dimension values for the spawn
+    const dimensionValues: {[dimensionId: number]: string[]} = {};
+    if (spawn.dimension_values) {
+      spawn.dimension_values.forEach((dv: any) => {
+        const dimensionId = dv.dimension_value.dimension;
+        if (!dimensionValues[dimensionId]) {
+          dimensionValues[dimensionId] = [];
+        }
+        dimensionValues[dimensionId].push(dv.dimension_value.value);
+      });
+    }
+    setStringDimensionValues(dimensionValues);
+    
+    pushDrawer(
+      `spawn-${spawn.id}`,
+      `Edit Spawn: ${spawn.effective_variable_name || spawn.variable_hash}`,
+      'spawn-edit',
+      spawn
+    );
   };
 
   // Nested string editing handlers
@@ -1465,7 +1712,7 @@ export default function ProjectDetailPage() {
      }
    };
 
-   // Helper function to detect circular references in string variables
+  // Helper function to detect circular references in string variables
   const detectCircularReferences = (content: string, currentStringId?: number, visited: Set<number> = new Set()): string | null => {
     // Extract variable names from content
     const variableMatches = content.match(/{{([^}]+)}}/g) || [];
@@ -1911,9 +2158,65 @@ export default function ProjectDetailPage() {
               str.variable_hash === variableName
             );
             if (stringVariable) {
-              // For string variables, expand recursively to their content (as plain text and badges for trait vars)
-              const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
-              result.push(...nestedParts);
+              if (stringVariable.is_split_variable) {
+                // For split variables, render as clickable tags (no underline)
+                result.push(
+                  <Badge
+                    key={`${keyPrefix}${depth}-${index}-${variableName}`}
+                    variant="outline"
+                    className="mx-1 cursor-pointer transition-colors bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 inline-flex items-center gap-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditString(stringVariable);
+                    }}
+                    title={`Click to edit split variable "${variableName}"`}
+                  >
+                    <Split className="h-3 w-3" />
+                    {`{{${variableName}}}`}
+                  </Badge>
+                );
+              } else {
+                // For regular string variables, check if content is empty
+                if (!stringVariable.content || stringVariable.content.trim() === '') {
+                  // For empty string variables, render as purple badge (like split variables but purple)
+                  result.push(
+                    <Badge
+                      key={`${keyPrefix}${depth}-${index}-${variableName}`}
+                      variant="outline"
+                      className="mx-1 cursor-pointer transition-colors bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 inline-flex items-center gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditString(stringVariable);
+                      }}
+                      title={`Click to edit empty string variable "${variableName}"`}
+                    >
+                      <Spool className="h-3 w-3" />
+                      {`{{${variableName}}}`}
+                    </Badge>
+                  );
+                } else {
+                  // For string variables with content, render as clickable underlined content
+                  const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
+                  result.push(
+                    <span
+                      key={`${keyPrefix}${depth}-${index}-${variableName}`}
+                      className="cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 inline-block"
+                      style={{
+                        borderBottom: `2px solid currentColor`,
+                        paddingBottom: `${depth * 2}px`,
+                        marginBottom: `${depth * 2}px`
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditString(stringVariable);
+                      }}
+                      title={`Click to edit string variable "${variableName}"`}
+                    >
+                      {nestedParts}
+                    </span>
+                  );
+                }
+              }
             } else if (variable) {
               // For trait variables, show as grey badges
               result.push(
@@ -1976,9 +2279,71 @@ export default function ProjectDetailPage() {
       );
       
       if (stringVariable) {
-        // Always expand string variables recursively to their content (as plain text and badges for trait vars)
-        const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
-        parts.push(...nestedParts);
+        if (!showStringVariables) {
+          if (stringVariable.is_split_variable) {
+            // For split variables, render as clickable tags (no underline)
+            parts.push(
+              <Badge
+                key={`${keyPrefix}${depth}-trait-${matchIndex}-${variableName}`}
+                variant="outline"
+                className="mx-1 cursor-pointer transition-colors bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 inline-flex items-center gap-1"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openEditString(stringVariable);
+                }}
+                title={`Click to edit split variable "${variableName}"`}
+              >
+                <Split className="h-3 w-3" />
+                {`{{${variableName}}}`}
+              </Badge>
+            );
+          } else {
+            // For regular string variables, check if content is empty
+            if (!stringVariable.content || stringVariable.content.trim() === '') {
+              // For empty string variables, render as purple badge (like split variables but purple)
+              parts.push(
+                <Badge
+                  key={`${keyPrefix}${depth}-trait-${matchIndex}-${variableName}`}
+                  variant="outline"
+                  className="mx-1 cursor-pointer transition-colors bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 inline-flex items-center gap-1"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEditString(stringVariable);
+                  }}
+                  title={`Click to edit empty string variable "${variableName}"`}
+                >
+                  <Spool className="h-3 w-3" />
+                  {`{{${variableName}}}`}
+                </Badge>
+              );
+            } else {
+              // For string variables with content, render as clickable underlined content
+              const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
+              parts.push(
+                <span
+                  key={`${keyPrefix}${depth}-trait-${matchIndex}-${variableName}`}
+                  className="cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 inline-block"
+                  style={{
+                    borderBottom: `2px solid currentColor`,
+                    paddingBottom: `${depth * 2}px`,
+                    marginBottom: `${depth * 2}px`
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEditString(stringVariable);
+                  }}
+                  title={`Click to edit string variable "${variableName}"`}
+                >
+                  {nestedParts}
+                </span>
+              );
+            }
+          }
+        } else {
+          // When showStringVariables is on, expand normally
+          const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
+          parts.push(...nestedParts);
+        }
       } else if (variable) {
         // For trait variables, use dimension values with precedence over trait values
         const variableValue = getVariableValueWithDimensionPrecedence(variable);
@@ -2530,7 +2895,7 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Filter Sidebar (left) */}
         <aside className="w-90 border-r bg-muted/40 flex flex-col">
           {/* Filter Header - Sticky */}
@@ -3011,6 +3376,885 @@ export default function ProjectDetailPage() {
         </div>
       </main>
 
+      {/* String Edit Sidebar (Right) */}
+      {isStringDrawerOpen && (
+        <aside className="w-[800px] border-l bg-background flex flex-col h-full">
+          {/* Sidebar Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b bg-background sticky top-0 z-10 min-h-[65px]">
+            <div className="flex items-center gap-2">
+              {currentDrawerLevel > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={popDrawer}
+                  className="h-8 w-8 p-0"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              )}
+              <h2 className="text-lg font-semibold">
+                {getCurrentDrawer()?.title || (editingString ? "Edit String" : "New String")}
+              </h2>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={closeStringDialog}
+              className="h-8 w-8 p-0"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Sidebar Content */}
+          <div className="flex flex-col flex-1">
+            {/* Main Tabs - show at all levels */}
+            <div className="px-6 py-4 border-b">
+              <Tabs value={stringDialogTab} onValueChange={setStringDialogTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="content">Content</TabsTrigger>
+                  <TabsTrigger value="dimensions">Dimensions</TabsTrigger>
+                  <TabsTrigger value="advanced">Advanced</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+
+            {/* Content Area */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {stringDialogTab === "content" && currentDrawerLevel === 0 && (
+                <div className="space-y-4">
+                  {!editingString ? (
+                    // Show tabs only for new string creation
+                    <div>
+                      {/* Content Sub-tabs for root level */}
+                      <Tabs value={contentSubTab} onValueChange={(value) => setContentSubTab(value as "string" | "variable")} className="w-full">
+                        <TabsList className="grid w-full grid-cols-2">
+                          <TabsTrigger value="string">String</TabsTrigger>
+                          <TabsTrigger value="variable">Variable</TabsTrigger>
+                        </TabsList>
+                    
+                    <TabsContent value="string" className="mt-4">
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="string-content">Content</Label>
+                          <Textarea
+                            id="string-content"
+                            ref={setTextareaRef}
+                            value={stringContent}
+                            onChange={(e) => setStringContent(e.target.value)}
+                            onSelect={handleTextSelection}
+                            onMouseUp={handleTextSelection}
+                            onKeyUp={handleTextSelection}
+                            placeholder="Enter string content"
+                            rows={4}
+                            required
+                          />
+                        </div>
+                        
+
+                        
+
+                        
+                        {selectedText && selectedText.length > 0 && (
+                          <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                            <p className="text-sm text-blue-800">
+                              <strong>Text selected:</strong> "{selectedText.length > 50 ? `${selectedText.substring(0, 50)}...` : selectedText}"
+                            </p>
+                            <p className="text-xs text-blue-600 mt-1">
+                              Click a variable below to replace the selected text with that variable.
+                            </p>
+                          </div>
+                        )}
+                        
+                        {(() => {
+                          // Find string variables used in the current string content
+                          const variableMatches = stringContent.match(/{{([^}]+)}}/g) || [];
+                          const variableNames = variableMatches.map(match => match.slice(2, -2));
+                          const uniqueVariableNames = [...new Set(variableNames)];
+                          
+                          // Find existing string variables from the variable names
+                          const usedStringVariables = project.strings?.filter((str: any) => {
+                            const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
+                            return effectiveName && uniqueVariableNames.includes(effectiveName);
+                          }) || [];
+
+                          // Get pending variables that are referenced in content
+                          const pendingVariablesInContent = Object.keys(pendingStringVariables).filter(name => 
+                            uniqueVariableNames.includes(name)
+                          );
+                          
+                          if (usedStringVariables.length === 0 && pendingVariablesInContent.length === 0) {
+                            return (
+                              <p className="text-sm text-muted-foreground">
+                                No string variables are currently used in this string.
+                              </p>
+                            );
+                          }
+                          
+                          return (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <Label>String Variables Used</Label>
+                                <Badge variant="outline" className="text-xs">
+                                  {usedStringVariables.length + pendingVariablesInContent.length}
+                                </Badge>
+                              </div>
+                              <div className="space-y-1">
+                                {usedStringVariables.map((stringVar: any) => (
+                                  <div 
+                                    key={stringVar.id} 
+                                    className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
+                                    onClick={() => openEditString(stringVar)}
+                                  >
+                                    <div className="flex items-center gap-2 mb-3">
+                                      {stringVar.is_split_variable ? (
+                                        <div className="flex items-center gap-1 text-orange-600 bg-orange-50 p-1 rounded border border-orange-200">
+                                          <Split className="h-3 w-3" />
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
+                                          <Spool className="h-3 w-3" />
+                                        </div>
+                                      )}
+                                      <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                                        {`{{${stringVar.effective_variable_name || stringVar.variable_hash}}}`}
+                                      </Badge>
+                                      {stringVar.is_conditional && (
+                                        <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
+                                          <Signpost className="h-3 w-3" />
+                                        </Badge>
+                                      )}
+                                      {stringVar.is_split_variable && (
+                                        <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600 border-orange-200 p-1">
+                                          <Split className="h-3 w-3" />
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground line-clamp-2">
+                                      {stringVar.is_split_variable ? (
+                                        <span className="italic">Split variable - click to manage spawns</span>
+                                      ) : stringVar.content ? 
+                                        (stringVar.content.length > 100 ? `${stringVar.content.substring(0, 100)}...` : stringVar.content) :
+                                        "No content"
+                                      }
+                                    </p>
+                                  </div>
+                                ))}
+                                {pendingVariablesInContent.map((pendingVar: string) => (
+                                  <div 
+                                    key={pendingVar} 
+                                    className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer bg-yellow-50/50 border-yellow-200"
+                                    onClick={() => createAndEditPendingVariable(pendingVar)}
+                                  >
+                                    <div className="flex items-center gap-2 mb-3">
+                                      <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 p-1 rounded border border-yellow-200">
+                                        <Plus className="h-3 w-3" />
+                                      </div>
+                                      <Badge variant="outline" className="text-xs font-mono bg-yellow-50 text-yellow-700 border-yellow-200">
+                                        {`{{${pendingVar}}}`}
+                                      </Badge>
+                                      <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
+                                        Pending
+                                      </Badge>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground line-clamp-2 italic">
+                                      Click to create and edit this string variable
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        
+
+                      </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="variable" className="mt-4">
+                      <div className="space-y-4">
+                        {/* Split Variable Header */}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-lg font-semibold">Split Variable</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Manage spawn string variables for this split variable
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={addSplitVariableSpawn}
+                            className="flex items-center gap-2"
+                          >
+                            <Plus className="h-4 w-4" />
+                            Add Spawn
+                          </Button>
+                        </div>
+
+
+
+                        {/* Spawn Variables */}
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <Label>Spawn Variables</Label>
+                            <Badge variant="outline" className="text-xs">
+                              {splitVariableSpawns.length} spawn{splitVariableSpawns.length !== 1 ? 's' : ''}
+                            </Badge>
+                          </div>
+                          
+                          {splitVariableSpawns.map((spawn, index) => (
+                            <div 
+                              key={spawn.id} 
+                              className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
+                              onClick={() => openEditSpawn(spawn)}
+                            >
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
+                                  <Spool className="h-3 w-3" />
+                                </div>
+                                <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                                  {`{{${spawn.effective_variable_name || spawn.variable_hash}}}`}
+                                </Badge>
+                                {spawn.is_conditional && (
+                                  <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
+                                    <Signpost className="h-3 w-3" />
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {spawn.content ? 
+                                  (spawn.content.length > 100 ? `${spawn.content.substring(0, 100)}...` : spawn.content) :
+                                  "No content"
+                                }
+                              </p>
+                            </div>
+                          ))}
+                          
+                          {splitVariableSpawns.length === 0 && (
+                            <div className="text-center py-8 text-muted-foreground">
+                              <p>No spawn variables found for this split variable.</p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={addSplitVariableSpawn}
+                                className="mt-2"
+                              >
+                                Add First Spawn
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                        </TabsContent>
+                      </Tabs>
+                    </div>
+                  ) : (
+                    // Show direct content for editing existing strings (no tabs)
+                    <div className="space-y-4">
+                      {editingString.is_split_variable ? (
+                        // Split variable editing content
+                        <div className="space-y-4">
+                          {/* Split Variable Header */}
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h3 className="text-lg font-semibold">Split Variable</h3>
+                              <p className="text-sm text-muted-foreground">
+                                Manage spawn string variables for this split variable
+                              </p>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={addSplitVariableSpawn}
+                              className="flex items-center gap-2"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Add Spawn
+                            </Button>
+                          </div>
+
+                          {/* Spawn Variables */}
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <Label>Spawn Variables</Label>
+                              <Badge variant="outline" className="text-xs">
+                                {splitVariableSpawns.length} spawn{splitVariableSpawns.length !== 1 ? 's' : ''}
+                              </Badge>
+                            </div>
+                            
+                            {splitVariableSpawns.map((spawn, index) => (
+                              <div 
+                                key={spawn.id} 
+                                className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
+                                onClick={() => openEditSpawn(spawn)}
+                              >
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
+                                    <Spool className="h-3 w-3" />
+                                  </div>
+                                  <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                                    {`{{${spawn.effective_variable_name || spawn.variable_hash}}}`}
+                                  </Badge>
+                                  {spawn.is_conditional && (
+                                    <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
+                                      <Signpost className="h-3 w-3" />
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm text-muted-foreground line-clamp-2">
+                                  {spawn.content ? 
+                                    (spawn.content.length > 100 ? `${spawn.content.substring(0, 100)}...` : spawn.content) :
+                                    "No content"
+                                  }
+                                </p>
+                              </div>
+                            ))}
+                            
+                            {splitVariableSpawns.length === 0 && (
+                              <div className="text-center py-8 text-muted-foreground">
+                                <p>No spawn variables found for this split variable.</p>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={addSplitVariableSpawn}
+                                  className="mt-2"
+                                >
+                                  Add First Spawn
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        // Normal string editing content
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="string-content">Content</Label>
+                            <Textarea
+                              id="string-content"
+                              ref={setTextareaRef}
+                              value={stringContent}
+                              onChange={(e) => setStringContent(e.target.value)}
+                              onSelect={handleTextSelection}
+                              onMouseUp={handleTextSelection}
+                              onKeyUp={handleTextSelection}
+                              placeholder="Enter string content"
+                              rows={4}
+                              required
+                            />
+                          </div>
+
+                          {selectedText && selectedText.length > 0 && (
+                            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                              <p className="text-sm text-blue-800">
+                                <strong>Text selected:</strong> "{selectedText.length > 50 ? `${selectedText.substring(0, 50)}...` : selectedText}"
+                              </p>
+                              <p className="text-xs text-blue-600 mt-1">
+                                Click a variable below to replace the selected text with that variable.
+                              </p>
+                            </div>
+                          )}
+
+                          {(() => {
+                            // Find string variables used in the current content
+                            const variableMatches = stringContent.match(/{{([^}]+)}}/g) || [];
+                            const variableNames = variableMatches.map(match => match.slice(2, -2));
+                            const uniqueVariableNames = [...new Set(variableNames)];
+                            
+                            // Find existing string variables from the variable names
+                            const usedStringVariables = project.strings?.filter((str: any) => {
+                              const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
+                              return effectiveName && uniqueVariableNames.includes(effectiveName);
+                            }) || [];
+
+                            // Get pending variables that are referenced in content
+                            const pendingVariablesInContent = Object.keys(pendingStringVariables).filter(name => 
+                              uniqueVariableNames.includes(name)
+                            );
+                            
+                            if (usedStringVariables.length === 0 && pendingVariablesInContent.length === 0) {
+                              return (
+                                <div className="space-y-2">
+                                  <Label>String Variables Used</Label>
+                                  <p className="text-sm text-muted-foreground">
+                                    No string variables are currently used in this string.
+                                  </p>
+                                </div>
+                              );
+                            }
+                            
+                            return (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Label>String Variables Used</Label>
+                                  <Badge variant="outline" className="text-xs">
+                                    {usedStringVariables.length + pendingVariablesInContent.length}
+                                  </Badge>
+                                </div>
+                                <div className="space-y-2">
+                                  {usedStringVariables.map((stringVar: any) => (
+                                    <div 
+                                      key={stringVar.id} 
+                                      className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
+                                      onClick={() => openEditString(stringVar)}
+                                    >
+                                      <div className="flex items-center gap-2 mb-3">
+                                        {stringVar.is_split_variable ? (
+                                          <div className="flex items-center gap-1 text-orange-600 bg-orange-50 p-1 rounded border border-orange-200">
+                                            <Split className="h-3 w-3" />
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
+                                            <Spool className="h-3 w-3" />
+                                          </div>
+                                        )}
+                                        <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                                          {`{{${stringVar.effective_variable_name || stringVar.variable_hash}}}`}
+                                        </Badge>
+                                        {stringVar.is_conditional && (
+                                          <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
+                                            <Signpost className="h-3 w-3" />
+                                          </Badge>
+                                        )}
+                                        {stringVar.is_split_variable && (
+                                          <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600 border-orange-200 p-1">
+                                            <Split className="h-3 w-3" />
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <p className="text-sm text-muted-foreground line-clamp-2">
+                                        {stringVar.is_split_variable ? (
+                                          <span className="italic">Split variable - click to manage spawns</span>
+                                        ) : stringVar.content ? 
+                                          (stringVar.content.length > 100 ? `${stringVar.content.substring(0, 100)}...` : stringVar.content) :
+                                          "No content"
+                                        }
+                                      </p>
+                                    </div>
+                                  ))}
+
+                                  {pendingVariablesInContent.map((pendingVar: string) => (
+                                    <div 
+                                      key={pendingVar} 
+                                      className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer bg-yellow-50/50 border-yellow-200"
+                                      onClick={() => createAndEditPendingVariable(pendingVar)}
+                                    >
+                                      <div className="flex items-center gap-2 mb-3">
+                                        <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 p-1 rounded border border-yellow-200">
+                                          <Plus className="h-3 w-3" />
+                                        </div>
+                                        <Badge variant="outline" className="text-xs font-mono bg-yellow-50 text-yellow-700 border-yellow-200">
+                                          {`{{${pendingVar}}}`}
+                                        </Badge>
+                                        <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
+                                          Pending
+                                        </Badge>
+                                      </div>
+                                      <p className="text-sm text-muted-foreground line-clamp-2 italic">
+                                        Click to create and edit this string variable
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Spawn Editing Content - Simple Interface */}
+              {stringDialogTab === "content" && currentDrawerLevel > 0 && getCurrentDrawer()?.component === 'spawn-edit' && editingSpawn && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="spawn-content">Content</Label>
+                    <Textarea
+                      id="spawn-content"
+                      ref={setTextareaRef}
+                      value={stringContent}
+                      onChange={(e) => {
+                        setStringContent(e.target.value);
+                        updateSplitVariableSpawn(editingSpawn.id, 'content', e.target.value);
+                      }}
+                      onSelect={handleTextSelection}
+                      onMouseUp={handleTextSelection}
+                      onKeyUp={handleTextSelection}
+                      placeholder="Enter spawn content"
+                      rows={4}
+                      required
+                    />
+                  </div>
+
+                  {(() => {
+                    // Find string variables used in the current spawn content
+                    const variableMatches = stringContent.match(/{{([^}]+)}}/g) || [];
+                    const variableNames = variableMatches.map(match => match.slice(2, -2));
+                    const uniqueVariableNames = [...new Set(variableNames)];
+                    
+                    // Find existing string variables from the variable names
+                    const usedStringVariables = project.strings?.filter((str: any) => {
+                      const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
+                      return effectiveName && uniqueVariableNames.includes(effectiveName);
+                    }) || [];
+
+                    // Get pending variables that are referenced in content
+                    const pendingVariablesInContent = Object.keys(pendingStringVariables).filter(name => 
+                      uniqueVariableNames.includes(name)
+                    );
+                    
+                    if (usedStringVariables.length === 0 && pendingVariablesInContent.length === 0) {
+                      return (
+                        <div className="space-y-2">
+                          <Label>String Variables Used</Label>
+                          <p className="text-sm text-muted-foreground">
+                            No string variables are currently used in this spawn.
+                          </p>
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label>String Variables Used</Label>
+                          <Badge variant="outline" className="text-xs">
+                            {usedStringVariables.length + pendingVariablesInContent.length}
+                          </Badge>
+                        </div>
+                        <div className="space-y-2">
+                          {usedStringVariables.map((stringVar: any) => (
+                            <div 
+                              key={stringVar.id} 
+                              className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
+                              onClick={() => openEditString(stringVar)}
+                            >
+                              <div className="flex items-center gap-2 mb-3">
+                                {stringVar.is_split_variable ? (
+                                  <div className="flex items-center gap-1 text-orange-600 bg-orange-50 p-1 rounded border border-orange-200">
+                                    <Split className="h-3 w-3" />
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
+                                    <Spool className="h-3 w-3" />
+                                  </div>
+                                )}
+                                <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                                  {`{{${stringVar.effective_variable_name || stringVar.variable_hash}}}`}
+                                </Badge>
+                                {stringVar.is_conditional && (
+                                  <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
+                                    <Signpost className="h-3 w-3" />
+                                  </Badge>
+                                )}
+                                {stringVar.is_split_variable && (
+                                  <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600 border-orange-200 p-1">
+                                    <Split className="h-3 w-3" />
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {stringVar.is_split_variable ? (
+                                  <span className="italic">Split variable - click to manage spawns</span>
+                                ) : stringVar.content ? 
+                                  (stringVar.content.length > 100 ? `${stringVar.content.substring(0, 100)}...` : stringVar.content) :
+                                  "No content"
+                                }
+                              </p>
+                            </div>
+                          ))}
+
+                          {pendingVariablesInContent.map((variableName: string) => (
+                            <div
+                              key={`pending-${variableName}`}
+                              className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer bg-blue-50/50 border-blue-200"
+                              onClick={() => createAndEditPendingVariable(variableName)}
+                            >
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className="flex items-center gap-1 text-blue-600 bg-blue-50 p-1 rounded border border-blue-200">
+                                  <Plus className="h-3 w-3" />
+                                </div>
+                                <Badge variant="outline" className="text-xs font-mono bg-blue-50 text-blue-700 border-blue-200">
+                                  {`{{${variableName}}}`}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
+                                  New
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground line-clamp-2 italic">
+                                Click to create and edit this string variable
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+              
+              {/* Spawn Editing Dimensions Tab */}
+              {stringDialogTab === "dimensions" && currentDrawerLevel > 0 && getCurrentDrawer()?.component === 'spawn-edit' && editingSpawn && (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Set dimension values for this spawn variable.
+                  </p>
+                  {/* Dimension controls for spawn would go here - same as string dimensions */}
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>Dimension management for spawn variables coming soon.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Spawn Editing Advanced Tab */}
+              {stringDialogTab === "advanced" && currentDrawerLevel > 0 && getCurrentDrawer()?.component === 'spawn-edit' && editingSpawn && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="spawn-variable-name-advanced">Variable Name</Label>
+                    <Input
+                      id="spawn-variable-name-advanced"
+                      value={stringVariableName}
+                      onChange={(e) => {
+                        setStringVariableName(e.target.value);
+                        updateSplitVariableSpawn(editingSpawn.id, 'variable_name', e.target.value);
+                      }}
+                      placeholder="Variable name (optional)"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {stringVariableName.trim() 
+                        ? `This will be used as {{${stringVariableName.trim()}}} in other strings.`
+                        : `Currently using: {{${editingSpawn.effective_variable_name || editingSpawn.variable_hash}}}`
+                      }
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Spawn Settings</Label>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="spawn-is-conditional-advanced"
+                        checked={stringIsConditional}
+                        onChange={(e) => {
+                          setStringIsConditional(e.target.checked);
+                          updateSplitVariableSpawn(editingSpawn.id, 'is_conditional', e.target.checked);
+                        }}
+                        className="rounded border-gray-300"
+                      />
+                      <Label htmlFor="spawn-is-conditional-advanced" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                        Is Conditional
+                      </Label>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Conditional spawns can be shown or hidden based on specific conditions
+                    </p>
+                  </div>
+
+                  {splitVariableSpawns.length > 1 && (
+                    <div className="space-y-2">
+                      <Label>Danger Zone</Label>
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-red-800">Delete this spawn</p>
+                            <p className="text-sm text-red-600">This action cannot be undone.</p>
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              removeSplitVariableSpawn(editingSpawn.id);
+                              popDrawer();
+                            }}
+                          >
+                            Delete Spawn
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Root Level Dimensions Tab */}
+              {currentDrawerLevel === 0 && stringDialogTab === "dimensions" && (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Set dimension values for this string.
+                  </p>
+                  {/* Add dimension controls here */}
+                </div>
+              )}
+              
+              {/* Root Level Advanced Tab */}
+              {currentDrawerLevel === 0 && stringDialogTab === "advanced" && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="string-variable-name-advanced">Variable Name</Label>
+                    <Input
+                      id="string-variable-name-advanced"
+                      value={stringVariableName}
+                      onChange={(e) => setStringVariableName(e.target.value)}
+                      placeholder="Variable name (optional)"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {!editingString ? (
+                        contentSubTab === "variable" ? 
+                          "This name will be used as the base for all spawn variables" : 
+                          "Optional name for this string variable"
+                      ) : (
+                        editingString.is_split_variable ?
+                          "This name is used as the base for all spawn variables" :
+                          "Optional name for this string variable"
+                      )}
+                    </p>
+                  </div>
+                  
+                  {(!editingString ? contentSubTab === "string" : !editingString.is_split_variable) && (
+                    <div className="space-y-2">
+                      <Label>String Settings</Label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="string-is-conditional-advanced"
+                          checked={stringIsConditional}
+                          onChange={(e) => setStringIsConditional(e.target.checked)}
+                          className="rounded border-gray-300"
+                        />
+                        <Label htmlFor="string-is-conditional-advanced" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                          Is Conditional
+                        </Label>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Conditional strings can be shown or hidden based on specific conditions
+                      </p>
+                    </div>
+                  )}
+
+                  {editingString && (
+                    <div className="space-y-2">
+                      <Label>Conversion</Label>
+                      <div className="p-3 bg-orange-50 border border-orange-200 rounded-md">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-orange-800">
+                              {editingString.is_split_variable ? "Convert to Normal String" : "Convert to Split Variable"}
+                            </p>
+                            <p className="text-sm text-orange-600">
+                              {editingString.is_split_variable 
+                                ? "This will merge all spawns into a single string and remove spawn management."
+                                : "This will convert this string into a split variable with multiple spawns."
+                              }
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-orange-300 text-orange-700 hover:bg-orange-100"
+                            onClick={() => {
+                              setPendingConversionType(editingString.is_split_variable ? 'string' : 'variable');
+                              setConversionConfirmDialog(true);
+                            }}
+                          >
+                            {editingString.is_split_variable ? "Convert to String" : "Convert to Variable"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+
+                  
+                  {editingString && (
+                    <div className="space-y-2">
+                      <Label>Danger Zone</Label>
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-red-800">Delete this string</p>
+                            <p className="text-sm text-red-600">This action cannot be undone.</p>
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => openDeleteStringDialog(editingString)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t p-6 bg-background">
+              <div className="flex justify-end gap-2">
+                {currentDrawerLevel > 0 ? (
+                  <>
+                    <Button type="button" variant="secondary" onClick={popDrawer}>
+                      Back
+                    </Button>
+                    <Button type="button" onClick={async () => {
+                      // Save spawn changes to backend
+                      try {
+                        await apiFetch(`/api/strings/${editingSpawn.id}/`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            content: stringContent,
+                            variable_name: stringVariableName,
+                            is_conditional: stringIsConditional,
+                          }),
+                        });
+                        
+                        // Update the spawn in splitVariableSpawns state
+                        setSplitVariableSpawns(prev => prev.map(spawn => 
+                          spawn.id === editingSpawn.id 
+                            ? { 
+                                ...spawn, 
+                                content: stringContent,
+                                variable_name: stringVariableName,
+                                is_conditional: stringIsConditional 
+                              }
+                            : spawn
+                        ));
+                        
+                        // Refresh project data to get latest changes
+                        const updatedProject = await apiFetch(`/api/projects/${id}/`);
+                        setProject(sortProjectStrings(updatedProject));
+                        
+                        toast.success('Spawn updated successfully');
+                        popDrawer();
+                      } catch (error) {
+                        console.error('Error saving spawn:', error);
+                        toast.error('Failed to save spawn. Please try again.');
+                      }
+                    }}>
+                      Save Spawn
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button type="button" variant="secondary" onClick={closeStringDialog}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" onClick={contentSubTab === "variable" ? handleSplitVariableSubmit : handleStringSubmit}>
+                      {contentSubTab === "variable" ? "Save Split Variable" : (editingString ? "Save Changes" : "Create String")}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </aside>
+      )}
+
       </div>
 
       {/* Floating Action Bar for Bulk Operations */}
@@ -3346,8 +4590,8 @@ export default function ProjectDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Create/Edit String Sheet */}
-      <Sheet open={createDialog === "String" || !!editingString} onOpenChange={v => !v && closeStringDialog()}>
+      {/* Create/Edit String Sheet - Now using custom sidebar */}
+      <Sheet open={false} onOpenChange={v => !v && closeStringDialog()}>
         <SheetContent side="right" className="w-[800px] max-w-[90vw] flex flex-col p-0">
           {/* Fixed Header with Tabs */}
           <SheetHeader className="px-6 py-4 border-b bg-background">
@@ -3376,13 +4620,10 @@ export default function ProjectDetailPage() {
                   onSelect={handleTextSelection}
                   onMouseUp={handleTextSelection}
                   onKeyUp={handleTextSelection}
-                  placeholder="Enter string content. Click variables below to insert them."
+                  placeholder="Enter string content"
                   rows={4}
                   required
                 />
-                <p className="text-xs text-muted-foreground">
-                  Click variable badges below to insert them.
-                </p>
               </div>
             <div>
               <h3 className="font-medium mb-2">Variables</h3>
@@ -3438,38 +4679,41 @@ export default function ProjectDetailPage() {
                     {usedStringVariables.map((stringVar: any) => (
                       <div
                         key={stringVar.id}
-                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                        className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
                         onClick={() => openEditNestedString(stringVar)}
                       >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Badge
-                              variant="outline"
-                              className="text-xs bg-purple-50 text-purple-700 border-purple-200"
-                            >
-                              <Spool className="h-3 w-3 mr-1" />
-                              {`{{${stringVar.effective_variable_name || stringVar.variable_hash}}}`}
+                        <div className="flex items-center gap-2 mb-3">
+                          {stringVar.is_split_variable ? (
+                            <div className="flex items-center gap-1 text-orange-600 bg-orange-50 p-1 rounded border border-orange-200">
+                              <Split className="h-3 w-3" />
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
+                              <Spool className="h-3 w-3" />
+                            </div>
+                          )}
+                          <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                            {`{{${stringVar.effective_variable_name || stringVar.variable_hash}}}`}
+                          </Badge>
+                          {stringVar.is_conditional && (
+                            <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
+                              <Signpost className="h-3 w-3" />
                             </Badge>
-                            {stringVar.is_conditional && (
-                              <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
-                                <Signpost className="h-3 w-3" />
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1 truncate">
-                            {stringVar.is_split_variable ? (
-                              <span className="italic flex items-center gap-1">
-                                <Split className="h-3 w-3" />
-                                Split variable - click split to add more spawns
-                              </span>
-                            ) : stringVar.content.length > 60 
-                              ? `${stringVar.content.substring(0, 60)}...` 
-                              : stringVar.content}
-                          </p>
+                          )}
+                          {stringVar.is_split_variable && (
+                            <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600 border-orange-200 p-1">
+                              <Split className="h-3 w-3" />
+                            </Badge>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Edit2 className="h-4 w-4 text-muted-foreground" />
-                        </div>
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          {stringVar.is_split_variable ? (
+                            <span className="italic">Split variable - click to manage spawns</span>
+                          ) : stringVar.content ? 
+                            (stringVar.content.length > 100 ? `${stringVar.content.substring(0, 100)}...` : stringVar.content) :
+                            "No content"
+                          }
+                        </p>
                       </div>
                     ))}
 
@@ -3477,32 +4721,23 @@ export default function ProjectDetailPage() {
                     {pendingVariablesInContent.map((variableName: string) => (
                       <div
                         key={`pending-${variableName}`}
-                        className="flex items-center justify-between p-3 border-2 border-dashed border-blue-200 rounded-lg hover:bg-blue-50/50 transition-colors cursor-pointer bg-blue-50/30"
+                        className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer bg-blue-50/50 border-blue-200"
                         onClick={() => createAndEditPendingVariable(variableName)}
                       >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Badge
-                              variant="outline"
-                              className="text-xs bg-blue-100 text-blue-700 border-blue-300"
-                            >
-                              <Spool className="h-3 w-3 mr-1" />
-                              {`{{${variableName}}}`}
-                            </Badge>
-                            <Badge
-                              variant="outline" 
-                              className="text-xs bg-blue-100 text-blue-600 border-blue-300"
-                            >
-                              New
-                            </Badge>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="flex items-center gap-1 text-blue-600 bg-blue-50 p-1 rounded border border-blue-200">
+                            <Plus className="h-3 w-3" />
                           </div>
-                          <p className="text-sm text-blue-600 mt-1 italic">
-                            Click to create and edit this string variable
-                          </p>
+                          <Badge variant="outline" className="text-xs font-mono bg-blue-50 text-blue-700 border-blue-200">
+                            {`{{${variableName}}}`}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
+                            New
+                          </Badge>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Plus className="h-4 w-4 text-blue-600" />
-                        </div>
+                        <p className="text-sm text-muted-foreground line-clamp-2 italic">
+                          Click to create and edit this string variable
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -4140,6 +5375,53 @@ export default function ProjectDetailPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {/* Conversion Confirmation Dialog */}
+      <Dialog open={conversionConfirmDialog} onOpenChange={v => !v && setConversionConfirmDialog(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {pendingConversionType === 'string' ? 'Convert to Normal String' : 'Convert to Split Variable'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {pendingConversionType === 'string' 
+                ? 'This will convert your split variable back to a normal string. All spawn strings will be deleted and only the content from the first spawn will be preserved.'
+                : 'This will convert your normal string into a split variable. The current content will become the first spawn, and you can add more spawns later.'
+              }
+            </p>
+            <div className="p-3 bg-orange-50 border border-orange-200 rounded-md">
+              <p className="text-sm font-medium text-orange-800">
+                ⚠️ Warning: This action cannot be undone
+              </p>
+              <p className="text-sm text-orange-600 mt-1">
+                {pendingConversionType === 'string' 
+                  ? 'All spawn strings except the first one will be permanently deleted.'
+                  : 'Your string will be restructured into a split variable format.'
+                }
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setConversionConfirmDialog(false);
+                setPendingConversionType(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleConversion}
+            >
+              {pendingConversionType === 'string' ? 'Convert to String' : 'Convert to Variable'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 

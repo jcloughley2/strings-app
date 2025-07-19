@@ -17,7 +17,7 @@ class Project(models.Model):
         return self.name
 
 class String(models.Model):
-    content = models.TextField()
+    content = models.TextField(blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='strings')
     # Every string is now automatically a variable with either a hash or custom name
     variable_name = models.CharField(max_length=100, blank=True, null=True)

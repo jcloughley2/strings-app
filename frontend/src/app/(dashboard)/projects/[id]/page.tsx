@@ -3376,35 +3376,36 @@ export default function ProjectDetailPage() {
         </div>
       </main>
 
-      {/* String Edit Sidebar (Right) */}
-      {isStringDrawerOpen && (
-        <aside className="w-[800px] border-l bg-background flex flex-col h-full">
-          {/* Sidebar Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b bg-background sticky top-0 z-10 min-h-[65px]">
-            <div className="flex items-center gap-2">
-              {currentDrawerLevel > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={popDrawer}
-                  className="h-8 w-8 p-0"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-              )}
-              <h2 className="text-lg font-semibold">
-                {getCurrentDrawer()?.title || (editingString ? "Edit String" : "New String")}
-              </h2>
+      {/* String Edit Sheets - Right-hand Drawers */}
+      <Sheet open={isStringDrawerOpen} onOpenChange={v => !v && closeStringDialog()}>
+        <SheetContent side="right" className="w-[800px] max-w-[90vw] flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b bg-background">
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                {currentDrawerLevel > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={popDrawer}
+                    className="h-8 w-8 p-0"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                )}
+                <SheetTitle>
+                  {getCurrentDrawer()?.title || (editingString ? "Edit String" : "New String")}
+                </SheetTitle>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={closeStringDialog}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={closeStringDialog}
-              className="h-8 w-8 p-0"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          </SheetHeader>
 
           {/* Sidebar Content */}
           <div className="flex flex-col flex-1">
@@ -4252,8 +4253,118 @@ export default function ProjectDetailPage() {
               </div>
             </div>
           </div>
-        </aside>
-      )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Nested Drawer Sheets - Infinite Nesting Support */}
+      {drawerStack.map((drawer, index) => (
+        <Sheet key={drawer.id} open={true} onOpenChange={v => !v && popDrawer()}>
+          <SheetContent side="right" className="w-[800px] max-w-[90vw] flex flex-col p-0">
+            <SheetHeader className="px-6 py-4 border-b bg-background">
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={popDrawer}
+                    className="h-8 w-8 p-0"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  <SheetTitle>
+                    {drawer.title}
+                  </SheetTitle>
+                </div>
+              </div>
+            </SheetHeader>
+            
+            <div className="flex-1 overflow-y-auto p-6">
+              {drawer.component === 'spawn-edit' && editingSpawn && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Spawn Content</Label>
+                    <Textarea
+                      value={stringContent}
+                      onChange={(e) => setStringContent(e.target.value)}
+                      placeholder="Enter spawn content"
+                      rows={6}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Variable Name (Optional)</Label>
+                    <Input
+                      value={stringVariableName}
+                      onChange={(e) => setStringVariableName(e.target.value)}
+                      placeholder="Optional custom name"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`spawn-conditional-${index}`}
+                      checked={stringIsConditional}
+                      onChange={(e) => setStringIsConditional(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    <Label htmlFor={`spawn-conditional-${index}`} className="text-sm cursor-pointer">
+                      Conditional (can be toggled on/off)
+                    </Label>
+                  </div>
+                </div>
+              )}
+              
+              {drawer.component === 'string-edit' && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>String Content</Label>
+                    <Textarea
+                      value={stringContent}
+                      onChange={(e) => setStringContent(e.target.value)}
+                      placeholder="Enter string content"
+                      rows={6}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Variable Name (Optional)</Label>
+                    <Input
+                      value={stringVariableName}
+                      onChange={(e) => setStringVariableName(e.target.value)}
+                      placeholder="Optional custom name"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`string-conditional-${index}`}
+                      checked={stringIsConditional}
+                      onChange={(e) => setStringIsConditional(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    <Label htmlFor={`string-conditional-${index}`} className="text-sm cursor-pointer">
+                      Conditional (can be toggled on/off)
+                    </Label>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="px-6 py-4 border-t bg-background">
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={popDrawer}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={handleStringSubmit}>
+                  Save
+                </Button>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+      ))}
 
       </div>
 

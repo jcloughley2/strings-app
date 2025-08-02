@@ -81,7 +81,7 @@ export default function ProjectDetailPage() {
 
   // String dialog tab state
   const [stringDialogTab, setStringDialogTab] = useState("content");
-  const [contentSubTab, setContentSubTab] = useState<"string" | "variable">("string");
+  const [contentSubTab, setContentSubTab] = useState<"string" | "conditional">("string");
 
   // Variable dialog tab state
   const [variableDialogTab, setVariableDialogTab] = useState("overview");
@@ -141,7 +141,7 @@ export default function ProjectDetailPage() {
 
   // Handle content sub-tab changes
   useEffect(() => {
-    if (contentSubTab === "variable" && !editingConditional) {
+    if (contentSubTab === "conditional" && !editingConditional) {
       // Switching to variable tab - initialize conditional mode
       setEditingConditional(true);
       if (editingString && !editingString.is_conditional_container) {
@@ -352,7 +352,7 @@ export default function ProjectDetailPage() {
     
     // Set the content sub-tab based on whether it's a conditional
     if (isConditionalContainer) {
-      setContentSubTab("variable");
+              setContentSubTab("conditional");
       // Load all its spawns for conditional editing
       const conditionalName = str.effective_variable_name || str.variable_hash;
       const spawns = project.strings?.filter((s: any) => {
@@ -614,6 +614,21 @@ export default function ProjectDetailPage() {
       isEditingConditional: false
     };
 
+    // Check if this should be a conditional container but isn't marked as one
+    if (!str.is_conditional_container && str.is_conditional) {
+      const conditionalName = str.effective_variable_name || str.variable_hash;
+      const potentialSpawns = project.strings?.filter((s: any) => {
+        const effectiveName = s.effective_variable_name || s.variable_hash;
+        return effectiveName.startsWith(`${conditionalName}_`) && 
+               /^.+_\d+$/.test(effectiveName);
+      }) || [];
+      
+             if (potentialSpawns.length > 0) {
+         // Auto-repair: mark as conditional container since it has spawns
+         str.is_conditional_container = true;
+       }
+    }
+    
     // If it's a conditional container, load its spawns
     if (str.is_conditional_container) {
       const conditionalName = str.effective_variable_name || str.variable_hash;
@@ -634,7 +649,7 @@ export default function ProjectDetailPage() {
       });
       
       newDrawer.conditionalSpawns = spawns;
-      newDrawer.isEditingConditional = true;
+      // Let user choose mode via tabs instead of auto-setting isEditingConditional
     }
 
     setCascadingDrawers(prev => [...prev, newDrawer]);
@@ -3646,10 +3661,10 @@ export default function ProjectDetailPage() {
                     // Show tabs only for new string creation
                     <div>
                       {/* Content Sub-tabs for root level */}
-                      <Tabs value={contentSubTab} onValueChange={(value) => setContentSubTab(value as "string" | "variable")} className="w-full">
+                      <Tabs value={contentSubTab} onValueChange={(value) => setContentSubTab(value as "string" | "conditional")} className="w-full">
                         <TabsList className="grid w-full grid-cols-2">
                           <TabsTrigger value="string">String</TabsTrigger>
-                          <TabsTrigger value="variable">Variable</TabsTrigger>
+                          <TabsTrigger value="conditional">Conditional</TabsTrigger>
                         </TabsList>
                     
                     <TabsContent value="string" className="mt-4">
@@ -3787,7 +3802,7 @@ export default function ProjectDetailPage() {
                       </div>
                     </TabsContent>
                     
-                    <TabsContent value="variable" className="mt-4">
+                    <TabsContent value="conditional" className="mt-4">
                       <div className="space-y-4">
                         {/* Conditional Header */}
                         <div className="flex items-center justify-between">
@@ -3819,45 +3834,58 @@ export default function ProjectDetailPage() {
                             </Badge>
                           </div>
                           
-                          {conditionalSpawns.map((spawn, index) => (
-                            <div 
-                              key={spawn.id} 
-                              className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
-                              onClick={() => openEditSpawn(spawn)}
-                            >
-                              <div className="flex items-center gap-2 mb-3">
-                                <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
-                                  <Spool className="h-3 w-3" />
+                          <div className="grid gap-3">
+                            {conditionalSpawns.map((spawn: any) => {
+                              const isTemporary = spawn._isTemporary || spawn.id.toString().startsWith('temp-');
+                              const variableName = spawn.effective_variable_name || spawn.variable_hash;
+                              
+                              return (
+                                <div 
+                                  key={spawn.id} 
+                                  className={`border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer ${
+                                    isTemporary 
+                                      ? 'bg-yellow-50/50 border-yellow-200' 
+                                      : 'bg-purple-50/50 border-purple-200'
+                                  }`}
+                                  onClick={() => openEditSpawn(spawn)}
+                                >
+                                  <div className="flex items-center gap-2 mb-2">
+                                    {isTemporary ? (
+                                      <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 p-1 rounded border border-yellow-200">
+                                        <Plus className="h-3 w-3" />
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
+                                        <Spool className="h-3 w-3" />
+                                      </div>
+                                    )}
+                                    <Badge variant="outline" className={`text-xs font-mono ${
+                                      isTemporary 
+                                        ? 'bg-yellow-50 text-yellow-700 border-yellow-200' 
+                                        : 'bg-purple-50 text-purple-700 border-purple-200'
+                                    }`}>
+                                      {`{{${variableName}}}`}
+                                    </Badge>
+                                    {isTemporary && (
+                                      <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
+                                        New variable!
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {!isTemporary && (
+                                    <p className="text-sm text-muted-foreground line-clamp-2">
+                                      {spawn.content || "Empty content"}
+                                    </p>
+                                  )}
                                 </div>
-                                <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
-                                  {`{{${spawn.effective_variable_name || spawn.variable_hash}}}`}
-                                </Badge>
-                                {spawn.is_conditional && (
-                                  <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
-                                    <Signpost className="h-3 w-3" />
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-sm text-muted-foreground line-clamp-2">
-                                {spawn.content ? 
-                                  (spawn.content.length > 100 ? `${spawn.content.substring(0, 100)}...` : spawn.content) :
-                                  "No content"
-                                }
-                              </p>
-                            </div>
-                          ))}
+                              );
+                            })}
+                          </div>
                           
                           {conditionalSpawns.length === 0 && (
                             <div className="text-center py-8 text-muted-foreground">
-                              <p>No spawn variables found for this conditional.</p>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={addConditionalSpawn}
-                                className="mt-2"
-                              >
-                                Add First Spawn
-                              </Button>
+                              <p className="text-sm">No spawn variables yet</p>
+                              <p className="text-xs">Click "Add Spawn" to create the first spawn</p>
                             </div>
                           )}
                         </div>
@@ -4312,7 +4340,7 @@ export default function ProjectDetailPage() {
                     />
                     <p className="text-xs text-muted-foreground">
                       {!editingString ? (
-                        contentSubTab === "variable" ? 
+                                                      contentSubTab === "conditional" ? 
                           "This name will be used as the base for all spawn variables" : 
                           "Optional name for this string variable"
                       ) : (
@@ -4454,8 +4482,8 @@ export default function ProjectDetailPage() {
                     <Button type="button" variant="secondary" onClick={closeStringDialog}>
                       Cancel
                     </Button>
-                    <Button type="submit" onClick={contentSubTab === "variable" ? handleSplitVariableSubmit : handleStringSubmit}>
-                      {contentSubTab === "variable" ? "Save Conditional" : (editingString ? "Save Changes" : "Create String")}
+                                    <Button type="submit" onClick={contentSubTab === "conditional" ? handleSplitVariableSubmit : handleStringSubmit}>
+                  {contentSubTab === "conditional" ? "Save Conditional" : (editingString ? "Save Changes" : "Create String")}
                     </Button>
                   </>
                 )}
@@ -4559,8 +4587,41 @@ export default function ProjectDetailPage() {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="content">Content</Label>
+                        {/* String/Conditional Mode Tabs */}
+                        <Tabs 
+                          value={(drawer.isConditional || drawer.isConditionalContainer) ? "conditional" : "string"} 
+                          onValueChange={(value) => {
+                            const isConditional = value === "conditional";
+                            const updates: any = { isConditional };
+                            
+                            // When switching TO conditional mode, initialize spawns if empty
+                            if (isConditional && drawer.conditionalSpawns.length === 0) {
+                              const parentName = drawer.stringData.effective_variable_name || drawer.stringData.variable_hash;
+                              const firstSpawn = {
+                                id: `temp-spawn-${Date.now()}`,
+                                content: drawer.content || "First spawn content",
+                                variable_name: `${parentName}_1`,
+                                variable_hash: `${parentName}_1`,
+                                effective_variable_name: `${parentName}_1`,
+                                is_conditional: false,
+                                is_conditional_container: false,
+                                _isTemporary: true
+                              };
+                              updates.conditionalSpawns = [firstSpawn];
+                            }
+                            updateCascadingDrawer(drawer.id, updates);
+                          }} 
+                          className="w-full"
+                        >
+                          <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="string">String</TabsTrigger>
+                            <TabsTrigger value="conditional">Conditional</TabsTrigger>
+                          </TabsList>
+                          
+                          <TabsContent value="string" className="mt-4">
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="content">Content</Label>
                           <Textarea
                             id="content"
                             value={drawer.content}
@@ -4661,6 +4722,104 @@ export default function ProjectDetailPage() {
                             </div>
                           );
                         })()}
+                            </div>
+                          </TabsContent>
+                          
+                          <TabsContent value="conditional" className="mt-4">
+                            <div className="space-y-4">
+                              <div>
+                                <h3 className="text-lg font-semibold">Conditional</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  Manage spawn string variables for this conditional
+                                </p>
+                              </div>
+                              
+                              <div className="flex items-center justify-between">
+                                <Label>Spawn Variables</Label>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const parentName = drawer.stringData.effective_variable_name || drawer.stringData.variable_hash;
+                                    const spawnNumber = drawer.conditionalSpawns.length + 1;
+                                    const newSpawn = {
+                                      id: `temp-spawn-${Date.now()}`,
+                                      content: `Spawn ${spawnNumber} content`,
+                                      variable_name: `${parentName}_${spawnNumber}`,
+                                      variable_hash: `${parentName}_${spawnNumber}`,
+                                      effective_variable_name: `${parentName}_${spawnNumber}`,
+                                      is_conditional: false,
+                                      is_conditional_container: false,
+                                      _isTemporary: true
+                                    };
+                                    updateCascadingDrawer(drawer.id, { 
+                                      conditionalSpawns: [...drawer.conditionalSpawns, newSpawn] 
+                                    });
+                                  }}
+                                  className="flex items-center gap-2"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                  Add Spawn
+                                </Button>
+                              </div>
+                              
+                              <div className="grid gap-3">
+                                {drawer.conditionalSpawns.map((spawn: any) => {
+                                  const isTemporary = spawn._isTemporary || spawn.id.toString().startsWith('temp-');
+                                  const variableName = spawn.effective_variable_name || spawn.variable_hash;
+                                  
+                                  return (
+                                    <div 
+                                      key={spawn.id} 
+                                      className={`border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer ${
+                                        isTemporary 
+                                          ? 'bg-yellow-50/50 border-yellow-200' 
+                                          : 'bg-purple-50/50 border-purple-200'
+                                      }`}
+                                      onClick={() => openEditInCascadingDrawer(spawn)}
+                                    >
+                                      <div className="flex items-center gap-2 mb-2">
+                                        {isTemporary ? (
+                                          <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 p-1 rounded border border-yellow-200">
+                                            <Plus className="h-3 w-3" />
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
+                                            <Spool className="h-3 w-3" />
+                                          </div>
+                                        )}
+                                        <Badge variant="outline" className={`text-xs font-mono ${
+                                          isTemporary 
+                                            ? 'bg-yellow-50 text-yellow-700 border-yellow-200' 
+                                            : 'bg-purple-50 text-purple-700 border-purple-200'
+                                        }`}>
+                                          {`{{${variableName}}}`}
+                                        </Badge>
+                                        {isTemporary && (
+                                          <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
+                                            New variable!
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      {!isTemporary && (
+                                        <p className="text-sm text-muted-foreground line-clamp-2">
+                                          {spawn.content || "Empty content"}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                                
+                                {drawer.conditionalSpawns.length === 0 && (
+                                  <div className="text-center py-8 text-muted-foreground">
+                                    <p className="text-sm">No spawn variables yet</p>
+                                    <p className="text-xs">Click "Add Spawn" to create the first spawn</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </TabsContent>
+                        </Tabs>
                       </div>
                     )}
                   </div>
@@ -4676,15 +4835,6 @@ export default function ProjectDetailPage() {
                         onChange={(e) => updateCascadingDrawer(drawer.id, { variableName: e.target.value })}
                         placeholder="Custom variable name (optional)"
                       />
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="is-conditional"
-                        checked={drawer.isConditional}
-                        onCheckedChange={(checked: boolean) => updateCascadingDrawer(drawer.id, { isConditional: checked })}
-                      />
-                      <Label htmlFor="is-conditional">Conditional</Label>
                     </div>
                   </div>
                 )}

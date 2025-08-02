@@ -82,6 +82,8 @@
 - **Convert Any String**: Turn into container with multiple spawns
 - **Automatic Setup**: Creates dimension and spawns with `{name}_1`, `{name}_2` pattern
 - **Idempotent**: Safe to retry operations without duplicates
+- **Tab Interface**: All editing uses "String" vs "Conditional" tabs (no toggle switches)
+- **Auto-Detection**: System repairs missing `is_conditional_container` flags automatically
 
 ### Variable Embedding
 - **Syntax**: `{{variableName}}` in any content
@@ -126,11 +128,22 @@ Nested String 2 (Stacked Drawer)
   ... unlimited depth
 ```
 
-### String Editing Interface
-- **Three Tabs**: Content, Dimensions, Advanced
-- **Variable Name Display**: Shows at top with type badges
-- **Real-time Detection**: Variables appear as boxes below content
+### String Editing Interface ⭐
+**UNIFIED TABBED INTERFACE**: All variable editing (create/edit/nested) uses consistent pattern
+
+#### Content Tab Structure
+- **String/Conditional Tabs**: Replace toggle switches with clear mode selection
+  - **String Tab**: Text content editing + variable detection boxes
+  - **Conditional Tab**: Spawn management with yellow/purple variable boxes
+- **Three Main Tabs**: Content, Dimensions, Advanced
+- **Variable Name Display**: Shows at top with type badges  
 - **ShadCN Close Buttons**: Single X button (removed custom duplicates)
+
+#### Conditional Mode Features
+- **Spawn Variables**: Yellow boxes (new/temporary), purple boxes (existing)
+- **Add Spawn Button**: Creates new spawn with proper `{parent}_N` naming
+- **Auto-Container Detection**: Repairs `is_conditional_container` flag automatically
+- **Consistent Interactions**: All spawns clickable to open cascading drawers
 
 ---
 
@@ -178,6 +191,8 @@ Nested String 2 (Stacked Drawer)
 - **Simple Stacking**: Use z-index, remove complex transforms
 - **Variable Detection**: Show yellow (new) and purple (existing) boxes
 - **Individual Controls**: Each drawer has own save/cancel
+- **Unified Interface**: Same String/Conditional tabs across all editing contexts
+- **Auto-Repair**: Automatically fixes `is_conditional_container` flags for existing variables
 - **ShadCN Integration**: Use built-in close buttons only
 
 ### Content Validation

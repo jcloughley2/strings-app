@@ -2168,7 +2168,44 @@ export default function ProjectDetailPage() {
       );
       
       if (stringVariable) {
-        const replacement = processVariableContent(stringVariable.content, depth + 1);
+        let replacement;
+        
+        // Handle conditional variables with dimension-based spawn selection
+        if (stringVariable.is_conditional_container) {
+          // Find the dimension that corresponds to this conditional variable
+          const correspondingDimension = project.dimensions?.find((d: any) => 
+            d.name === stringVariable.effective_variable_name
+          );
+          
+          if (correspondingDimension) {
+            // Check if user has selected a specific spawn for this dimension
+            const selectedSpawn = selectedDimensionValues[correspondingDimension.id];
+            
+            if (selectedSpawn) {
+              // Find the specific spawn variable
+              const spawnVariable = project.strings?.find((str: any) => 
+                str.effective_variable_name === selectedSpawn
+              );
+              
+              if (spawnVariable) {
+                replacement = processVariableContent(spawnVariable.content, depth + 1);
+              } else {
+                // Fallback to conditional variable name if spawn not found
+                replacement = `{{${variableName}}}`;
+              }
+            } else {
+              // No specific spawn selected, show the conditional variable name
+              replacement = `{{${variableName}}}`;
+            }
+          } else {
+            // No corresponding dimension found, show as variable name
+            replacement = `{{${variableName}}}`;
+          }
+        } else {
+          // Regular string variable, process normally
+          replacement = processVariableContent(stringVariable.content, depth + 1);
+        }
+        
         const regex = new RegExp(`{{${variableName}}}`, 'g');
         processedContent = processedContent.replace(regex, replacement);
       }

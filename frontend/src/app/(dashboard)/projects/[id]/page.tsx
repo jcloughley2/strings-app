@@ -11,8 +11,9 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectSe
 
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 
-import { Edit2, Trash2, Type, Bookmark, Spool, Signpost, Plus, X, Globe, SwatchBook, MoreHorizontal, Download, Upload, Copy, ArrowLeft, Split } from "lucide-react";
+import { Edit2, Trash2, Type, Bookmark, Spool, Signpost, Plus, X, Globe, SwatchBook, MoreHorizontal, Download, Upload, Copy, ArrowLeft, Folder } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -103,15 +104,28 @@ export default function ProjectDetailPage() {
   const [nestedStringVariableName, setNestedStringVariableName] = useState("");
   const [nestedStringIsConditional, setNestedStringIsConditional] = useState(false);
   
-  // Split mode state for nested editing
-  const [nestedStringSplitMode, setNestedStringSplitMode] = useState(false);
+  // Conditional mode state for nested editing
+  const [nestedStringConditionalMode, setNestedStringConditionalMode] = useState(false);
   const [nestedStringSpawns, setNestedStringSpawns] = useState<{id: string, content: string, variableName: string, isConditional: boolean}[]>([]);
   
-  // Split variable editing state
-  const [editingSplitVariable, setEditingSplitVariable] = useState(false);
-  const [splitVariableSpawns, setSplitVariableSpawns] = useState<any[]>([]);
+  // Conditional editing state
+  const [editingConditional, setEditingConditional] = useState(false);
+  const [conditionalSpawns, setConditionalSpawns] = useState<any[]>([]);
 
-  // Nested drawer system
+  // Cascading drawer system for infinite nesting
+  const [cascadingDrawers, setCascadingDrawers] = useState<Array<{
+    id: string;
+    stringData: any;
+    content: string;
+    variableName: string;
+    isConditional: boolean;
+    isConditionalContainer: boolean;
+    tab: string;
+    conditionalSpawns: any[];
+    isEditingConditional: boolean;
+  }>>([]);
+  
+  // Legacy drawer system (keeping for spawn editing)
   const [drawerStack, setDrawerStack] = useState<Array<{
     id: string;
     title: string;
@@ -123,40 +137,40 @@ export default function ProjectDetailPage() {
 
   // Conversion confirmation modal state
   const [conversionConfirmDialog, setConversionConfirmDialog] = useState(false);
-  const [pendingConversionType, setPendingConversionType] = useState<'string' | 'variable' | null>(null);
+  const [pendingConversionType, setPendingConversionType] = useState<'string' | 'conditional' | null>(null);
 
   // Handle content sub-tab changes
   useEffect(() => {
-    if (contentSubTab === "variable" && !editingSplitVariable) {
-      // Switching to variable tab - initialize split variable mode
-      setEditingSplitVariable(true);
-      if (editingString && !editingString.is_split_variable) {
-        // If editing a regular string, initialize with one default spawn for split variable creation
+    if (contentSubTab === "variable" && !editingConditional) {
+      // Switching to variable tab - initialize conditional mode
+      setEditingConditional(true);
+      if (editingString && !editingString.is_conditional_container) {
+        // If editing a regular string, initialize with one default spawn for conditional creation
         const defaultSpawn = {
           id: Date.now(), // Temporary ID for new spawn
           content: stringContent || "Default content",
           effective_variable_name: `${(stringVariableName || "variable").toLowerCase().replace(/\s+/g, '_')}_1`,
           variable_hash: `${(stringVariableName || "variable").toLowerCase().replace(/\s+/g, '_')}_1`,
-          is_split_variable: false
+          is_conditional_container: false
         };
-        setSplitVariableSpawns([defaultSpawn]);
+        setConditionalSpawns([defaultSpawn]);
       } else if (!editingString) {
-        // Creating a new split variable - start with one default spawn
+        // Creating a new conditional - start with one default spawn
         const defaultSpawn = {
           id: Date.now(), // Temporary ID for new spawn
           content: "Default content",
           effective_variable_name: "new_variable_1",
           variable_hash: "new_variable_1",
-          is_split_variable: false
+          is_conditional_container: false
         };
-        setSplitVariableSpawns([defaultSpawn]);
+        setConditionalSpawns([defaultSpawn]);
       }
-    } else if (contentSubTab === "string" && editingSplitVariable) {
-      // Switching to string tab - disable split variable mode
-      setEditingSplitVariable(false);
-      setSplitVariableSpawns([]);
+    } else if (contentSubTab === "string" && editingConditional) {
+      // Switching to string tab - disable conditional mode
+      setEditingConditional(false);
+      setConditionalSpawns([]);
     }
-  }, [contentSubTab, editingSplitVariable, editingString, stringContent, stringVariableName]);
+  }, [contentSubTab, editingConditional, editingString, stringContent, stringVariableName]);
   
   // Pending string variables state - for variables detected in content but not yet created
   const [pendingStringVariables, setPendingStringVariables] = useState<{[name: string]: {content: string, is_conditional: boolean}}>({});
@@ -225,6 +239,47 @@ export default function ProjectDetailPage() {
     });
   }, [stringContent, project?.strings]);
 
+  // Detect new variables in cascading drawer content and add them as pending variables
+  useEffect(() => {
+    cascadingDrawers.forEach(drawer => {
+      if (!drawer.content.trim()) return;
+
+      const variableMatches = drawer.content.match(/{{([^}]+)}}/g) || [];
+      const variableNames = variableMatches.map(match => match.slice(2, -2));
+      const uniqueVariableNames = [...new Set(variableNames)];
+
+      // Find existing string variables
+      const existingStringVariableNames = project.strings?.map((str: any) => 
+        str.effective_variable_name || str.variable_name || str.variable_hash
+      ).filter(Boolean) || [];
+
+      // Find new variables that don't exist yet
+      const newVariableNames = uniqueVariableNames.filter(name => 
+        !existingStringVariableNames.includes(name) && name.trim() !== ''
+      );
+
+      // Update pending variables - add new ones, remove ones no longer referenced
+      if (newVariableNames.length > 0) {
+        setPendingStringVariables(prev => {
+          const newPending = { ...prev };
+          
+          // Add new variables as pending
+          newVariableNames.forEach(variableName => {
+            // Keep existing pending variable data if it exists, otherwise create empty
+            if (!newPending[variableName]) {
+              newPending[variableName] = {
+                content: "",  // Start with empty content
+                is_conditional: false
+              };
+            }
+          });
+          
+          return newPending;
+        });
+      }
+    });
+  }, [cascadingDrawers, project?.strings]);
+
   // Helper function to sort strings by creation date (newest first)
   const sortProjectStrings = (projectData: any) => {
     if (projectData && projectData.strings) {
@@ -278,14 +333,14 @@ export default function ProjectDetailPage() {
     setStringIsConditional(false);
     setPendingStringVariables({});
     setContentSubTab("string");
-    setEditingSplitVariable(false);
-    setSplitVariableSpawns([]);
+    setEditingConditional(false);
+    setConditionalSpawns([]);
     setCreateDialog("String");
     setIsStringDrawerOpen(true);
   };
 
   const openEditString = (str: any) => {
-    const isSplitVariable = str.is_split_variable;
+    const isConditionalContainer = str.is_conditional_container;
     
     // Set up basic editing state
     setStringContent(str.content);
@@ -295,14 +350,14 @@ export default function ProjectDetailPage() {
     setPendingStringVariables({});
     setIsStringDrawerOpen(true);
     
-    // Set the content sub-tab based on whether it's a split variable
-    if (isSplitVariable) {
+    // Set the content sub-tab based on whether it's a conditional
+    if (isConditionalContainer) {
       setContentSubTab("variable");
-      // Load all its spawns for split variable editing
-      const splitVariableName = str.effective_variable_name || str.variable_hash;
+      // Load all its spawns for conditional editing
+      const conditionalName = str.effective_variable_name || str.variable_hash;
       const spawns = project.strings?.filter((s: any) => {
         const effectiveName = s.effective_variable_name || s.variable_hash;
-        return effectiveName.startsWith(`${splitVariableName}_`) && 
+        return effectiveName.startsWith(`${conditionalName}_`) && 
                /^.+_\d+$/.test(effectiveName); // Matches pattern like "name_1", "name_2", etc.
       }) || [];
       
@@ -317,12 +372,12 @@ export default function ProjectDetailPage() {
         return aNum - bNum;
       });
       
-      setSplitVariableSpawns(spawns);
-      setEditingSplitVariable(true);
+      setConditionalSpawns(spawns);
+      setEditingConditional(true);
     } else {
       setContentSubTab("string");
-      setEditingSplitVariable(false);
-      setSplitVariableSpawns([]);
+      setEditingConditional(false);
+      setConditionalSpawns([]);
     }
     
     // Populate dimension values - now supporting multiple values per dimension
@@ -384,8 +439,8 @@ export default function ProjectDetailPage() {
     setStringDialogTab("content");
     setContentSubTab("string");
     setPendingStringVariables({});
-    setEditingSplitVariable(false);
-    setSplitVariableSpawns([]);
+    setEditingConditional(false);
+    setConditionalSpawns([]);
     setIsStringDrawerOpen(false);
     
     // Reset drawer stack
@@ -400,11 +455,11 @@ export default function ProjectDetailPage() {
 
     try {
       if (pendingConversionType === 'string') {
-        // Converting split variable to normal string
+        // Converting conditional to normal string
         // Use the content of the first spawn or a default message
         let newContent = stringContent;
-        if (splitVariableSpawns.length > 0) {
-          newContent = splitVariableSpawns[0].content || stringContent;
+        if (conditionalSpawns.length > 0) {
+          newContent = conditionalSpawns[0].content || stringContent;
         }
         
         // Update the main string to be a normal string
@@ -415,12 +470,12 @@ export default function ProjectDetailPage() {
             content: newContent,
             variable_name: stringVariableName,
             is_conditional: stringIsConditional,
-            is_split_variable: false,
+            is_conditional_container: false,
           }),
         });
 
         // Delete all spawn strings
-        for (const spawn of splitVariableSpawns) {
+        for (const spawn of conditionalSpawns) {
           if (spawn.id !== editingString.id) { // Don't delete the main string
             try {
               await apiFetch(`/api/strings/${spawn.id}/`, {
@@ -434,15 +489,15 @@ export default function ProjectDetailPage() {
 
         // Update local state
         setStringContent(newContent);
-        setEditingSplitVariable(false);
-        setSplitVariableSpawns([]);
+        setEditingConditional(false);
+        setConditionalSpawns([]);
         
         toast.success('Converted to normal string successfully');
       } else {
-        // Converting normal string to split variable
+        // Converting normal string to conditional
         // Create a default spawn with the current content
-        const splitVariableName = stringVariableName || editingString.effective_variable_name || editingString.variable_hash;
-        const firstSpawnName = `${splitVariableName}_1`;
+        const conditionalName = stringVariableName || editingString.effective_variable_name || editingString.variable_hash;
+        const firstSpawnName = `${conditionalName}_1`;
         
         // Create the first spawn
         const spawnResponse = await apiFetch('/api/strings/', {
@@ -453,27 +508,27 @@ export default function ProjectDetailPage() {
             variable_name: firstSpawnName,
             is_conditional: stringIsConditional,
             project: id,
-            is_split_variable: false,
+            is_conditional_container: false,
           }),
         });
 
-        // Update the main string to be a split variable
+        // Update the main string to be a conditional
         await apiFetch(`/api/strings/${editingString.id}/`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            content: `[Split Variable: ${splitVariableName}]`,
+            content: `[Conditional: ${conditionalName}]`,
             variable_name: stringVariableName,
             is_conditional: false, // Split variables themselves are not conditional
-            is_split_variable: true,
+            is_conditional_container: true,
           }),
         });
 
         // Update local state
-        setEditingSplitVariable(true);
-        setSplitVariableSpawns([spawnResponse]);
+        setEditingConditional(true);
+        setConditionalSpawns([spawnResponse]);
         
-        toast.success('Converted to split variable successfully');
+        toast.success('Converted to conditional successfully');
       }
 
       // Refresh project data
@@ -545,20 +600,29 @@ export default function ProjectDetailPage() {
     );
   };
 
-  // Nested string editing handlers
-  const openEditNestedString = (str: any) => {
-    const isSplitVariable = str.is_split_variable;
-    
-    if (isSplitVariable) {
-      // This is a split variable - load all its spawns
-      const splitVariableName = str.effective_variable_name || str.variable_hash;
+  // Cascading drawer functions
+  const openEditInCascadingDrawer = (str: any) => {
+    const newDrawer = {
+      id: `string-${str.id}-${Date.now()}`,
+      stringData: str,
+      content: str.content || "",
+      variableName: str.variable_name || "",
+      isConditional: str.is_conditional || false,
+      isConditionalContainer: str.is_conditional_container || false,
+      tab: "content",
+      conditionalSpawns: [],
+      isEditingConditional: false
+    };
+
+    // If it's a conditional container, load its spawns
+    if (str.is_conditional_container) {
+      const conditionalName = str.effective_variable_name || str.variable_hash;
       const spawns = project.strings?.filter((s: any) => {
         const effectiveName = s.effective_variable_name || s.variable_hash;
-        return effectiveName.startsWith(`${splitVariableName}_`) && 
-               /^.+_\d+$/.test(effectiveName); // Matches pattern like "name_1", "name_2", etc.
+        return effectiveName.startsWith(`${conditionalName}_`) && 
+               /^.+_\d+$/.test(effectiveName);
       }) || [];
       
-      // Sort spawns by their number
       spawns.sort((a: any, b: any) => {
         const aName = a.effective_variable_name || a.variable_hash;
         const bName = b.effective_variable_name || b.variable_hash;
@@ -569,20 +633,169 @@ export default function ProjectDetailPage() {
         return aNum - bNum;
       });
       
-      setSplitVariableSpawns(spawns);
-      setEditingSplitVariable(true);
-      setEditingNestedString(str);
-    } else {
-      // Regular string variable
-      setNestedStringContent(str.content);
-      setNestedStringVariableName(str.variable_name || "");
-      setNestedStringIsConditional(str.is_conditional || false);
-      setEditingNestedString(str);
-      setNestedStringSplitMode(false);
-      setNestedStringSpawns([]);
-      setEditingSplitVariable(false);
-      setSplitVariableSpawns([]);
+      newDrawer.conditionalSpawns = spawns;
+      newDrawer.isEditingConditional = true;
     }
+
+    setCascadingDrawers(prev => [...prev, newDrawer]);
+  };
+
+  const closeCascadingDrawer = async (drawerId: string, skipAutoSave = false) => {
+    const drawer = cascadingDrawers.find(d => d.id === drawerId);
+    
+    // If this is a temporary string being cancelled, save it to database first
+    // But only if we're not being called from saveCascadingDrawer (skipAutoSave = true)
+    if (!skipAutoSave && drawer && drawer.stringData._isTemporary) {
+      try {
+        // Save the temporary string to database
+        await apiFetch('/api/strings/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: drawer.content || "",
+            variable_name: drawer.variableName?.trim() || null,
+            is_conditional: drawer.isConditional || false,
+            project: id,
+          }),
+        });
+
+        // Remove from pending variables now that it's saved
+        const variableName = drawer.stringData.variable_name || drawer.stringData.variable_hash;
+        setPendingStringVariables(prev => {
+          const newPending = { ...prev };
+          delete newPending[variableName];
+          return newPending;
+        });
+
+        // Refresh project data to include the new string
+        const updatedProject = await apiFetch(`/api/projects/${id}/`);
+        setProject(updatedProject);
+        
+        toast.success('New variable created!');
+      } catch (err) {
+        console.error('Failed to save temporary string:', err);
+        toast.error('Failed to create new variable. Please try again.');
+        return; // Don't close drawer if save failed
+      }
+    }
+    
+    setCascadingDrawers(prev => {
+      const drawerIndex = prev.findIndex(d => d.id === drawerId);
+      if (drawerIndex === -1) return prev;
+      
+      // Close this drawer and all drawers to its right
+      return prev.slice(0, drawerIndex);
+    });
+  };
+
+  const updateCascadingDrawer = (drawerId: string, updates: Partial<typeof cascadingDrawers[0]>) => {
+    setCascadingDrawers(prev => prev.map(drawer => 
+      drawer.id === drawerId ? { ...drawer, ...updates } : drawer
+    ));
+  };
+
+  const saveCascadingDrawer = async (drawerId: string) => {
+    const drawer = cascadingDrawers.find(d => d.id === drawerId);
+    if (!drawer) return;
+
+    try {
+      if (drawer.isEditingConditional) {
+        // Handle conditional saving logic
+        const conditionalName = drawer.stringData.effective_variable_name || drawer.stringData.variable_hash;
+        
+        // Validate spawns have content
+        const emptySpawns = drawer.conditionalSpawns.filter(spawn => {
+          const content = spawn.content?.trim() || "";
+          return !content;
+        });
+
+        if (emptySpawns.length > 0) {
+          toast.error(`All spawns must have content. ${emptySpawns.length} spawn(s) are empty.`);
+          return;
+        }
+
+        // Save all spawns
+        const stringPromises = drawer.conditionalSpawns.map(async (spawn) => {
+          const spawnContent = spawn.content?.trim() || `Default content for ${spawn.effective_variable_name || spawn.variable_hash}`;
+          
+          return await apiFetch(`/api/strings/${spawn.id}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: spawnContent,
+              variable_name: spawn.variable_name?.trim() || null,
+              is_conditional: spawn.is_conditional || false,
+            }),
+          });
+        });
+
+        await Promise.all(stringPromises);
+        
+        // Update the main conditional container
+        await apiFetch(`/api/strings/${drawer.stringData.id}/`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: `[Conditional: ${conditionalName}]`,
+            variable_name: drawer.variableName?.trim() || null,
+            is_conditional: drawer.isConditional,
+            is_conditional_container: true,
+          }),
+        });
+      } else {
+        // Regular string saving
+        if (drawer.stringData._isTemporary) {
+          // This is a temporary string - create it in the database
+          await apiFetch('/api/strings/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: drawer.content,
+              variable_name: drawer.variableName?.trim() || null,
+              is_conditional: drawer.isConditional,
+              project: id,
+            }),
+          });
+
+          // Remove from pending variables now that it's saved
+          const variableName = drawer.stringData.variable_name || drawer.stringData.variable_hash;
+          setPendingStringVariables(prev => {
+            const newPending = { ...prev };
+            delete newPending[variableName];
+            return newPending;
+          });
+        } else {
+          // This is an existing string - update it
+          await apiFetch(`/api/strings/${drawer.stringData.id}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: drawer.content,
+              variable_name: drawer.variableName?.trim() || null,
+              is_conditional: drawer.isConditional,
+            }),
+          });
+        }
+      }
+
+      // Refresh project data
+      const updatedProject = await apiFetch(`/api/projects/${id}/`);
+      setProject(updatedProject);
+      
+      // Close this drawer (skip auto-save since we already saved)
+      closeCascadingDrawer(drawerId, true);
+      
+      toast.success('String updated successfully!');
+    } catch (err) {
+      console.error('Failed to save string:', err);
+      toast.error('Failed to save string. Please try again.');
+    }
+  };
+
+  // Legacy nested string editing handlers (keeping for backward compatibility)
+  const openEditNestedString = (str: any) => {
+    // Now redirect to cascading drawer system
+    openEditInCascadingDrawer(str);
   };
 
   const closeNestedStringDialog = () => {
@@ -590,55 +803,42 @@ export default function ProjectDetailPage() {
     setNestedStringVariableName("");
     setNestedStringIsConditional(false);
     setEditingNestedString(null);
-    setNestedStringSplitMode(false);
+    setNestedStringConditionalMode(false);
     setNestedStringSpawns([]);
-    setEditingSplitVariable(false);
-    setSplitVariableSpawns([]);
+    setEditingConditional(false);
+    setConditionalSpawns([]);
   };
 
   // Function to create and edit a pending string variable
-  const createAndEditPendingVariable = async (variableName: string) => {
+  const createAndEditPendingVariable = (variableName: string) => {
     const pendingVar = pendingStringVariables[variableName];
     if (!pendingVar) return;
 
-    try {
-      // Create the string variable
-      const response = await apiFetch('/api/strings/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: pendingVar.content,
-          variable_name: variableName,
-          is_conditional: pendingVar.is_conditional,
-          project: id,
-        }),
-      });
+    // Create a temporary string object (not saved to database yet)
+    const tempString = {
+      id: `temp-${Date.now()}-${Math.random()}`, // Temporary ID
+      content: pendingVar.content || "",
+      variable_name: variableName,
+      variable_hash: variableName, // Use variable name as hash for temp
+      effective_variable_name: variableName,
+      is_conditional: pendingVar.is_conditional || false,
+      is_conditional_container: false,
+      project: id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      dimension_values: [],
+      _isTemporary: true // Flag to indicate this is a temporary string
+    };
 
-      // Remove from pending variables
-      setPendingStringVariables(prev => {
-        const newPending = { ...prev };
-        delete newPending[variableName];
-        return newPending;
-      });
-
-      // Refresh project data to include the new string variable
-      const updatedProject = await apiFetch(`/api/projects/${id}/`);
-      setProject(sortProjectStrings(updatedProject));
-
-      // Open the newly created string variable for editing
-      openEditNestedString(response);
-
-    } catch (err) {
-      console.error(`Failed to create string variable ${variableName}:`, err);
-      toast.error(`Failed to create string variable "${variableName}"`);
-    }
+    // Open the temporary string for editing in cascading drawer
+    openEditInCascadingDrawer(tempString);
   };
 
   const handleNestedStringSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
-      if (nestedStringSplitMode) {
+      if (nestedStringConditionalMode) {
         // Handle split mode submission - create multiple spawns
         await handleNestedStringSplitSubmit();
       } else {
@@ -669,11 +869,11 @@ export default function ProjectDetailPage() {
   };
 
   const handleNestedStringSplitSubmit = async () => {
-    const splitVariableName = editingNestedString.effective_variable_name || editingNestedString.variable_hash;
+    const conditionalName = editingNestedString.effective_variable_name || editingNestedString.variable_hash;
     
     // Debug logging
     console.log('=== SPLIT VARIABLE SUBMIT DEBUG ===');
-    console.log('splitVariableName:', splitVariableName);
+    console.log('conditionalName:', conditionalName);
     console.log('editingNestedString:', editingNestedString);
     console.log('nestedStringSpawns length:', nestedStringSpawns.length);
     console.log('Current nestedStringSpawns state:', nestedStringSpawns);
@@ -735,27 +935,27 @@ export default function ProjectDetailPage() {
     
     try {
       // Step 1: Check if dimension already exists, create if not
-      let newDimension = project.dimensions?.find((dim: any) => dim.name === splitVariableName);
+      let newDimension = project.dimensions?.find((dim: any) => dim.name === conditionalName);
       
       if (!newDimension) {
         // Create new dimension
-        console.log('Creating new dimension:', splitVariableName);
+        console.log('Creating new dimension:', conditionalName);
         newDimension = await apiFetch('/api/dimensions/', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            name: splitVariableName,
+            name: conditionalName,
             project: parseInt(id as string),
           }),
         });
       } else {
-        console.log('Using existing dimension:', splitVariableName);
+        console.log('Using existing dimension:', conditionalName);
       }
 
       // Step 2: Create string variables for each spawn (check if they exist first)
       console.log('=== CREATING STRING VARIABLES ===');
       const stringPromises = nestedStringSpawns.map(async (spawn, index) => {
-        const spawnName = `${splitVariableName}_${index + 1}`;
+        const spawnName = `${conditionalName}_${index + 1}`;
         const safeContent = spawn.content?.trim() || `Default content for ${spawnName}`;
         
         console.log(`Processing spawn ${index + 1}:`, {
@@ -810,7 +1010,7 @@ export default function ProjectDetailPage() {
 
       // Step 3: Create dimension values for each spawn (check if they exist first)
       const dimValuePromises = nestedStringSpawns.map(async (spawn, index) => {
-        const spawnName = `${splitVariableName}_${index + 1}`;
+        const spawnName = `${conditionalName}_${index + 1}`;
         
         // Check if dimension value already exists
         const existingDimValue = newDimension.values?.find((dv: any) => dv.value === spawnName);
@@ -833,22 +1033,22 @@ export default function ProjectDetailPage() {
 
       await Promise.all(dimValuePromises);
 
-      // Step 4: Convert the original string to a split variable (if not already)
-      if (!editingNestedString.is_split_variable) {
-        console.log('Converting original string to split variable');
-        const splitVariableContent = `[Split Variable: ${splitVariableName}]`;
+      // Step 4: Convert the original string to a conditional (if not already)
+      if (!editingNestedString.is_conditional_container) {
+        console.log('Converting original string to conditional');
+        const conditionalContent = `[Conditional: ${conditionalName}]`;
         await apiFetch(`/api/strings/${editingNestedString.id}/`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            content: splitVariableContent, // Provide descriptive content for split variable
-            variable_name: editingNestedString.variable_name || splitVariableName,
+            content: conditionalContent, // Provide descriptive content for conditional
+            variable_name: editingNestedString.variable_name || conditionalName,
             is_conditional: editingNestedString.is_conditional,
-            is_split_variable: true, // Mark as split variable
+            is_conditional_container: true, // Mark as conditional
           }),
         });
       } else {
-        console.log('Original string is already a split variable');
+        console.log('Original string is already a conditional');
       }
 
       // Refresh project data
@@ -858,7 +1058,7 @@ export default function ProjectDetailPage() {
       // Close nested dialog
       closeNestedStringDialog();
       
-      toast.success(`Split variable "${splitVariableName}" created with ${nestedStringSpawns.length} spawns!`);
+      toast.success(`Split variable "${conditionalName}" created with ${nestedStringSpawns.length} spawns!`);
     } catch (err) {
       console.error('Failed to split string:', err);
       toast.error('Failed to split string. Please try again.');
@@ -876,7 +1076,7 @@ export default function ProjectDetailPage() {
     
     console.log('Initializing split mode with content:', safeDefaultContent);
     
-    setNestedStringSplitMode(true);
+    setNestedStringConditionalMode(true);
     setNestedStringSpawns([
       {
         id: '1',
@@ -952,8 +1152,8 @@ export default function ProjectDetailPage() {
   };
 
   // Split variable spawn editing functions
-  const updateSplitVariableSpawn = (spawnId: number, field: string, value: string | boolean) => {
-    setSplitVariableSpawns(prev => prev.map(spawn => 
+  const updateConditionalSpawn = (spawnId: number, field: string, value: string | boolean) => {
+    setConditionalSpawns(prev => prev.map(spawn => 
       spawn.id === spawnId ? { ...spawn, [field]: value } : spawn
     ));
   };
@@ -980,7 +1180,7 @@ export default function ProjectDetailPage() {
   const handleSplitVariableSubmit = async () => {
     try {
       // Update all spawns
-      const updatePromises = splitVariableSpawns.map(spawn => 
+      const updatePromises = conditionalSpawns.map(spawn => 
         apiFetch(`/api/strings/${spawn.id}/`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -1003,25 +1203,25 @@ export default function ProjectDetailPage() {
       
       toast.success('Split variable spawns updated successfully!');
     } catch (err) {
-      console.error('Failed to update split variable spawns:', err);
+      console.error('Failed to update conditional spawns:', err);
       toast.error('Failed to update spawns. Please try again.');
     }
   };
 
-  const addSplitVariableSpawn = async () => {
-    const splitVariableName = editingNestedString.effective_variable_name || editingNestedString.variable_hash;
+  const addConditionalSpawn = async () => {
+    const conditionalName = editingNestedString.effective_variable_name || editingNestedString.variable_hash;
     
     try {
-      // Find the existing dimension for this split variable
-      const existingDimension = project.dimensions?.find((dim: any) => dim.name === splitVariableName);
+      // Find the existing dimension for this conditional
+      const existingDimension = project.dimensions?.find((dim: any) => dim.name === conditionalName);
       if (!existingDimension) {
-        throw new Error('Cannot find dimension for split variable');
+        throw new Error('Cannot find dimension for conditional');
       }
 
       // Determine the next spawn number
       let nextSpawnNumber = 1;
-      if (splitVariableSpawns.length > 0) {
-        const spawnNumbers = splitVariableSpawns.map((spawn: any) => {
+      if (conditionalSpawns.length > 0) {
+        const spawnNumbers = conditionalSpawns.map((spawn: any) => {
           const effectiveName = spawn.effective_variable_name || spawn.variable_hash;
           const match = effectiveName.match(/_(\d+)$/);
           return match ? parseInt(match[1]) : 0;
@@ -1030,10 +1230,10 @@ export default function ProjectDetailPage() {
       }
 
       // Create the new spawn name
-      const newSpawnName = `${splitVariableName}_${nextSpawnNumber}`;
+      const newSpawnName = `${conditionalName}_${nextSpawnNumber}`;
       
       // Get content from the first existing spawn (they should all have the same content)
-      const firstSpawnContent = splitVariableSpawns.length > 0 ? splitVariableSpawns[0].content : '';
+      const firstSpawnContent = conditionalSpawns.length > 0 ? conditionalSpawns[0].content : '';
       const safeCopyContent = firstSpawnContent && firstSpawnContent.trim() ? firstSpawnContent.trim() : '';
       const contentToCopy = safeCopyContent || `Content for ${newSpawnName}`;
       
@@ -1064,7 +1264,7 @@ export default function ProjectDetailPage() {
       });
 
       // Add to local state
-      setSplitVariableSpawns(prev => [...prev, newSpawn]);
+      setConditionalSpawns(prev => [...prev, newSpawn]);
       
       toast.success(`Added new spawn "${newSpawnName}"`);
     } catch (err) {
@@ -1073,9 +1273,9 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const removeSplitVariableSpawn = async (spawnId: number) => {
-    if (splitVariableSpawns.length <= 1) {
-      toast.error('Cannot remove the last spawn. A split variable must have at least one spawn.');
+  const removeConditionalSpawn = async (spawnId: number) => {
+    if (conditionalSpawns.length <= 1) {
+      toast.error('Cannot remove the last spawn. A conditional must have at least one spawn.');
       return;
     }
 
@@ -1085,7 +1285,7 @@ export default function ProjectDetailPage() {
       });
 
       // Remove from local state
-      setSplitVariableSpawns(prev => prev.filter(spawn => spawn.id !== spawnId));
+      setConditionalSpawns(prev => prev.filter(spawn => spawn.id !== spawnId));
       
       toast.success('Spawn removed successfully');
     } catch (err) {
@@ -1094,24 +1294,24 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const handleSplitString = async (str: any) => {
-    const splitVariableName = str.effective_variable_name || str.variable_hash;
-    const isSplitVariable = str.is_split_variable;
+  const handleCreateConditional = async (str: any) => {
+    const conditionalName = str.effective_variable_name || str.variable_hash;
+    const isConditionalContainer = str.is_conditional_container;
 
     try {
-      if (isSplitVariable) {
-        // This is already a split variable - add one more spawn
+      if (isConditionalContainer) {
+        // This is already a conditional - add one more spawn
         
-        // Step 1: Find the existing dimension for this split variable
-        const existingDimension = project.dimensions?.find((dim: any) => dim.name === splitVariableName);
+        // Step 1: Find the existing dimension for this conditional
+        const existingDimension = project.dimensions?.find((dim: any) => dim.name === conditionalName);
         if (!existingDimension) {
-          throw new Error('Cannot find dimension for split variable');
+          throw new Error('Cannot find dimension for conditional');
         }
 
-        // Step 2: Find all existing spawns for this split variable
+        // Step 2: Find all existing spawns for this conditional
         const existingSpawns = project.strings?.filter((s: any) => {
           const effectiveName = s.effective_variable_name || s.variable_hash;
-          return effectiveName.startsWith(`${splitVariableName}_`) && 
+          return effectiveName.startsWith(`${conditionalName}_`) && 
                  /^.+_\d+$/.test(effectiveName); // Matches pattern like "name_1", "name_2", etc.
         }) || [];
 
@@ -1127,7 +1327,7 @@ export default function ProjectDetailPage() {
         }
 
         // Step 4: Create the new spawn name
-        const newSpawnName = `${splitVariableName}_${nextSpawnNumber}`;
+        const newSpawnName = `${conditionalName}_${nextSpawnNumber}`;
         
         // Step 5: Get content from the first existing spawn (they should all have the same content)
         const firstSpawnContent = existingSpawns.length > 0 ? existingSpawns[0].content : '';
@@ -1173,7 +1373,7 @@ export default function ProjectDetailPage() {
         const updatedProject = await apiFetch(`/api/projects/${id}/`);
         setProject(sortProjectStrings(updatedProject));
         
-        toast.success(`Added new spawn "${newSpawnName}" to split variable "${splitVariableName}"`);
+        toast.success(`Added new spawn "${newSpawnName}" to conditional "${conditionalName}"`);
 
       } else {
         // This is a regular string - perform initial split
@@ -1186,15 +1386,15 @@ export default function ProjectDetailPage() {
         const originalContent = str.content;
 
         // Step 1: Check if dimension already exists, create if not
-        let newDimension = project.dimensions?.find((dim: any) => dim.name === splitVariableName);
+        let newDimension = project.dimensions?.find((dim: any) => dim.name === conditionalName);
         
         if (!newDimension) {
-          console.log('Creating new dimension:', splitVariableName);
+          console.log('Creating new dimension:', conditionalName);
           const dimensionResponse = await apiFetch('/api/dimensions/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              name: splitVariableName,
+              name: conditionalName,
               project: parseInt(id as string),
             }),
           });
@@ -1205,12 +1405,12 @@ export default function ProjectDetailPage() {
 
           newDimension = await dimensionResponse.json();
         } else {
-          console.log('Using existing dimension:', splitVariableName);
+          console.log('Using existing dimension:', conditionalName);
         }
 
         // Step 2: Create two new string variables with the original content (check if they exist first)
-        const stringVar1Name = `${splitVariableName}_1`;
-        const stringVar2Name = `${splitVariableName}_2`;
+        const stringVar1Name = `${conditionalName}_1`;
+        const stringVar2Name = `${conditionalName}_2`;
 
         const stringPromises = [
           // Check and create first string variable
@@ -1319,18 +1519,18 @@ export default function ProjectDetailPage() {
           throw new Error('Failed to create dimension values');
         }
 
-        // Step 4: Convert the original string to a split variable (if not already)
-        if (!str.is_split_variable) {
-          console.log('Converting original string to split variable');
-          const splitVariableContent = `[Split Variable: ${splitVariableName}]`;
+        // Step 4: Convert the original string to a conditional (if not already)
+        if (!str.is_conditional_container) {
+          console.log('Converting original string to conditional');
+          const conditionalContent = `[Conditional: ${conditionalName}]`;
           const updateResponse = await apiFetch(`/api/strings/${str.id}/`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              content: splitVariableContent, // Provide descriptive content for split variable
-              variable_name: str.variable_name || splitVariableName,
+              content: conditionalContent, // Provide descriptive content for conditional
+              variable_name: str.variable_name || conditionalName,
               is_conditional: str.is_conditional,
-              is_split_variable: true, // Mark as split variable
+              is_conditional_container: true, // Mark as conditional
             }),
           });
 
@@ -1338,14 +1538,14 @@ export default function ProjectDetailPage() {
             throw new Error('Failed to update original string');
           }
         } else {
-          console.log('Original string is already a split variable');
+          console.log('Original string is already a conditional');
         }
 
         // Refresh the project data
         const updatedProject = await apiFetch(`/api/projects/${id}/`);
         setProject(sortProjectStrings(updatedProject));
         
-        toast.success(`Split "${splitVariableName}" into ${stringVar1Name} and ${stringVar2Name}`);
+        toast.success(`Split "${conditionalName}" into ${stringVar1Name} and ${stringVar2Name}`);
       }
       
     } catch (error) {
@@ -2158,8 +2358,8 @@ export default function ProjectDetailPage() {
               str.variable_hash === variableName
             );
             if (stringVariable) {
-              if (stringVariable.is_split_variable) {
-                // For split variables, render as clickable tags (no underline)
+              if (stringVariable.is_conditional_container) {
+                // For conditionals, render as clickable tags (no underline)
                 result.push(
                   <Badge
                     key={`${keyPrefix}${depth}-${index}-${variableName}`}
@@ -2167,18 +2367,18 @@ export default function ProjectDetailPage() {
                     className="mx-1 cursor-pointer transition-colors bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 inline-flex items-center gap-1"
                     onClick={(e) => {
                       e.stopPropagation();
-                      openEditString(stringVariable);
+                      openEditInCascadingDrawer(stringVariable);
                     }}
-                    title={`Click to edit split variable "${variableName}"`}
+                    title={`Click to edit conditional "${variableName}"`}
                   >
-                    <Split className="h-3 w-3" />
+                    <Folder className="h-3 w-3" />
                     {`{{${variableName}}}`}
                   </Badge>
                 );
               } else {
                 // For regular string variables, check if content is empty
                 if (!stringVariable.content || stringVariable.content.trim() === '') {
-                  // For empty string variables, render as purple badge (like split variables but purple)
+                  // For empty string variables, render as purple badge (like conditionals but purple)
                   result.push(
                     <Badge
                       key={`${keyPrefix}${depth}-${index}-${variableName}`}
@@ -2186,7 +2386,7 @@ export default function ProjectDetailPage() {
                       className="mx-1 cursor-pointer transition-colors bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 inline-flex items-center gap-1"
                       onClick={(e) => {
                         e.stopPropagation();
-                        openEditString(stringVariable);
+                        openEditInCascadingDrawer(stringVariable);
                       }}
                       title={`Click to edit empty string variable "${variableName}"`}
                     >
@@ -2208,7 +2408,7 @@ export default function ProjectDetailPage() {
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        openEditString(stringVariable);
+                        openEditInCascadingDrawer(stringVariable);
                       }}
                       title={`Click to edit string variable "${variableName}"`}
                     >
@@ -2280,8 +2480,8 @@ export default function ProjectDetailPage() {
       
       if (stringVariable) {
         if (!showStringVariables) {
-          if (stringVariable.is_split_variable) {
-            // For split variables, render as clickable tags (no underline)
+          if (stringVariable.is_conditional_container) {
+            // For conditionals, render as clickable tags (no underline)
             parts.push(
               <Badge
                 key={`${keyPrefix}${depth}-trait-${matchIndex}-${variableName}`}
@@ -2289,18 +2489,18 @@ export default function ProjectDetailPage() {
                 className="mx-1 cursor-pointer transition-colors bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 inline-flex items-center gap-1"
                 onClick={(e) => {
                   e.stopPropagation();
-                  openEditString(stringVariable);
+                  openEditInCascadingDrawer(stringVariable);
                 }}
-                title={`Click to edit split variable "${variableName}"`}
+                title={`Click to edit conditional "${variableName}"`}
               >
-                <Split className="h-3 w-3" />
+                <Folder className="h-3 w-3" />
                 {`{{${variableName}}}`}
               </Badge>
             );
           } else {
             // For regular string variables, check if content is empty
             if (!stringVariable.content || stringVariable.content.trim() === '') {
-              // For empty string variables, render as purple badge (like split variables but purple)
+              // For empty string variables, render as purple badge (like conditionals but purple)
               parts.push(
                 <Badge
                   key={`${keyPrefix}${depth}-trait-${matchIndex}-${variableName}`}
@@ -2308,7 +2508,7 @@ export default function ProjectDetailPage() {
                   className="mx-1 cursor-pointer transition-colors bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 inline-flex items-center gap-1"
                   onClick={(e) => {
                     e.stopPropagation();
-                    openEditString(stringVariable);
+                    openEditInCascadingDrawer(stringVariable);
                   }}
                   title={`Click to edit empty string variable "${variableName}"`}
                 >
@@ -2330,7 +2530,7 @@ export default function ProjectDetailPage() {
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    openEditString(stringVariable);
+                    openEditInCascadingDrawer(stringVariable);
                   }}
                   title={`Click to edit string variable "${variableName}"`}
                 >
@@ -2518,9 +2718,9 @@ export default function ProjectDetailPage() {
   };
 
   const filterStringsByDimensions = (strings: any[]) => {
-    // First, filter out split variables
+    // First, filter out conditionals
     const nonSplitStrings = strings.filter((str: any) => {
-      return !str.is_split_variable; // Hide split variables from main list
+      return !str.is_conditional_container; // Hide conditionals from main list
     });
     
     // Filter out embedded strings (strings that are referenced by other strings)
@@ -2596,40 +2796,48 @@ export default function ProjectDetailPage() {
   const handleBulkDelete = async () => {
     if (selectedStringIds.size === 0) return;
 
+    const totalCount = selectedStringIds.size;
+    let successCount = 0;
+    let failureCount = 0;
+    const failedStrings: { id: string; error: string }[] = [];
+
     try {
-      // Delete all selected strings
-      const deletePromises = Array.from(selectedStringIds).map(async (stringId) => {
-        const response = await fetch(`/api/projects/${id}/strings/${stringId}/`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to delete string ${stringId}`);
+      // Process deletions sequentially to avoid dependency conflicts
+      for (const stringId of Array.from(selectedStringIds)) {
+        try {
+          await apiFetch(`/api/strings/${stringId}/`, {
+            method: 'DELETE',
+          });
+          
+          successCount++;
+        } catch (fetchError) {
+          failedStrings.push({ 
+            id: String(stringId), 
+            error: fetchError instanceof Error ? fetchError.message : 'Network error'
+          });
+          failureCount++;
         }
-      });
-
-      await Promise.all(deletePromises);
+      }
 
       // Refresh project data
-      const response = await fetch(`/api/projects/${id}/`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const projectData = await response.json();
-        setProject(sortProjectStrings(projectData));
-        clearSelection();
-        closeBulkDeleteDialog();
-        toast.success(`Successfully deleted ${selectedStringIds.size} strings`);
+      const projectData = await apiFetch(`/api/projects/${id}/`);
+      setProject(sortProjectStrings(projectData));
+      clearSelection();
+      closeBulkDeleteDialog();
+      
+      // Provide detailed feedback
+      if (failureCount === 0) {
+        toast.success(`Successfully deleted all ${successCount} strings`);
+      } else if (successCount > 0) {
+        toast.success(`Deleted ${successCount} strings. ${failureCount} failed.`);
+        console.warn('Failed to delete strings:', failedStrings);
+      } else {
+        toast.error(`Failed to delete all ${failureCount} strings`);
+        console.error('All deletions failed:', failedStrings);
       }
     } catch (error) {
-      console.error('Error deleting strings:', error);
-      toast.error('Failed to delete some strings');
+      console.error('Error during bulk delete:', error);
+      toast.error('Bulk delete operation failed');
     }
   };
 
@@ -3154,7 +3362,7 @@ export default function ProjectDetailPage() {
                           variant="ghost"
                           size="sm"
                           className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
-                          onClick={() => openEditString(stringVar)}
+                          onClick={() => openEditInCascadingDrawer(stringVar)}
                         >
                           <Edit2 className="h-3 w-3" />
                         </Button>
@@ -3244,7 +3452,7 @@ export default function ProjectDetailPage() {
           <div className="flex-1 overflow-y-auto p-6">
           {filteredStrings.length === 0 ? (
             <div className="text-muted-foreground text-center">
-              {(project?.strings || []).filter((str: any) => !str.is_split_variable).length === 0 
+              {(project?.strings || []).filter((str: any) => !str.is_conditional_container).length === 0 
                 ? "No strings found in this project." 
                 : "No strings match the current filters."
               }
@@ -3273,13 +3481,13 @@ export default function ProjectDetailPage() {
                     {/* String Content - now clickable to edit */}
                     <div 
                       className="flex items-start justify-between gap-2 flex-1 cursor-pointer"
-                      onClick={() => openEditString(str)}
+                      onClick={() => openEditInCascadingDrawer(str)}
                     >
                       <div className="flex-1">
                         <div className={`font-medium text-base ${isPlaintextMode ? 'leading-normal' : 'leading-loose'}`}>
-                        {str.is_split_variable ? (
+                        {str.is_conditional_container ? (
                           <div className="flex items-center gap-2 text-muted-foreground italic">
-                            <Split className="h-4 w-4" />
+                            <Folder className="h-4 w-4" />
                             <span>Split variable - click split to add more spawns</span>
                           </div>
                         ) : isPlaintextMode 
@@ -3392,18 +3600,28 @@ export default function ProjectDetailPage() {
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
                 )}
-                <SheetTitle>
-                  {getCurrentDrawer()?.title || (editingString ? "Edit String" : "New String")}
-                </SheetTitle>
+                <div className="flex flex-col">
+                  <SheetTitle>
+                    {getCurrentDrawer()?.title || (editingString ? "Edit String" : "New String")}
+                  </SheetTitle>
+                  {(editingString || (currentDrawerLevel > 0 && editingSpawn)) && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                        {currentDrawerLevel > 0 && editingSpawn
+                          ? `{{${editingSpawn.effective_variable_name || editingSpawn.variable_hash}}}`
+                          : `{{${editingString.effective_variable_name || editingString.variable_hash}}}`
+                        }
+                      </Badge>
+                      {((currentDrawerLevel > 0 && editingSpawn?.is_conditional_container) || 
+                        (editingString?.is_conditional_container)) && (
+                        <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                          Conditional
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={closeStringDialog}
-                className="h-8 w-8 p-0"
-              >
-                <X className="h-4 w-4" />
-              </Button>
             </div>
           </SheetHeader>
 
@@ -3505,12 +3723,12 @@ export default function ProjectDetailPage() {
                                   <div 
                                     key={stringVar.id} 
                                     className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
-                                    onClick={() => openEditString(stringVar)}
+                                    onClick={() => openEditInCascadingDrawer(stringVar)}
                                   >
                                     <div className="flex items-center gap-2 mb-3">
-                                      {stringVar.is_split_variable ? (
+                                      {stringVar.is_conditional_container ? (
                                         <div className="flex items-center gap-1 text-orange-600 bg-orange-50 p-1 rounded border border-orange-200">
-                                          <Split className="h-3 w-3" />
+                                          <Folder className="h-3 w-3" />
                                         </div>
                                       ) : (
                                         <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
@@ -3525,15 +3743,15 @@ export default function ProjectDetailPage() {
                                           <Signpost className="h-3 w-3" />
                                         </Badge>
                                       )}
-                                      {stringVar.is_split_variable && (
+                                      {stringVar.is_conditional_container && (
                                         <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600 border-orange-200 p-1">
-                                          <Split className="h-3 w-3" />
+                                          <Folder className="h-3 w-3" />
                                         </Badge>
                                       )}
                                     </div>
                                     <p className="text-sm text-muted-foreground line-clamp-2">
-                                      {stringVar.is_split_variable ? (
-                                        <span className="italic">Split variable - click to manage spawns</span>
+                                      {stringVar.is_conditional_container ? (
+                                        <span className="italic">Conditional - click to manage spawns</span>
                                       ) : stringVar.content ? 
                                         (stringVar.content.length > 100 ? `${stringVar.content.substring(0, 100)}...` : stringVar.content) :
                                         "No content"
@@ -3555,12 +3773,9 @@ export default function ProjectDetailPage() {
                                         {`{{${pendingVar}}}`}
                                       </Badge>
                                       <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
-                                        Pending
+                                        New variable!
                                       </Badge>
                                     </div>
-                                    <p className="text-sm text-muted-foreground line-clamp-2 italic">
-                                      Click to create and edit this string variable
-                                    </p>
                                   </div>
                                 ))}
                               </div>
@@ -3574,18 +3789,18 @@ export default function ProjectDetailPage() {
                     
                     <TabsContent value="variable" className="mt-4">
                       <div className="space-y-4">
-                        {/* Split Variable Header */}
+                        {/* Conditional Header */}
                         <div className="flex items-center justify-between">
                           <div>
-                            <h3 className="text-lg font-semibold">Split Variable</h3>
+                            <h3 className="text-lg font-semibold">Conditional</h3>
                             <p className="text-sm text-muted-foreground">
-                              Manage spawn string variables for this split variable
+                              Manage spawn string variables for this conditional
                             </p>
                           </div>
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={addSplitVariableSpawn}
+                            onClick={addConditionalSpawn}
                             className="flex items-center gap-2"
                           >
                             <Plus className="h-4 w-4" />
@@ -3600,11 +3815,11 @@ export default function ProjectDetailPage() {
                           <div className="flex items-center justify-between">
                             <Label>Spawn Variables</Label>
                             <Badge variant="outline" className="text-xs">
-                              {splitVariableSpawns.length} spawn{splitVariableSpawns.length !== 1 ? 's' : ''}
+                              {conditionalSpawns.length} spawn{conditionalSpawns.length !== 1 ? 's' : ''}
                             </Badge>
                           </div>
                           
-                          {splitVariableSpawns.map((spawn, index) => (
+                          {conditionalSpawns.map((spawn, index) => (
                             <div 
                               key={spawn.id} 
                               className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
@@ -3632,13 +3847,13 @@ export default function ProjectDetailPage() {
                             </div>
                           ))}
                           
-                          {splitVariableSpawns.length === 0 && (
+                          {conditionalSpawns.length === 0 && (
                             <div className="text-center py-8 text-muted-foreground">
-                              <p>No spawn variables found for this split variable.</p>
+                              <p>No spawn variables found for this conditional.</p>
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={addSplitVariableSpawn}
+                                onClick={addConditionalSpawn}
                                 className="mt-2"
                               >
                                 Add First Spawn
@@ -3653,21 +3868,21 @@ export default function ProjectDetailPage() {
                   ) : (
                     // Show direct content for editing existing strings (no tabs)
                     <div className="space-y-4">
-                      {editingString.is_split_variable ? (
+                      {editingString.is_conditional_container ? (
                         // Split variable editing content
                         <div className="space-y-4">
-                          {/* Split Variable Header */}
+                          {/* Conditional Header */}
                           <div className="flex items-center justify-between">
                             <div>
-                              <h3 className="text-lg font-semibold">Split Variable</h3>
+                              <h3 className="text-lg font-semibold">Conditional</h3>
                               <p className="text-sm text-muted-foreground">
-                                Manage spawn string variables for this split variable
+                                Manage spawn string variables for this conditional
                               </p>
                             </div>
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={addSplitVariableSpawn}
+                              onClick={addConditionalSpawn}
                               className="flex items-center gap-2"
                             >
                               <Plus className="h-4 w-4" />
@@ -3680,11 +3895,11 @@ export default function ProjectDetailPage() {
                             <div className="flex items-center justify-between">
                               <Label>Spawn Variables</Label>
                               <Badge variant="outline" className="text-xs">
-                                {splitVariableSpawns.length} spawn{splitVariableSpawns.length !== 1 ? 's' : ''}
+                                {conditionalSpawns.length} spawn{conditionalSpawns.length !== 1 ? 's' : ''}
                               </Badge>
                             </div>
                             
-                            {splitVariableSpawns.map((spawn, index) => (
+                            {conditionalSpawns.map((spawn, index) => (
                               <div 
                                 key={spawn.id} 
                                 className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
@@ -3712,13 +3927,13 @@ export default function ProjectDetailPage() {
                               </div>
                             ))}
                             
-                            {splitVariableSpawns.length === 0 && (
+                            {conditionalSpawns.length === 0 && (
                               <div className="text-center py-8 text-muted-foreground">
-                                <p>No spawn variables found for this split variable.</p>
+                                <p>No spawn variables found for this conditional.</p>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={addSplitVariableSpawn}
+                                  onClick={addConditionalSpawn}
                                   className="mt-2"
                                 >
                                   Add First Spawn
@@ -3798,12 +4013,12 @@ export default function ProjectDetailPage() {
                                     <div 
                                       key={stringVar.id} 
                                       className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
-                                      onClick={() => openEditString(stringVar)}
+                                      onClick={() => openEditInCascadingDrawer(stringVar)}
                                     >
                                       <div className="flex items-center gap-2 mb-3">
-                                        {stringVar.is_split_variable ? (
+                                        {stringVar.is_conditional_container ? (
                                           <div className="flex items-center gap-1 text-orange-600 bg-orange-50 p-1 rounded border border-orange-200">
-                                            <Split className="h-3 w-3" />
+                                            <Folder className="h-3 w-3" />
                                           </div>
                                         ) : (
                                           <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
@@ -3818,15 +4033,15 @@ export default function ProjectDetailPage() {
                                             <Signpost className="h-3 w-3" />
                                           </Badge>
                                         )}
-                                        {stringVar.is_split_variable && (
+                                        {stringVar.is_conditional_container && (
                                           <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600 border-orange-200 p-1">
-                                            <Split className="h-3 w-3" />
+                                            <Folder className="h-3 w-3" />
                                           </Badge>
                                         )}
                                       </div>
                                       <p className="text-sm text-muted-foreground line-clamp-2">
-                                        {stringVar.is_split_variable ? (
-                                          <span className="italic">Split variable - click to manage spawns</span>
+                                        {stringVar.is_conditional_container ? (
+                                          <span className="italic">Conditional - click to manage spawns</span>
                                         ) : stringVar.content ? 
                                           (stringVar.content.length > 100 ? `${stringVar.content.substring(0, 100)}...` : stringVar.content) :
                                           "No content"
@@ -3849,12 +4064,9 @@ export default function ProjectDetailPage() {
                                           {`{{${pendingVar}}}`}
                                         </Badge>
                                         <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
-                                          Pending
+                                          New variable!
                                         </Badge>
                                       </div>
-                                      <p className="text-sm text-muted-foreground line-clamp-2 italic">
-                                        Click to create and edit this string variable
-                                      </p>
                                     </div>
                                   ))}
                                 </div>
@@ -3879,7 +4091,7 @@ export default function ProjectDetailPage() {
                       value={stringContent}
                       onChange={(e) => {
                         setStringContent(e.target.value);
-                        updateSplitVariableSpawn(editingSpawn.id, 'content', e.target.value);
+                        updateConditionalSpawn(editingSpawn.id, 'content', e.target.value);
                       }}
                       onSelect={handleTextSelection}
                       onMouseUp={handleTextSelection}
@@ -3931,12 +4143,12 @@ export default function ProjectDetailPage() {
                             <div 
                               key={stringVar.id} 
                               className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
-                              onClick={() => openEditString(stringVar)}
+                              onClick={() => openEditInCascadingDrawer(stringVar)}
                             >
                               <div className="flex items-center gap-2 mb-3">
-                                {stringVar.is_split_variable ? (
+                                {stringVar.is_conditional_container ? (
                                   <div className="flex items-center gap-1 text-orange-600 bg-orange-50 p-1 rounded border border-orange-200">
-                                    <Split className="h-3 w-3" />
+                                    <Folder className="h-3 w-3" />
                                   </div>
                                 ) : (
                                   <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
@@ -3951,15 +4163,15 @@ export default function ProjectDetailPage() {
                                     <Signpost className="h-3 w-3" />
                                   </Badge>
                                 )}
-                                {stringVar.is_split_variable && (
+                                {stringVar.is_conditional_container && (
                                   <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600 border-orange-200 p-1">
-                                    <Split className="h-3 w-3" />
+                                    <Folder className="h-3 w-3" />
                                   </Badge>
                                 )}
                               </div>
                               <p className="text-sm text-muted-foreground line-clamp-2">
-                                {stringVar.is_split_variable ? (
-                                  <span className="italic">Split variable - click to manage spawns</span>
+                                {stringVar.is_conditional_container ? (
+                                  <span className="italic">Conditional - click to manage spawns</span>
                                 ) : stringVar.content ? 
                                   (stringVar.content.length > 100 ? `${stringVar.content.substring(0, 100)}...` : stringVar.content) :
                                   "No content"
@@ -3985,9 +4197,6 @@ export default function ProjectDetailPage() {
                                   New
                                 </Badge>
                               </div>
-                              <p className="text-sm text-muted-foreground line-clamp-2 italic">
-                                Click to create and edit this string variable
-                              </p>
                             </div>
                           ))}
                         </div>
@@ -4020,7 +4229,7 @@ export default function ProjectDetailPage() {
                       value={stringVariableName}
                       onChange={(e) => {
                         setStringVariableName(e.target.value);
-                        updateSplitVariableSpawn(editingSpawn.id, 'variable_name', e.target.value);
+                        updateConditionalSpawn(editingSpawn.id, 'variable_name', e.target.value);
                       }}
                       placeholder="Variable name (optional)"
                     />
@@ -4041,7 +4250,7 @@ export default function ProjectDetailPage() {
                         checked={stringIsConditional}
                         onChange={(e) => {
                           setStringIsConditional(e.target.checked);
-                          updateSplitVariableSpawn(editingSpawn.id, 'is_conditional', e.target.checked);
+                          updateConditionalSpawn(editingSpawn.id, 'is_conditional', e.target.checked);
                         }}
                         className="rounded border-gray-300"
                       />
@@ -4054,7 +4263,7 @@ export default function ProjectDetailPage() {
                     </p>
                   </div>
 
-                  {splitVariableSpawns.length > 1 && (
+                  {conditionalSpawns.length > 1 && (
                     <div className="space-y-2">
                       <Label>Danger Zone</Label>
                       <div className="p-3 bg-red-50 border border-red-200 rounded-md">
@@ -4067,7 +4276,7 @@ export default function ProjectDetailPage() {
                             variant="destructive"
                             size="sm"
                             onClick={() => {
-                              removeSplitVariableSpawn(editingSpawn.id);
+                              removeConditionalSpawn(editingSpawn.id);
                               popDrawer();
                             }}
                           >
@@ -4107,14 +4316,14 @@ export default function ProjectDetailPage() {
                           "This name will be used as the base for all spawn variables" : 
                           "Optional name for this string variable"
                       ) : (
-                        editingString.is_split_variable ?
+                        editingString.is_conditional_container ?
                           "This name is used as the base for all spawn variables" :
                           "Optional name for this string variable"
                       )}
                     </p>
                   </div>
                   
-                  {(!editingString ? contentSubTab === "string" : !editingString.is_split_variable) && (
+                  {(!editingString ? contentSubTab === "string" : !editingString.is_conditional_container) && (
                     <div className="space-y-2">
                       <Label>String Settings</Label>
                       <div className="flex items-center space-x-2">
@@ -4142,12 +4351,12 @@ export default function ProjectDetailPage() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-medium text-orange-800">
-                              {editingString.is_split_variable ? "Convert to Normal String" : "Convert to Split Variable"}
+                              {editingString.is_conditional_container ? "Convert to Normal String" : "Convert to Conditional"}
                             </p>
                             <p className="text-sm text-orange-600">
-                              {editingString.is_split_variable 
+                              {editingString.is_conditional_container 
                                 ? "This will merge all spawns into a single string and remove spawn management."
-                                : "This will convert this string into a split variable with multiple spawns."
+                                : "This will convert this string into a conditional with multiple spawns."
                               }
                             </p>
                           </div>
@@ -4156,11 +4365,11 @@ export default function ProjectDetailPage() {
                             size="sm"
                             className="border-orange-300 text-orange-700 hover:bg-orange-100"
                             onClick={() => {
-                              setPendingConversionType(editingString.is_split_variable ? 'string' : 'variable');
+                              setPendingConversionType(editingString.is_conditional_container ? 'string' : 'conditional');
                               setConversionConfirmDialog(true);
                             }}
                           >
-                            {editingString.is_split_variable ? "Convert to String" : "Convert to Variable"}
+                            {editingString.is_conditional_container ? "Convert to String" : "Convert to Variable"}
                           </Button>
                         </div>
                       </div>
@@ -4214,8 +4423,8 @@ export default function ProjectDetailPage() {
                           }),
                         });
                         
-                        // Update the spawn in splitVariableSpawns state
-                        setSplitVariableSpawns(prev => prev.map(spawn => 
+                        // Update the spawn in conditionalSpawns state
+                        setConditionalSpawns(prev => prev.map(spawn => 
                           spawn.id === editingSpawn.id 
                             ? { 
                                 ...spawn, 
@@ -4246,7 +4455,7 @@ export default function ProjectDetailPage() {
                       Cancel
                     </Button>
                     <Button type="submit" onClick={contentSubTab === "variable" ? handleSplitVariableSubmit : handleStringSubmit}>
-                      {contentSubTab === "variable" ? "Save Split Variable" : (editingString ? "Save Changes" : "Create String")}
+                      {contentSubTab === "variable" ? "Save Conditional" : (editingString ? "Save Changes" : "Create String")}
                     </Button>
                   </>
                 )}
@@ -4256,7 +4465,253 @@ export default function ProjectDetailPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Nested Drawer Sheets - Infinite Nesting Support */}
+      {/* Cascading Drawer Sheets - Infinite Nesting Support */}
+      {cascadingDrawers.map((drawer, index) => (
+        <Sheet key={drawer.id} open={true} onOpenChange={v => !v && closeCascadingDrawer(drawer.id)}>
+          <SheetContent 
+            side="right" 
+            className="w-[800px] max-w-[90vw] flex flex-col p-0"
+            style={{
+              zIndex: 50 + index
+            }}
+          >
+            <SheetHeader className="px-6 py-4 border-b bg-background">
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-2">
+                  {index > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => closeCascadingDrawer(drawer.id)}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <div className="flex flex-col">
+                    <SheetTitle>
+                      Edit String
+                    </SheetTitle>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                        {`{{${drawer.stringData.effective_variable_name || drawer.stringData.variable_hash}}}`}
+                      </Badge>
+                      {drawer.isConditionalContainer && (
+                        <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                          Conditional
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </SheetHeader>
+
+            {/* Drawer Content */}
+            <div className="flex flex-col flex-1">
+              {/* Main Tabs */}
+              <div className="px-6 py-4 border-b">
+                <Tabs value={drawer.tab} onValueChange={(value) => updateCascadingDrawer(drawer.id, { tab: value })} className="w-full">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="content">Content</TabsTrigger>
+                    <TabsTrigger value="dimensions">Dimensions</TabsTrigger>
+                    <TabsTrigger value="advanced">Advanced</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+
+              {/* Content Area */}
+              <div className="flex-1 overflow-y-auto p-6">
+                {drawer.tab === "content" && (
+                  <div className="space-y-4">
+                    {drawer.isEditingConditional ? (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold">Conditional</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Manage spawn string variables for this conditional
+                        </p>
+                        
+                        {drawer.conditionalSpawns.map((spawn, spawnIndex) => (
+                          <div key={spawn.id} className="border rounded-lg p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-medium flex items-center gap-2">
+                                <Badge variant="outline" className="text-xs font-mono">
+                                  {`{{${spawn.effective_variable_name || spawn.variable_hash}}}`}
+                                </Badge>
+                              </h4>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label>Content</Label>
+                              <Textarea
+                                value={spawn.content}
+                                onChange={(e) => {
+                                  const newSpawns = [...drawer.conditionalSpawns];
+                                  newSpawns[spawnIndex] = { ...spawn, content: e.target.value };
+                                  updateCascadingDrawer(drawer.id, { conditionalSpawns: newSpawns });
+                                }}
+                                placeholder="Enter spawn content"
+                                rows={3}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="content">Content</Label>
+                          <Textarea
+                            id="content"
+                            value={drawer.content}
+                            onChange={(e) => updateCascadingDrawer(drawer.id, { content: e.target.value })}
+                            placeholder="Enter string content"
+                            rows={4}
+                          />
+                        </div>
+
+                        {/* Variable Detection and Display for Cascading Drawers */}
+                        {(() => {
+                          // Find string variables used in the current drawer content
+                          const variableMatches = drawer.content.match(/{{([^}]+)}}/g) || [];
+                          const variableNames = variableMatches.map(match => match.slice(2, -2));
+                          const uniqueVariableNames = [...new Set(variableNames)];
+                          
+                          // Find existing string variables from the variable names
+                          const usedStringVariables = project.strings?.filter((str: any) => {
+                            const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
+                            return effectiveName && uniqueVariableNames.includes(effectiveName);
+                          }) || [];
+
+                          // Get pending variables that are referenced in content
+                          const pendingVariablesInContent = Object.keys(pendingStringVariables).filter(name => 
+                            uniqueVariableNames.includes(name)
+                          );
+                          
+                          if (usedStringVariables.length === 0 && pendingVariablesInContent.length === 0) {
+                            return null;
+                          }
+                          
+                          return (
+                            <div className="space-y-3">
+                              <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+                                <span>Variables Used</span>
+                                <Badge variant="secondary" className="text-xs">
+                                  {usedStringVariables.length + pendingVariablesInContent.length}
+                                </Badge>
+                              </h4>
+                              
+                              <div className="grid gap-3">
+                                {/* Existing Variables */}
+                                {usedStringVariables.map((stringVar: any) => {
+                                  const variableName = stringVar.effective_variable_name || stringVar.variable_hash;
+                                  return (
+                                    <div 
+                                      key={stringVar.id} 
+                                      className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
+                                      onClick={() => openEditInCascadingDrawer(stringVar)}
+                                    >
+                                      <div className="flex items-center gap-2 mb-2">
+                                        {stringVar.is_conditional_container ? (
+                                          <div className="flex items-center gap-1 text-orange-600 bg-orange-50 p-1 rounded border border-orange-200">
+                                            <Folder className="h-3 w-3" />
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
+                                            <Spool className="h-3 w-3" />
+                                          </div>
+                                        )}
+                                        <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                                          {`{{${variableName}}}`}
+                                        </Badge>
+                                        {stringVar.is_conditional_container && (
+                                          <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                                            Conditional
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <p className="text-sm text-muted-foreground line-clamp-2">
+                                        {stringVar.content || "Empty content"}
+                                      </p>
+                                    </div>
+                                  );
+                                })}
+
+                                {/* New Variables (Yellow Boxes) */}
+                                {pendingVariablesInContent.map((pendingVar: string) => (
+                                  <div 
+                                    key={pendingVar} 
+                                    className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer bg-yellow-50/50 border-yellow-200"
+                                    onClick={() => createAndEditPendingVariable(pendingVar)}
+                                  >
+                                    <div className="flex items-center gap-2 mb-3">
+                                      <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 p-1 rounded border border-yellow-200">
+                                        <Plus className="h-3 w-3" />
+                                      </div>
+                                      <Badge variant="outline" className="text-xs font-mono bg-yellow-50 text-yellow-700 border-yellow-200">
+                                        {`{{${pendingVar}}}`}
+                                      </Badge>
+                                      <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
+                                        New variable!
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {drawer.tab === "advanced" && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="variable-name">Variable Name</Label>
+                      <Input
+                        id="variable-name"
+                        value={drawer.variableName}
+                        onChange={(e) => updateCascadingDrawer(drawer.id, { variableName: e.target.value })}
+                        placeholder="Custom variable name (optional)"
+                      />
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="is-conditional"
+                        checked={drawer.isConditional}
+                        onCheckedChange={(checked: boolean) => updateCascadingDrawer(drawer.id, { isConditional: checked })}
+                      />
+                      <Label htmlFor="is-conditional">Conditional</Label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer with Save/Cancel */}
+              <div className="px-6 py-4 border-t bg-background">
+                <div className="flex gap-2 justify-end">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => closeCascadingDrawer(drawer.id)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={() => saveCascadingDrawer(drawer.id)}
+                  >
+                    Save Changes
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+      ))}
+
+      {/* Legacy Nested Drawer Sheets - Keeping for spawn editing */}
       {drawerStack.map((drawer, index) => (
         <Sheet key={drawer.id} open={true} onOpenChange={v => !v && popDrawer()}>
           <SheetContent side="right" className="w-[800px] max-w-[90vw] flex flex-col p-0">
@@ -4657,7 +5112,7 @@ export default function ProjectDetailPage() {
               {Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null).length === 0 &&
                selectedConditionalVariables.length === 0 && (
                 <div className="text-sm text-muted-foreground">
-                  No dimension or conditional filters applied. All {(project.strings || []).filter((str: any) => !str.is_split_variable).length} strings will be exported.
+                  No dimension or conditional filters applied. All {(project.strings || []).filter((str: any) => !str.is_conditional_container).length} strings will be exported.
                 </div>
               )}
             </div>
@@ -4794,9 +5249,9 @@ export default function ProjectDetailPage() {
                         onClick={() => openEditNestedString(stringVar)}
                       >
                         <div className="flex items-center gap-2 mb-3">
-                          {stringVar.is_split_variable ? (
+                          {stringVar.is_conditional_container ? (
                             <div className="flex items-center gap-1 text-orange-600 bg-orange-50 p-1 rounded border border-orange-200">
-                              <Split className="h-3 w-3" />
+                              <Folder className="h-3 w-3" />
                             </div>
                           ) : (
                             <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
@@ -4811,15 +5266,15 @@ export default function ProjectDetailPage() {
                               <Signpost className="h-3 w-3" />
                             </Badge>
                           )}
-                          {stringVar.is_split_variable && (
+                          {stringVar.is_conditional_container && (
                             <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600 border-orange-200 p-1">
-                              <Split className="h-3 w-3" />
+                              <Folder className="h-3 w-3" />
                             </Badge>
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground line-clamp-2">
-                          {stringVar.is_split_variable ? (
-                            <span className="italic">Split variable - click to manage spawns</span>
+                          {stringVar.is_conditional_container ? (
+                            <span className="italic">Conditional - click to manage spawns</span>
                           ) : stringVar.content ? 
                             (stringVar.content.length > 100 ? `${stringVar.content.substring(0, 100)}...` : stringVar.content) :
                             "No content"
@@ -4828,7 +5283,7 @@ export default function ProjectDetailPage() {
                       </div>
                     ))}
 
-                    {/* Pending string variables */}
+                    {/* New variable! string variables */}
                     {pendingVariablesInContent.map((variableName: string) => (
                       <div
                         key={`pending-${variableName}`}
@@ -4846,9 +5301,6 @@ export default function ProjectDetailPage() {
                             New
                           </Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground line-clamp-2 italic">
-                          Click to create and edit this string variable
-                        </p>
                       </div>
                     ))}
                   </div>
@@ -5240,30 +5692,30 @@ export default function ProjectDetailPage() {
                 </Button>
                 <SheetTitle>Edit String Variable</SheetTitle>
               </div>
-              {!nestedStringSplitMode && (
+              {!nestedStringConditionalMode && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleNestedStringSplit}
                   className="flex items-center gap-2"
                 >
-                  <Split className="h-4 w-4" />
-                  Split Variable
+                  <Folder className="h-4 w-4" />
+                  Conditional
                 </Button>
               )}
             </div>
           </SheetHeader>
           
           <div className="flex-1 overflow-y-auto px-6 py-4">
-            {editingSplitVariable ? (
+            {editingConditional ? (
               // Split variable editing UI
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium">Split Variable Spawns</h3>
+                  <h3 className="text-lg font-medium">Conditional Spawns</h3>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={addSplitVariableSpawn}
+                    onClick={addConditionalSpawn}
                     className="flex items-center gap-2"
                   >
                     <Plus className="h-4 w-4" />
@@ -5272,11 +5724,11 @@ export default function ProjectDetailPage() {
                 </div>
                 
                 <p className="text-sm text-muted-foreground">
-                  Edit the spawned string variables below. Each spawn represents a different version of this split variable.
+                  Edit the spawned string variables below. Each spawn represents a different version of this conditional.
                 </p>
 
                 <div className="space-y-4">
-                  {splitVariableSpawns.map((spawn, index) => (
+                  {conditionalSpawns.map((spawn, index) => (
                     <div key={spawn.id} className="border rounded-lg p-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <h4 className="font-medium flex items-center gap-2">
@@ -5284,11 +5736,11 @@ export default function ProjectDetailPage() {
                             {`{{${spawn.effective_variable_name || spawn.variable_hash}}}`}
                           </Badge>
                         </h4>
-                        {splitVariableSpawns.length > 1 && (
+                        {conditionalSpawns.length > 1 && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => removeSplitVariableSpawn(spawn.id)}
+                            onClick={() => removeConditionalSpawn(spawn.id)}
                             className="h-8 w-8 p-0 text-destructive"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -5300,7 +5752,7 @@ export default function ProjectDetailPage() {
                         <Label>Content</Label>
                         <Textarea
                           value={spawn.content}
-                          onChange={(e) => updateSplitVariableSpawn(spawn.id, 'content', e.target.value)}
+                          onChange={(e) => updateConditionalSpawn(spawn.id, 'content', e.target.value)}
                           placeholder="Enter spawn content"
                           rows={3}
                         />
@@ -5310,7 +5762,7 @@ export default function ProjectDetailPage() {
                         <Label>Variable Name</Label>
                         <Input
                           value={spawn.variable_name || ''}
-                          onChange={(e) => updateSplitVariableSpawn(spawn.id, 'variable_name', e.target.value)}
+                          onChange={(e) => updateConditionalSpawn(spawn.id, 'variable_name', e.target.value)}
                           placeholder="Custom variable name (optional)"
                         />
                       </div>
@@ -5320,7 +5772,7 @@ export default function ProjectDetailPage() {
                           type="checkbox"
                           id={`spawn-${spawn.id}-conditional`}
                           checked={spawn.is_conditional}
-                          onChange={(e) => updateSplitVariableSpawn(spawn.id, 'is_conditional', e.target.checked)}
+                          onChange={(e) => updateConditionalSpawn(spawn.id, 'is_conditional', e.target.checked)}
                           className="rounded border-gray-300"
                         />
                         <Label htmlFor={`spawn-${spawn.id}-conditional`} className="text-sm">
@@ -5331,11 +5783,11 @@ export default function ProjectDetailPage() {
                   ))}
                 </div>
               </div>
-            ) : nestedStringSplitMode ? (
+            ) : nestedStringConditionalMode ? (
               // Split mode UI (for creating new splits)
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium">Split Variable Spawns</h3>
+                  <h3 className="text-lg font-medium">Conditional Spawns</h3>
                   <Button
                     variant="outline"
                     size="sm"
@@ -5448,7 +5900,7 @@ export default function ProjectDetailPage() {
           </div>
           
           <SheetFooter className="px-6 py-4 border-t bg-background">
-            {editingSplitVariable ? (
+            {editingConditional ? (
               <>
                 <Button type="button" variant="secondary" onClick={closeNestedStringDialog}>
                   Close
@@ -5460,9 +5912,9 @@ export default function ProjectDetailPage() {
                   Update All Spawns
                 </Button>
               </>
-            ) : nestedStringSplitMode ? (
+            ) : nestedStringConditionalMode ? (
               <>
-                <Button type="button" variant="secondary" onClick={() => setNestedStringSplitMode(false)}>
+                <Button type="button" variant="secondary" onClick={() => setNestedStringConditionalMode(false)}>
                   Cancel Split
                 </Button>
                 <Button 
@@ -5492,14 +5944,14 @@ export default function ProjectDetailPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {pendingConversionType === 'string' ? 'Convert to Normal String' : 'Convert to Split Variable'}
+              {pendingConversionType === 'string' ? 'Convert to Normal String' : 'Convert to Conditional'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               {pendingConversionType === 'string' 
-                ? 'This will convert your split variable back to a normal string. All spawn strings will be deleted and only the content from the first spawn will be preserved.'
-                : 'This will convert your normal string into a split variable. The current content will become the first spawn, and you can add more spawns later.'
+                ? 'This will convert your conditional back to a normal string. All spawn strings will be deleted and only the content from the first spawn will be preserved.'
+                : 'This will convert your normal string into a conditional. The current content will become the first spawn, and you can add more spawns later.'
               }
             </p>
             <div className="p-3 bg-orange-50 border border-orange-200 rounded-md">
@@ -5509,7 +5961,7 @@ export default function ProjectDetailPage() {
               <p className="text-sm text-orange-600 mt-1">
                 {pendingConversionType === 'string' 
                   ? 'All spawn strings except the first one will be permanently deleted.'
-                  : 'Your string will be restructured into a split variable format.'
+                  : 'Your string will be restructured into a conditional format.'
                 }
               </p>
             </div>

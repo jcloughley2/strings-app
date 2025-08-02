@@ -23,8 +23,8 @@ class String(models.Model):
     variable_name = models.CharField(max_length=100, blank=True, null=True)
     variable_hash = models.CharField(max_length=6, blank=True)
     is_conditional = models.BooleanField(default=False)
-    # Add explicit field to identify split variables
-    is_split_variable = models.BooleanField(default=False)
+    # Add explicit field to identify conditionals (directory containers)
+    is_conditional_container = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

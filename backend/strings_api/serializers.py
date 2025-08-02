@@ -9,7 +9,7 @@ class StringSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = String
-        fields = ['id', 'content', 'project', 'variable_name', 'variable_hash', 'effective_variable_name', 'is_conditional', 'is_split_variable', 'dimension_values', 'created_at', 'updated_at']
+        fields = ['id', 'content', 'project', 'variable_name', 'variable_hash', 'effective_variable_name', 'is_conditional', 'is_conditional_container', 'dimension_values', 'created_at', 'updated_at']
         read_only_fields = ['id', 'variable_hash', 'effective_variable_name', 'created_at', 'updated_at']
     
     def get_dimension_values(self, obj):

@@ -155,6 +155,34 @@ def update_dependent_strings_when_string_variable_changes(sender, instance, **kw
     if instance.is_conditional_container:
         sync_conditional_dimension(instance)
     
+    # Handle spawn variable creation/update - sync parent conditional dimension
+    string_name = instance.effective_variable_name
+    spawn_pattern = re.compile(r'^(.+)_\d+$')
+    match = spawn_pattern.match(string_name)
+    
+    if match:
+        parent_name = match.group(1)
+        # Find the parent conditional variable
+        try:
+            parent_conditional = String.objects.get(
+                project=instance.project,
+                variable_name=parent_name,
+                is_conditional_container=True
+            )
+            # Resync the dimension
+            sync_conditional_dimension(parent_conditional)
+        except String.DoesNotExist:
+            # Try with variable_hash if variable_name lookup fails
+            try:
+                parent_conditional = String.objects.get(
+                    project=instance.project,
+                    variable_hash=parent_name,
+                    is_conditional_container=True
+                )
+                sync_conditional_dimension(parent_conditional)
+            except String.DoesNotExist:
+                pass  # Parent not found, might not exist yet
+    
     # All strings are now variables, so check if any string references this one
     variable_pattern = re.compile(r'{{([^}]+)}}')
     effective_name = instance.effective_variable_name

@@ -742,7 +742,7 @@ export default function ProjectDetailPage() {
         const stringPromises = drawer.conditionalSpawns.map(async (spawn) => {
           const spawnContent = spawn.content?.trim() || `Default content for ${spawn.effective_variable_name || spawn.variable_hash}`;
           
-          if (spawn._isTemporary) {
+          if (spawn._isTemporary || String(spawn.id).startsWith('temp-')) {
             // Create new spawn variable
             return await apiFetch('/api/strings/', {
               method: 'POST',
@@ -772,7 +772,7 @@ export default function ProjectDetailPage() {
         await Promise.all(stringPromises);
         
         // Create or update the main conditional container
-        if (drawer.stringData._isTemporary) {
+        if (drawer.stringData._isTemporary || String(drawer.stringData.id).startsWith('temp-')) {
           // Create new conditional container
           await apiFetch('/api/strings/', {
             method: 'POST',
@@ -800,7 +800,7 @@ export default function ProjectDetailPage() {
         }
       } else {
         // Regular string saving
-        if (drawer.stringData._isTemporary) {
+        if (drawer.stringData._isTemporary || String(drawer.stringData.id).startsWith('temp-')) {
           // This is a temporary string - create it in the database
           await apiFetch('/api/strings/', {
             method: 'POST',
@@ -1235,18 +1235,34 @@ export default function ProjectDetailPage() {
 
   const handleSplitVariableSubmit = async () => {
     try {
-      // Update all spawns
-      const updatePromises = conditionalSpawns.map(spawn => 
-        apiFetch(`/api/strings/${spawn.id}/`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content: spawn.content,
-            variable_name: spawn.variable_name,
-            is_conditional: spawn.is_conditional,
-          }),
-        })
-      );
+      // Create or update all spawns
+      const updatePromises = conditionalSpawns.map(spawn => {
+        if (spawn._isTemporary || String(spawn.id).startsWith('temp-')) {
+          // Create new spawn variable
+          return apiFetch('/api/strings/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: spawn.content,
+              variable_name: spawn.variable_name,
+              is_conditional: spawn.is_conditional,
+              is_conditional_container: false,
+              project: id,
+            }),
+          });
+        } else {
+          // Update existing spawn variable
+          return apiFetch(`/api/strings/${spawn.id}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: spawn.content,
+              variable_name: spawn.variable_name,
+              is_conditional: spawn.is_conditional,
+            }),
+          });
+        }
+      });
 
       await Promise.all(updatePromises);
 

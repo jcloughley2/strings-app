@@ -742,30 +742,62 @@ export default function ProjectDetailPage() {
         const stringPromises = drawer.conditionalSpawns.map(async (spawn) => {
           const spawnContent = spawn.content?.trim() || `Default content for ${spawn.effective_variable_name || spawn.variable_hash}`;
           
-          return await apiFetch(`/api/strings/${spawn.id}/`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              content: spawnContent,
-              variable_name: spawn.variable_name?.trim() || null,
-              is_conditional: spawn.is_conditional || false,
-            }),
-          });
+          if (spawn._isTemporary) {
+            // Create new spawn variable
+            return await apiFetch('/api/strings/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                content: spawnContent,
+                variable_name: spawn.variable_name?.trim() || null,
+                is_conditional: spawn.is_conditional || false,
+                is_conditional_container: false,
+                project: id,
+              }),
+            });
+          } else {
+            // Update existing spawn variable
+            return await apiFetch(`/api/strings/${spawn.id}/`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                content: spawnContent,
+                variable_name: spawn.variable_name?.trim() || null,
+                is_conditional: spawn.is_conditional || false,
+              }),
+            });
+          }
         });
 
         await Promise.all(stringPromises);
         
-        // Update the main conditional container
-        await apiFetch(`/api/strings/${drawer.stringData.id}/`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content: `[Conditional: ${conditionalName}]`,
-            variable_name: drawer.variableName?.trim() || null,
-            is_conditional: drawer.isConditional,
-            is_conditional_container: true,
-          }),
-        });
+        // Create or update the main conditional container
+        if (drawer.stringData._isTemporary) {
+          // Create new conditional container
+          await apiFetch('/api/strings/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: `[Conditional: ${conditionalName}]`,
+              variable_name: drawer.variableName?.trim() || null,
+              is_conditional: drawer.isConditional,
+              is_conditional_container: true,
+              project: id,
+            }),
+          });
+        } else {
+          // Update existing conditional container
+          await apiFetch(`/api/strings/${drawer.stringData.id}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: `[Conditional: ${conditionalName}]`,
+              variable_name: drawer.variableName?.trim() || null,
+              is_conditional: drawer.isConditional,
+              is_conditional_container: true,
+            }),
+          });
+        }
       } else {
         // Regular string saving
         if (drawer.stringData._isTemporary) {

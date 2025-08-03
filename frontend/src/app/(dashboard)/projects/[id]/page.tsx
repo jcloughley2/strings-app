@@ -614,7 +614,7 @@ export default function ProjectDetailPage() {
       isEditingConditional: false
     };
 
-    // Check if this should be a conditional container but isn't marked as one
+        // Check if this should be a conditional container but isn't marked as one
     if (!str.is_conditional_container && str.is_conditional) {
       const conditionalName = str.effective_variable_name || str.variable_hash;
       const potentialSpawns = project.strings?.filter((s: any) => {
@@ -623,10 +623,19 @@ export default function ProjectDetailPage() {
                /^.+_\d+$/.test(effectiveName);
       }) || [];
       
-             if (potentialSpawns.length > 0) {
-         // Auto-repair: mark as conditional container since it has spawns
-         str.is_conditional_container = true;
-       }
+      if (potentialSpawns.length > 0) {
+        // Auto-repair: mark as conditional container since it has spawns
+        str.is_conditional_container = true;
+        
+        // Save the fix to the database
+        apiFetch(`/api/strings/${str.id}/`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            is_conditional_container: true
+          }),
+        }).catch(err => console.warn('Failed to auto-repair conditional container flag:', err));
+      }
     }
     
     // If it's a conditional container, load its spawns

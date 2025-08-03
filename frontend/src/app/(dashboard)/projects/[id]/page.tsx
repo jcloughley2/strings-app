@@ -1234,9 +1234,18 @@ export default function ProjectDetailPage() {
   };
 
   const handleSplitVariableSubmit = async () => {
+    console.log('DEBUG: handleSplitVariableSubmit called');
+    console.log('DEBUG: conditionalSpawns length:', conditionalSpawns.length);
+    console.log('DEBUG: conditionalSpawns:', conditionalSpawns);
+    
+    if (conditionalSpawns.length === 0) {
+      console.log('DEBUG: No spawns to process, returning early');
+      toast.info('No spawn variables to save');
+      return;
+    }
+    
     try {
       // Create or update all spawns
-      console.log('DEBUG: conditionalSpawns:', conditionalSpawns);
       const updatePromises = conditionalSpawns.map(spawn => {
         const isTemporary = spawn._isTemporary || String(spawn.id).startsWith('temp-');
         console.log(`DEBUG: spawn ${spawn.id} - isTemporary: ${isTemporary}, _isTemporary: ${spawn._isTemporary}, id: ${spawn.id}`);
@@ -1244,28 +1253,38 @@ export default function ProjectDetailPage() {
         if (isTemporary) {
           // Create new spawn variable
           console.log('DEBUG: Creating new spawn variable with POST');
+          const payload = {
+            content: spawn.content,
+            variable_name: spawn.variable_name,
+            is_conditional: spawn.is_conditional,
+            is_conditional_container: false,
+            project: id,
+          };
+          console.log('DEBUG: POST payload:', payload);
           return apiFetch('/api/strings/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              content: spawn.content,
-              variable_name: spawn.variable_name,
-              is_conditional: spawn.is_conditional,
-              is_conditional_container: false,
-              project: id,
-            }),
+            body: JSON.stringify(payload),
+          }).catch(err => {
+            console.error('DEBUG: POST request failed for spawn:', spawn, 'Error:', err);
+            throw err;
           });
         } else {
           // Update existing spawn variable
           console.log('DEBUG: Updating existing spawn variable with PATCH');
+          const payload = {
+            content: spawn.content,
+            variable_name: spawn.variable_name,
+            is_conditional: spawn.is_conditional,
+          };
+          console.log('DEBUG: PATCH payload:', payload);
           return apiFetch(`/api/strings/${spawn.id}/`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              content: spawn.content,
-              variable_name: spawn.variable_name,
-              is_conditional: spawn.is_conditional,
-            }),
+            body: JSON.stringify(payload),
+          }).catch(err => {
+            console.error('DEBUG: PATCH request failed for spawn:', spawn, 'Error:', err);
+            throw err;
           });
         }
       });

@@ -1997,6 +1997,7 @@ export default function ProjectDetailPage() {
         project: id,
         variable_name: stringVariableName || null,
         is_conditional: stringIsConditional,
+        is_conditional_container: stringIsConditional, // When marked as conditional, it should also be a conditional container
         variables: detectedVariables.map((v: any) => v.id),
       };
 

@@ -751,7 +751,7 @@ export default function ProjectDetailPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 content: spawnContent,
-                variable_name: spawn.variable_name?.trim() || null,
+                variable_name: (spawn.effective_variable_name || spawn.variable_hash || spawn.variable_name)?.trim() || null,
                 is_conditional: spawn.is_conditional || false,
                 is_conditional_container: false,
                 project: id,
@@ -764,7 +764,7 @@ export default function ProjectDetailPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 content: spawnContent,
-                variable_name: spawn.variable_name?.trim() || null,
+                variable_name: (spawn.effective_variable_name || spawn.variable_hash || spawn.variable_name)?.trim() || null,
                 is_conditional: spawn.is_conditional || false,
               }),
             });
@@ -1264,7 +1264,7 @@ export default function ProjectDetailPage() {
           console.log('DEBUG: Creating new spawn variable with POST');
           const payload = {
             content: spawn.content,
-            variable_name: spawn.variable_name,
+            variable_name: spawn.effective_variable_name || spawn.variable_hash || spawn.variable_name,
             is_conditional: spawn.is_conditional,
             is_conditional_container: false,
             project: id,
@@ -1283,7 +1283,7 @@ export default function ProjectDetailPage() {
           console.log('DEBUG: Updating existing spawn variable with PATCH');
           const payload = {
             content: spawn.content,
-            variable_name: spawn.variable_name,
+            variable_name: spawn.effective_variable_name || spawn.variable_hash || spawn.variable_name,
             is_conditional: spawn.is_conditional,
           };
           console.log('DEBUG: PATCH payload:', payload);

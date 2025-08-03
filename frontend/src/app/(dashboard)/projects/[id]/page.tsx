@@ -1236,9 +1236,14 @@ export default function ProjectDetailPage() {
   const handleSplitVariableSubmit = async () => {
     try {
       // Create or update all spawns
+      console.log('DEBUG: conditionalSpawns:', conditionalSpawns);
       const updatePromises = conditionalSpawns.map(spawn => {
-        if (spawn._isTemporary || String(spawn.id).startsWith('temp-')) {
+        const isTemporary = spawn._isTemporary || String(spawn.id).startsWith('temp-');
+        console.log(`DEBUG: spawn ${spawn.id} - isTemporary: ${isTemporary}, _isTemporary: ${spawn._isTemporary}, id: ${spawn.id}`);
+        
+        if (isTemporary) {
           // Create new spawn variable
+          console.log('DEBUG: Creating new spawn variable with POST');
           return apiFetch('/api/strings/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1252,6 +1257,7 @@ export default function ProjectDetailPage() {
           });
         } else {
           // Update existing spawn variable
+          console.log('DEBUG: Updating existing spawn variable with PATCH');
           return apiFetch(`/api/strings/${spawn.id}/`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },

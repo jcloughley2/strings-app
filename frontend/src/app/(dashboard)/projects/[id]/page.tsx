@@ -3347,42 +3347,7 @@ export default function ProjectDetailPage() {
                     </div>
                   </div>
                   
-                  {/* Dimension Values */}
-                  {showDimensions && str.dimension_values && str.dimension_values.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
-                      {(() => {
-                        // Group only non-inherited dimension values by dimension
-                        const groupedDimensions: {[dimensionId: number]: {name: string, values: string[]}} = {};
-                        str.dimension_values.forEach((dv: any) => {
-                          const dimension = project.dimensions?.find((d: any) => d.id === dv.dimension_value.dimension);
-                          const dimensionId = dv.dimension_value.dimension;
-                          const value = dv.dimension_value.value;
-                          // Only include if NOT inherited
-                          if (!isDimensionValueInheritedFromVariables(dimensionId, value, str.content)) {
-                            if (!groupedDimensions[dimensionId]) {
-                              groupedDimensions[dimensionId] = {
-                                name: dimension?.name || 'Unknown',
-                                values: []
-                              };
-                            }
-                            groupedDimensions[dimensionId].values.push(value);
-                          }
-                        });
-                        // Render grouped dimension values
-                        return Object.entries(groupedDimensions).map(([dimensionId, group]) => (
-                          <Badge
-                            key={dimensionId}
-                            variant="outline"
-                            className="text-xs bg-gray-50 text-gray-700 border-gray-200"
-                          >
-                            <span className="font-medium">{group.name}</span>
-                            <span className="mx-1">:</span>
-                            <span>{group.values.join(', ')}</span>
-                          </Badge>
-                        ));
-                      })()}
-                    </div>
-                  )}
+
                 </Card>
               ))}
             </ul>

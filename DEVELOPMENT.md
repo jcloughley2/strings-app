@@ -9,25 +9,30 @@ The project is split into two main parts:
 ## Key Concepts
 
 ### String Variables
-- Strings can contain variables using the `{{variable}}` syntax
-- Variables are managed globally at the project level
-- Variables can have different values for different traits
+- Every string automatically becomes a variable with a unique hash or custom name
+- Strings can embed other variables using the `{{variableName}}` syntax
+- Variables support recursive embedding with circular reference protection
 
-### Traits
-- Traits represent different contexts for variable values
-- Each trait can define custom values for any variable
-- Traits are used to preview strings with different variable values
+### Conditionals
+- Convert any string into a conditional container with multiple variations (spawns)
+- Each conditional creates a dimension with corresponding dimension values
+- Spawns inherit dimension values and can be filtered independently
+
+### Dimensions & Filtering
+- Dimensions categorize strings and provide filtering capabilities
+- Dimension values are automatically inherited from embedded variables
+- Filter sidebar allows selection of specific dimension values
 
 ### Project Layout
-- Main content shows all strings with their current values
-- Right sidebar contains two tabs:
-  - Variables: Manage project variables and their values
-  - Traits: Manage traits and their variable assignments
+- Main canvas shows all strings including conditionals and embedded strings
+- Left sidebar: Dimension-based filtering (360px)
+- Right sidebar: Dimension variable management (collapsible)
+- Color-coded badges: Orange for conditionals, purple for strings
 
 ## State Management
 - Project data is fetched at the page level and passed down to components
-- Changes to variables/traits trigger a project refresh to ensure consistency
-- Variable updates can affect both variable values and string content
+- Changes to dimensions/strings trigger a project refresh to ensure consistency
+- Variable embedding updates affect content processing and dimension inheritance
 
 ## API Integration
 - All data is persisted through the Django REST API
@@ -55,17 +60,22 @@ npm run dev
 
 ## Common Development Tasks
 
-### Adding a New Variable
-1. Create variable through the UI or API
-2. If adding through API: POST to `/api/variables/`
-3. Variable values can be set globally or per trait
+### Adding a New String Variable
+1. Every string automatically becomes a variable with a unique hash
+2. Use the "New String" button or API: POST to `/api/strings/`
+3. Strings can be converted to conditionals with multiple spawns
 
 ### Updating String Content
-1. String content can be edited through the UI
-2. Variables in strings must use `{{variable}}` syntax
-3. The system automatically tracks variable usage
+1. String content can be edited through the unified drawer interface
+2. Variables in strings use `{{variableName}}` syntax for embedding
+3. The system automatically tracks variable usage and inheritance
 
-### Managing Traits
-1. Create traits to define different contexts
-2. Assign variable values specific to each trait
-3. Use trait selector to preview strings with different values 
+### Managing Conditionals
+1. Convert any string to a conditional container using the Variable Type dropdown
+2. Add multiple spawns (variations) to the conditional
+3. Each spawn automatically gets dimension values for filtering
+
+### Working with Dimensions
+1. Dimensions are created automatically when conditionals are made
+2. Use the filter sidebar to view strings by dimension values
+3. Dimension inheritance happens automatically through variable embedding

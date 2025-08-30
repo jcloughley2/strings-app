@@ -307,7 +307,7 @@ export default function ProjectDetailPage() {
     variableMatches.forEach((match) => {
       const variableName = match.slice(2, -2);
       
-      // Check string variables only (trait variables no longer exist)
+      // Check string variables only
       const stringVariable = project.strings?.find((str: any) => 
         str.effective_variable_name === variableName || 
         str.variable_name === variableName || 
@@ -351,8 +351,7 @@ export default function ProjectDetailPage() {
       const conditionalName = str.effective_variable_name || str.variable_hash;
       const spawns = findSpawnsForConditional(conditionalName);
       
-      console.log('DEBUG: Loading spawns for conditional:', conditionalName);
-      console.log('DEBUG: Found spawns:', spawns);
+
       
       setConditionalSpawns(spawns);
       
@@ -395,7 +394,7 @@ export default function ProjectDetailPage() {
               }),
             });
           } catch (err) {
-            console.error(`Failed to create pending string variable ${variableName}:`, err);
+
           }
         }
         
@@ -404,7 +403,7 @@ export default function ProjectDetailPage() {
         setProject(sortProjectStrings(updatedProject));
       }
     } catch (err) {
-      console.error('Failed to create pending variables:', err);
+
     }
     
     // Clear dialog state
@@ -465,7 +464,7 @@ export default function ProjectDetailPage() {
                 method: 'DELETE',
               });
             } catch (err) {
-              console.error('Failed to delete spawn:', err);
+
             }
           }
         }
@@ -523,7 +522,7 @@ export default function ProjectDetailPage() {
       setPendingConversionType(null);
 
     } catch (error) {
-      console.error('Error during conversion:', error);
+
       toast.error('Failed to convert string. Please try again.');
     }
   };
@@ -590,7 +589,7 @@ export default function ProjectDetailPage() {
     if (str.is_conditional_container) {
       const conditionalName = str.effective_variable_name || str.variable_hash;
       spawns = findSpawnsForConditional(conditionalName);
-      console.log('DEBUG: Loading spawns for conditional container:', conditionalName, spawns);
+
     }
     
     const newDrawer = {
@@ -621,7 +620,7 @@ export default function ProjectDetailPage() {
           body: JSON.stringify({
             is_conditional_container: true
           }),
-        }).catch(err => console.warn('Failed to auto-repair conditional container flag:', err));
+        }).catch(err => {});
       }
     }
     
@@ -680,7 +679,7 @@ export default function ProjectDetailPage() {
         
         toast.success('New variable created!');
       } catch (err) {
-        console.error('Failed to save temporary string:', err);
+
         toast.error('Failed to create new variable. Please try again.');
         return; // Don't close drawer if save failed
       }
@@ -708,11 +707,11 @@ export default function ProjectDetailPage() {
     try {
       if (drawer.isEditingConditional) {
         // Handle conditional saving logic
-        console.log('DEBUG: Saving conditional in cascading drawer');
+
         
         // First, convert the existing string to a conditional container if needed
         if (!drawer.stringData.is_conditional_container) {
-          console.log('DEBUG: Converting existing string to conditional container');
+
           await apiFetch(`/api/strings/${drawer.stringData.id}/`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -726,7 +725,7 @@ export default function ProjectDetailPage() {
         }
         
         const conditionalName = drawer.stringData.effective_variable_name || drawer.stringData.variable_hash;
-        console.log('DEBUG: Conditional name:', conditionalName);
+
         
         // Create dimension for the conditional (if it doesn't already exist)
         const latestProject = await apiFetch(`/api/projects/${id}/`);
@@ -734,7 +733,7 @@ export default function ProjectDetailPage() {
         
         if (!existingDimension) {
           try {
-            console.log('DEBUG: Creating dimension for conditional:', conditionalName);
+
             await apiFetch('/api/dimensions/', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -744,17 +743,16 @@ export default function ProjectDetailPage() {
               }),
             });
           } catch (dimensionError) {
-            console.error('DEBUG: Dimension creation failed:', dimensionError);
+
             // Continue anyway - the dimension might have been created by another process
           }
         }
         
         // Debug: Check spawns state
-        console.log('DEBUG: drawer.conditionalSpawns:', drawer.conditionalSpawns);
-        console.log('DEBUG: drawer.conditionalSpawns.length:', drawer.conditionalSpawns.length);
+
         
         if (drawer.conditionalSpawns.length === 0) {
-          console.log('DEBUG: No spawns found, this might be the issue!');
+
           toast.error('No spawns found. Please switch to conditional mode first.');
           return;
         }
@@ -804,7 +802,7 @@ export default function ProjectDetailPage() {
         });
 
         const savedSpawns = await Promise.all(stringPromises);
-        console.log('DEBUG: Saved spawns:', savedSpawns);
+
         
         // Create dimension values for each spawn
         const projectForDimensions = await apiFetch(`/api/projects/${id}/`);
@@ -836,7 +834,7 @@ export default function ProjectDetailPage() {
             }),
           });
               
-              console.log('DEBUG: Created dimension value and link for spawn:', spawnName);
+
             } catch (error) {
               console.error('DEBUG: Failed to create dimension value for spawn:', spawnName, error);
               // Continue with other spawns even if one fails
@@ -987,26 +985,7 @@ export default function ProjectDetailPage() {
   const handleNestedStringSplitSubmit = async () => {
     const conditionalName = editingNestedString.effective_variable_name || editingNestedString.variable_hash;
     
-    // Debug logging
-    console.log('=== SPLIT VARIABLE SUBMIT DEBUG ===');
-    console.log('conditionalName:', conditionalName);
-    console.log('editingNestedString:', editingNestedString);
-    console.log('nestedStringSpawns length:', nestedStringSpawns.length);
-    console.log('Current nestedStringSpawns state:', nestedStringSpawns);
-    
-    // Log each spawn's content in detail
-    nestedStringSpawns.forEach((spawn, index) => {
-      console.log(`Spawn ${index + 1}:`, {
-        id: spawn.id,
-        content: spawn.content,
-        contentType: typeof spawn.content,
-        contentLength: spawn.content?.length,
-        trimmedContent: spawn.content?.trim(),
-        trimmedLength: spawn.content?.trim()?.length,
-        variableName: spawn.variableName,
-        isConditional: spawn.isConditional
-      });
-    });
+
     
     // Validate that all spawns have content
     const emptySpawns = nestedStringSpawns.filter(spawn => {
@@ -1015,7 +994,6 @@ export default function ProjectDetailPage() {
     });
     
     if (emptySpawns.length > 0) {
-      console.error('Empty spawns found:', emptySpawns);
       toast.error(`All spawns must have content before splitting. Found ${emptySpawns.length} empty spawn(s).`);
       return;
     }
@@ -1027,25 +1005,18 @@ export default function ProjectDetailPage() {
     });
     
     if (invalidSpawns.length > 0) {
-      console.error('Invalid spawns found:', invalidSpawns);
       toast.error(`Some spawns have invalid content. Please check all spawn content.`);
       return;
     }
     
-    // FINAL CHECK: Re-validate spawns right before API calls
-    console.log('=== FINAL VALIDATION BEFORE API CALLS ===');
+    // Final validation before API calls
     const finalEmptySpawns = nestedStringSpawns.filter(spawn => {
       const content = spawn.content;
-      const isEmpty = !content || typeof content !== 'string' || content.trim() === '';
-      if (isEmpty) {
-        console.error('FINAL CHECK: Found empty spawn:', spawn);
-      }
-      return isEmpty;
+      return !content || typeof content !== 'string' || content.trim() === '';
     });
     
     if (finalEmptySpawns.length > 0) {
-      console.error('FINAL CHECK: Still have empty spawns after validation!', finalEmptySpawns);
-      toast.error(`FINAL CHECK: Found ${finalEmptySpawns.length} empty spawn(s) right before API call!`);
+      toast.error(`Found ${finalEmptySpawns.length} empty spawn(s) before API call. Please check all spawn content.`);
       return;
     }
     
@@ -1055,7 +1026,6 @@ export default function ProjectDetailPage() {
       
       if (!newDimension) {
         // Create new dimension
-        console.log('Creating new dimension:', conditionalName);
         newDimension = await apiFetch('/api/dimensions/', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1064,22 +1034,15 @@ export default function ProjectDetailPage() {
             project: parseInt(id as string),
           }),
         });
-      } else {
-        console.log('Using existing dimension:', conditionalName);
       }
 
       // Step 2: Create string variables for each spawn (check if they exist first)
-      console.log('=== CREATING STRING VARIABLES ===');
+
       const stringPromises = nestedStringSpawns.map(async (spawn, index) => {
         const spawnName = `${conditionalName}_${index + 1}`;
         const safeContent = spawn.content?.trim() || `Default content for ${spawnName}`;
         
-        console.log(`Processing spawn ${index + 1}:`, {
-          originalContent: spawn.content,
-          safeContent: safeContent,
-          spawnName: spawnName,
-          isConditional: spawn.isConditional
-        });
+
         
         // Check if string with this variable name already exists
         const existingString = project.strings?.find((str: any) => {
@@ -1088,13 +1051,11 @@ export default function ProjectDetailPage() {
         });
         
         if (existingString) {
-          console.log(`String spawn already exists: ${spawnName}`);
           return Promise.resolve(existingString);
         }
         
         // Final safety check before API call
         if (!safeContent || safeContent.length === 0) {
-          console.error(`ERROR: Spawn ${spawnName} has no content!`);
           throw new Error(`Spawn ${spawnName} has no content`);
         }
         
@@ -1105,7 +1066,7 @@ export default function ProjectDetailPage() {
           project: parseInt(id as string),
         };
         
-        console.log(`API request for spawn ${index + 1}:`, requestBody);
+
         
         return apiFetch('/api/strings/', {
           method: 'POST',
@@ -1114,13 +1075,13 @@ export default function ProjectDetailPage() {
         });
       });
 
-      console.log('=== EXECUTING API CALLS ===');
+
       let stringResponses;
       try {
         stringResponses = await Promise.all(stringPromises);
-        console.log('All string creation API calls succeeded:', stringResponses);
+
       } catch (error) {
-        console.error('ERROR in string creation API calls:', error);
+
         throw error;
       }
 
@@ -1132,7 +1093,6 @@ export default function ProjectDetailPage() {
         const existingDimValue = newDimension.values?.find((dv: any) => dv.value === spawnName);
         
         if (!existingDimValue) {
-          console.log('Creating dimension value:', spawnName);
           return apiFetch('/api/dimension-values/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2022,7 +1982,7 @@ export default function ProjectDetailPage() {
 
 
 
-   // Trait dialog handlers
+
 
 
    // Dimension dialog handlers
@@ -2395,9 +2355,9 @@ export default function ProjectDetailPage() {
     return [];
   };
 
-  // Helper function to get variable value with dimension precedence over trait values and blank
+  // Helper function to get variable value with dimension precedence
   const getVariableValueWithDimensionPrecedence = (variable: any) => {
-    // Check for dimension values only (traits are removed)
+    // Check for dimension values only
     for (const [dimensionId, selectedValue] of Object.entries(selectedDimensionValues)) {
       if (selectedValue) {
         // Find dimension value in this variable's dimension values
@@ -2498,7 +2458,7 @@ export default function ProjectDetailPage() {
 
   // Helper function to check if a variable has any value (dimension only)
   const variableHasAnyValue = (variable: any) => {
-    // Check dimension values only (traits removed)
+    // Check dimension values only
     for (const [dimensionId, selectedValue] of Object.entries(selectedDimensionValues)) {
       if (selectedValue) {
         const dimensionValueObj = project.dimensions
@@ -3022,7 +2982,7 @@ export default function ProjectDetailPage() {
               body: JSON.stringify({
                 name: variableName,
                 project: id,
-                variable_type: 'trait',
+                variable_type: 'string',
               }),
             });
             createdVariablesCount++;
@@ -3086,23 +3046,7 @@ export default function ProjectDetailPage() {
     const variableNames = variableMatches.map(match => match.slice(2, -2));
     
     for (const variableName of variableNames) {
-      // Check trait variables
-      const traitVariable = project.variables?.find((v: any) => v.name === variableName);
-      if (traitVariable && traitVariable.dimension_values) {
-        // Find the dimension value object for this dimension and value
-        const dimension = project.dimensions?.find((d: any) => d.id === dimensionId);
-        const dimensionValueObj = dimension?.values?.find((dv: any) => dv.value === dimensionValue);
-        
-        if (dimensionValueObj) {
-          // Check if this variable has a value for this dimension value
-          const hasValue = traitVariable.dimension_values.some((vdv: any) => 
-            vdv.dimension_value === dimensionValueObj.id
-          );
-          if (hasValue) {
-            return true;
-          }
-        }
-      }
+
       
       // Check string variables
       const stringVariable = project.strings?.find((str: any) => 
@@ -5627,7 +5571,7 @@ export default function ProjectDetailPage() {
 
 
 
-      {/* Trait functionality has been removed */}
+
 
       {/* Create/Edit Dimension Sheet */}
       <Sheet open={createDialog === "Dimension" || !!editingDimension} onOpenChange={v => !v && closeDimensionDialog()}>

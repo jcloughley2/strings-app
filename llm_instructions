@@ -168,7 +168,7 @@ Nested String 2 (Stacked Drawer)
 - `DELETE /api/strings/{id}/` - Delete string
 
 ### Other Entities
-- Traits, Variables, Dimensions follow standard REST patterns
+- Dimensions, DimensionValues, StringDimensionValues follow standard REST patterns
 - All support embedding `{{variableName}}` in content fields
 
 ---

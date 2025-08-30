@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter } from "@/components/ui/dialog";
@@ -7,16 +7,17 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/com
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
 import { Card } from "@/components/ui/card";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectSeparator } from "@/components/ui/select";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 
-import { Edit2, Trash2, Type, Bookmark, Spool, Signpost, Plus, X, Globe, SwatchBook, MoreHorizontal, Download, Upload, Copy, ArrowLeft, Folder } from "lucide-react";
+
+import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Globe } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
@@ -1892,30 +1893,7 @@ export default function ProjectDetailPage() {
     }
   };
 
-  // Wrap selected text with conditional
-  const wrapWithConditional = (conditionalName: string) => {
-    if (!textareaRef || !selectedText) return;
-    
-    const wrappedText = `[[${conditionalName}]]${selectedText}[[/]]`;
-    const newContent = 
-      stringContent.substring(0, selectionStart) + 
-      wrappedText + 
-      stringContent.substring(selectionEnd);
-    
-    setStringContent(newContent);
-    setSelectedText("");
-    
-    // Focus back to textarea and set cursor after wrapped text
-    setTimeout(() => {
-      if (textareaRef) {
-        textareaRef.focus();
-        textareaRef.setSelectionRange(
-          selectionStart + wrappedText.length,
-          selectionStart + wrappedText.length
-        );
-      }
-         }, 0);
-   };
+
 
   // String deletion handlers
   const openDeleteStringDialog = (str: any) => {
@@ -1928,32 +1906,10 @@ export default function ProjectDetailPage() {
 
 
 
-  const checkStringUsage = (stringId: number) => {
-    // Check if string is referenced by any string variables
-    return (project.variables || []).some((variable: any) => {
-      return variable.variable_type === 'string' && 
-             variable.referenced_string && 
-             variable.referenced_string.toString() === stringId.toString();
-    });
-  };
+
 
   const handleDeleteString = async () => {
     if (!deleteStringDialog) return;
-
-    // Check if string is being referenced by any string variables
-    const isReferenced = checkStringUsage(deleteStringDialog.id);
-    
-    if (isReferenced) {
-      const referencingVariables = (project.variables || []).filter((variable: any) => 
-        variable.variable_type === 'string' && 
-        variable.referenced_string && 
-        variable.referenced_string.toString() === deleteStringDialog.id.toString()
-      );
-      
-      const variableNames = referencingVariables.map((v: any) => v.name).join(', ');
-      toast.error(`Cannot delete this string because it's referenced by string variable${referencingVariables.length > 1 ? 's' : ''}: ${variableNames}. Please update or delete the variable${referencingVariables.length > 1 ? 's' : ''} first.`);
-      return;
-    }
 
     try {
       await apiFetch(`/api/strings/${deleteStringDialog.id}/`, {
@@ -2207,10 +2163,7 @@ export default function ProjectDetailPage() {
       const variableNames = variableMatches.map(match => match.slice(2, -2)); // Remove {{ and }}
       const uniqueVariableNames = [...new Set(variableNames)];
       
-      // Find all variables that match the content
-      const detectedVariables = (project.variables || []).filter((variable: any) => 
-        uniqueVariableNames.includes(variable.name)
-      );
+
       
       const stringData = {
         content: stringContent,
@@ -2218,7 +2171,7 @@ export default function ProjectDetailPage() {
         variable_name: stringVariableName || null,
         is_conditional: stringIsConditional,
         is_conditional_container: stringIsConditional, // When marked as conditional, it should also be a conditional container
-        variables: detectedVariables.map((v: any) => v.id),
+
       };
 
       let stringResponse;
@@ -2967,32 +2920,9 @@ export default function ProjectDetailPage() {
         return;
       }
 
-      // Get existing variable names
-      const existingVariableNames = new Set((project.variables || []).map((v: any) => v.name));
-      const newVariables = Array.from(allVariables).filter(name => !existingVariableNames.has(name));
 
-      // Create new variables first
-      let createdVariablesCount = 0;
-      if (newVariables.length > 0) {
-        const variablePromises = newVariables.map(async (variableName) => {
-          try {
-            await apiFetch('/api/variables/', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                name: variableName,
-                project: id,
-                variable_type: 'string',
-              }),
-            });
-            createdVariablesCount++;
-          } catch (err) {
-            console.error(`Failed to create variable ${variableName}:`, err);
-          }
-        });
-        
-        await Promise.all(variablePromises);
-      }
+
+
 
       // Create strings
       let createdStringsCount = 0;
@@ -3019,8 +2949,7 @@ export default function ProjectDetailPage() {
       setProject(sortProjectStrings(updatedProject));
 
       // Show success message
-      const message = `Import complete! Created ${createdStringsCount} strings${newVariables.length > 0 ? ` and ${createdVariablesCount} variables` : ''}`;
-      toast.success(message);
+      toast.success(`Import complete! Created ${createdStringsCount} strings`);
 
       closeImportDialog();
     } catch (error) {
@@ -4492,24 +4421,24 @@ export default function ProjectDetailPage() {
                                 isEditingConditional: isConditional // Set this flag for save logic
                               };
                             
-                                                        // When switching TO conditional mode, initialize spawns if empty
+                            // When switching TO conditional mode, initialize spawns if empty
                             if (isConditional && drawer.conditionalSpawns.length === 0) {
                                 console.log('DEBUG: Initializing default spawn for cascading drawer');
                                 const defaultSpawn = {
-                                  id: `temp-spawn-${Date.now()}`,
+                                id: `temp-spawn-${Date.now()}`,
                                   content: drawer.content || "Default spawn content",
                                   variable_name: null,
                                   variable_hash: null,
                                   effective_variable_name: null,
-                                  is_conditional: false,
-                                  is_conditional_container: false,
-                                  _isTemporary: true
-                                };
+                                is_conditional: false,
+                                is_conditional_container: false,
+                                _isTemporary: true
+                              };
                                 updates.conditionalSpawns = [defaultSpawn];
                                 console.log('DEBUG: Created default spawn:', defaultSpawn);
-                              }
+                            }
                               console.log('DEBUG: Updating cascading drawer with:', updates);
-                              updateCascadingDrawer(drawer.id, updates);
+                            updateCascadingDrawer(drawer.id, updates);
                           }} 
                           >
                             <SelectTrigger>
@@ -4912,40 +4841,14 @@ export default function ProjectDetailPage() {
               </div>
             )}
             
-            {deleteStringDialog && (() => {
-              const referencingVariables = (project.variables || []).filter((variable: any) => 
-                variable.variable_type === 'string' && 
-                variable.referenced_string && 
-                variable.referenced_string.toString() === deleteStringDialog.id.toString()
-              );
-              
-              if (referencingVariables.length > 0) {
-                return (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-                    <p className="text-sm text-red-800">
-                      <strong>Cannot delete:</strong> This string is referenced by the following string variable{referencingVariables.length > 1 ? 's' : ''}:
-                    </p>
-                    <ul className="mt-2 text-sm text-red-700">
-                      {referencingVariables.map((variable: any) => (
-                        <li key={variable.id} className="ml-4">• {variable.name}</li>
-                      ))}
-                    </ul>
-                    <p className="text-sm text-red-800 mt-2">
-                      Please update or delete the variable{referencingVariables.length > 1 ? 's' : ''} first.
-                    </p>
-                  </div>
-                );
-              } else {
-                return (
+            {deleteStringDialog && (
                   <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
                     <p className="text-sm text-blue-800">
-                      <strong>Note:</strong> Deleting this string will not affect any existing variables. 
-                      No string variables currently reference this string.
+                  <strong>Note:</strong> This string will be permanently deleted. 
+                  Any references to this string in other content will need to be updated manually.
                     </p>
                   </div>
-                );
-              }
-            })()}
+            )}
             <div className="flex justify-end gap-2 mt-6">
               <Button type="button" variant="secondary" onClick={closeDeleteStringDialog}>
                 Cancel
@@ -4954,7 +4857,7 @@ export default function ProjectDetailPage() {
                 type="button" 
                 variant="destructive" 
                 onClick={handleDeleteString}
-                disabled={deleteStringDialog && checkStringUsage(deleteStringDialog.id)}
+
               >
                 Delete String
               </Button>

@@ -326,6 +326,94 @@ class ProjectViewSet(viewsets.ModelViewSet):
         
         return processed_content
 
+    @action(detail=True, methods=['post'], url_path='duplicate')
+    def duplicate(self, request, pk=None):
+        """
+        Duplicate a project with all its strings, dimensions, and relationships.
+        Creates a new project with "Copy of " prepended to the name.
+        """
+        original_project = self.get_object()
+        logger.info(f"Starting duplication of project {original_project.id}: {original_project.name}")
+        
+        # Create the new project
+        new_project = Project.objects.create(
+            name=f"Copy of {original_project.name}",
+            description=original_project.description,
+            user=self.request.user
+        )
+        logger.info(f"Created new project {new_project.id}: {new_project.name}")
+        
+        # Dictionary to map old dimension IDs to new dimension IDs
+        dimension_mapping = {}
+        
+        # Duplicate all dimensions
+        dimensions_count = original_project.dimensions.count()
+        logger.info(f"Duplicating {dimensions_count} dimensions")
+        
+        for dimension in original_project.dimensions.all():
+            new_dimension = Dimension.objects.create(
+                name=dimension.name,
+                project=new_project
+            )
+            dimension_mapping[dimension.id] = new_dimension.id
+            
+            # Duplicate all dimension values for this dimension
+            dim_values_count = dimension.values.count()
+            for dim_value in dimension.values.all():
+                DimensionValue.objects.create(
+                    dimension=new_dimension,
+                    value=dim_value.value
+                )
+            logger.info(f"Duplicated dimension '{dimension.name}' with {dim_values_count} values")
+        
+        # Dictionary to map old string IDs to new string IDs
+        string_mapping = {}
+        
+        # Duplicate all strings
+        strings_count = original_project.strings.count()
+        logger.info(f"Duplicating {strings_count} strings")
+        
+        for string in original_project.strings.all():
+            try:
+                # Create new string without variable_hash to let it auto-generate
+                new_string = String.objects.create(
+                    content=string.content,
+                    project=new_project,
+                    variable_name=string.variable_name,
+                    is_conditional=string.is_conditional,
+                    is_conditional_container=string.is_conditional_container
+                )
+                string_mapping[string.id] = new_string.id
+                logger.info(f"Duplicated string {string.id} -> {new_string.id} ('{string.effective_variable_name}')")
+                
+                # Duplicate string dimension values
+                sdv_count = string.dimension_values.count()
+                for sdv in string.dimension_values.all():
+                    try:
+                        # Find the corresponding new dimension and dimension value
+                        new_dimension_id = dimension_mapping[sdv.dimension_value.dimension.id]
+                        new_dimension = Dimension.objects.get(id=new_dimension_id)
+                        new_dimension_value = new_dimension.values.get(value=sdv.dimension_value.value)
+                        
+                        StringDimensionValue.objects.create(
+                            string=new_string,
+                            dimension_value=new_dimension_value
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to duplicate string dimension value: {e}")
+                        
+                logger.info(f"Duplicated {sdv_count} dimension values for string {new_string.effective_variable_name}")
+                
+            except Exception as e:
+                logger.error(f"Failed to duplicate string {string.id}: {e}")
+                raise
+        
+        logger.info(f"Duplication completed. New project {new_project.id} has {new_project.strings.count()} strings")
+        
+        # Return the new project data
+        serializer = self.get_serializer(new_project)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 class StringViewSet(viewsets.ModelViewSet):
     serializer_class = StringSerializer
     permission_classes = [permissions.IsAuthenticated]

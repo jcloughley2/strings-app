@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
@@ -22,6 +22,7 @@ import { toast } from "sonner";
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
+  const router = useRouter();
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -2627,6 +2628,24 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleDuplicateProject = async () => {
+    try {
+      toast.loading("Duplicating project...");
+      const duplicatedProject = await apiFetch(`/api/projects/${id}/duplicate/`, {
+        method: "POST",
+      });
+      
+      toast.dismiss();
+      toast.success(`Project duplicated successfully!`);
+      
+      // Navigate to the new project
+      router.push(`/projects/${duplicatedProject.id}`);
+    } catch (error: any) {
+      toast.dismiss();
+      toast.error(error.message || "Failed to duplicate project");
+    }
+  };
+
   const handleDownloadCSV = async () => {
     setDownloadLoading(true);
     try {
@@ -3053,6 +3072,12 @@ export default function ProjectDetailPage() {
               >
                 <Download className="h-4 w-4 mr-2" />
                 Download CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={handleDuplicateProject}
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Duplicate Project
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem 

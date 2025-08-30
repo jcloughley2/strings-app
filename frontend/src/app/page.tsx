@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/useAuth";
 import { useEffect, useState } from "react";
@@ -9,9 +10,11 @@ import { OverflowMenu } from "@/components/ui/menu";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 export default function Home() {
   const { isLoggedIn, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +45,27 @@ export default function Home() {
 
   function handleDelete(project: any) {
     setDeleteProject(project);
+  }
+
+  async function handleDuplicate(project: any) {
+    try {
+      toast.loading("Duplicating project...");
+      const duplicatedProject = await apiFetch(`/api/projects/${project.id}/duplicate/`, {
+        method: "POST",
+      });
+      
+      // Add the new project to the projects list
+      setProjects((prev) => [duplicatedProject, ...prev]);
+      
+      toast.dismiss();
+      toast.success(`Project duplicated successfully!`);
+      
+      // Navigate to the new project
+      router.push(`/projects/${duplicatedProject.id}`);
+    } catch (error: any) {
+      toast.dismiss();
+      toast.error(error.message || "Failed to duplicate project");
+    }
   }
 
   async function saveEdit() {
@@ -140,6 +164,12 @@ export default function Home() {
                           onClick={(e) => { e.preventDefault(); handleEdit(project); }}
                         >
                           Edit project
+                        </button>
+                        <button
+                          className="w-full text-left px-4 py-2 hover:bg-accent rounded"
+                          onClick={(e) => { e.preventDefault(); handleDuplicate(project); }}
+                        >
+                          Duplicate project
                         </button>
                         <button
                           className="w-full text-left px-4 py-2 hover:bg-accent rounded text-red-600"

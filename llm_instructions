@@ -75,11 +75,12 @@
 - **File Behavior**: Can be referenced, inherit properties, exist independently
 
 ### Conditionals (Directory System)  
-- **Convert Any String**: Turn into container with multiple spawns
-- **Automatic Setup**: Creates dimension and spawns with `{name}_1`, `{name}_2` pattern
+- **Convert Any String**: Turn into container with multiple spawns (works in both main and cascading drawers)
+- **Automatic Setup**: Creates dimension and spawns with random hash names (no sequential naming)
 - **Idempotent**: Safe to retry operations without duplicates
-- **Tab Interface**: All editing uses "String" vs "Conditional" tabs (no toggle switches)
+- **Select Dropdown Interface**: All editing uses "Variable Type" select dropdown (String/Conditional)
 - **Auto-Detection**: System repairs missing `is_conditional_container` flags automatically
+- **Visual Distinction**: Orange badges for conditionals, purple badges for strings
 
 ### Variable Embedding
 - **Syntax**: `{{variableName}}` in any content
@@ -92,8 +93,8 @@
 ## User Interface
 
 ### Layout (Three Panels)
-- **Left**: Filter Sidebar (360px) - dimensions only
-- **Center**: Main Canvas - all strings including conditionals, semantic toggles
+- **Left**: Filter Sidebar (360px) - dimensions only (traits removed)
+- **Center**: Main Canvas - all strings including conditionals and embedded strings, orange/purple badges
 - **Right**: Variables Sidebar (collapsible) - dimension variable management
 
 ### Cascading Drawer System ⭐
@@ -125,21 +126,23 @@ Nested String 2 (Stacked Drawer)
 ```
 
 ### String Editing Interface ⭐
-**UNIFIED INTERFACE**: All variable editing (create/edit/nested) uses consistent pattern
+**UNIFIED INTERFACE**: All variable editing (create/edit/nested/cascading) uses consistent pattern
 
 #### Content Tab Structure
-- **Variable Type Selection**: Select dropdown for choosing String or Conditional mode
+- **Variable Type Selection**: Select dropdown for choosing String or Conditional mode (consistent across all drawer types)
   - **String Mode**: Text content editing + variable detection boxes
   - **Conditional Mode**: Spawn management with yellow/purple variable boxes
 - **Three Main Tabs**: Content, Dimensions, Advanced
-- **Variable Name Display**: Shows at top with type badges  
+- **Variable Name Display**: Shows at top with orange (conditional) or purple (string) badges
 - **ShadCN Close Buttons**: Single X button (removed custom duplicates)
+- **Consistent Interface**: Main drawer and cascading drawers use identical UI components
 
 #### Conditional Mode Features
 - **Spawn Variables**: Yellow boxes (new/temporary), purple boxes (existing)
-- **Add Spawn Button**: Creates new spawn with proper `{parent}_N` naming
+- **Add Spawn Button**: Creates new spawn with random hash naming (no sequential patterns)
 - **Auto-Container Detection**: Repairs `is_conditional_container` flag automatically
 - **Consistent Interactions**: All spawns clickable to open cascading drawers
+- **Conversion Support**: Can convert existing strings to conditionals in any drawer type
 
 ---
 
@@ -157,6 +160,7 @@ Nested String 2 (Stacked Drawer)
 - `GET /api/projects/{id}/` - Get project with all data
 - `PATCH /api/projects/{id}/` - Update project
 - `DELETE /api/projects/{id}/` - Delete project
+- `POST /api/projects/{id}/duplicate/` - Duplicate project with all content
 
 ### Strings (Core API)
 - `POST /api/strings/` - Create string (auto-variable)
@@ -173,8 +177,8 @@ Nested String 2 (Stacked Drawer)
 
 ### String Variables
 - **Every String is Variable**: No opt-in, automatic creation
-- **Purple Badges**: Always show `{{effectiveVariableName}}`
-- **Root-Level Focus**: Hide embedded strings from main view
+- **Color-Coded Badges**: Orange for conditionals, purple for strings - always show `{{effectiveVariableName}}`
+- **All Strings Visible**: Show all strings including embedded ones in main canvas
 - **Copy Functionality**: Include copy button with `{{name}}` format
 
 ### Variable Embedding
@@ -187,9 +191,10 @@ Nested String 2 (Stacked Drawer)
 - **Simple Stacking**: Use z-index, remove complex transforms
 - **Variable Detection**: Show yellow (new) and purple (existing) boxes
 - **Individual Controls**: Each drawer has own save/cancel
-- **Unified Interface**: Same String/Conditional tabs across all editing contexts
+- **Unified Interface**: Same Variable Type select dropdown across all editing contexts (main/cascading)
 - **Auto-Repair**: Automatically fixes `is_conditional_container` flags for existing variables
 - **ShadCN Integration**: Use built-in close buttons only
+- **Conversion Support**: Can convert strings to conditionals in cascading drawers with full spawn creation
 
 ### Content Validation
 - **Multiple Layers**: Frontend + backend validation
@@ -291,12 +296,23 @@ const variableNames = matches.map(match => match.slice(2, -2));
 - **✅ Streamlined Filtering**: Removed conditional variable filtering from export and processing functions
 - **✅ Removed Traits System**: Completely eliminated traits, trait variables, and trait-based filtering from the application
 
+### Additional Updates (Latest)
+- **✅ Show All Strings**: Embedded strings now appear independently in main canvas (no more filtering)
+- **✅ Visual Distinction**: Orange badges for conditionals, purple badges for strings throughout the app
+- **✅ Consistent UI Components**: All drawer types (main, cascading, nested) use identical select dropdown interface
+- **✅ Fixed Conversion Logic**: String-to-conditional conversion works properly in all drawer contexts
+- **✅ Spawn Loading**: Existing conditionals properly load their spawn children when edited
+- **✅ Complete Workflow**: Cascading drawer conversions create dimensions, spawns, and relationships correctly
+- **✅ Project Duplication**: Full project duplication with "Copy of" naming and complete data preservation
+
 ### Benefits
 - **Cleaner Interface**: Reduced sidebar complexity by removing redundant conditional management and traits
-- **Unified Workflow**: All string management happens in one place (main canvas)
-- **Better UX**: Select dropdown is more compact and mobile-friendly than tabs
+- **Unified Workflow**: All string management happens in one place (main canvas) with consistent interfaces
+- **Better UX**: Select dropdown is more compact and mobile-friendly than tabs, works across all drawer types
+- **Complete Visibility**: All strings visible independently, better understanding of project structure
 - **Simplified Logic**: Fewer filtering mechanisms to maintain, no trait complexity
 - **Focused Architecture**: System now focuses purely on string variables and dimensions
+- **Robust Conversions**: String-to-conditional conversion works reliably in any editing context
 
 ---
 

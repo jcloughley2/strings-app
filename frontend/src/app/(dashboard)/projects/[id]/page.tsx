@@ -346,26 +346,15 @@ export default function ProjectDetailPage() {
     // Set the content sub-tab based on whether it's a conditional
     if (isConditionalContainer) {
               setContentSubTab("conditional");
-      // Load all its spawns for conditional editing
+            // Load all its spawns for conditional editing using dimension relationships
       const conditionalName = str.effective_variable_name || str.variable_hash;
-      const spawns = project.strings?.filter((s: any) => {
-        const effectiveName = s.effective_variable_name || s.variable_hash;
-        return effectiveName.startsWith(`${conditionalName}_`) && 
-               /^.+_\d+$/.test(effectiveName); // Matches pattern like "name_1", "name_2", etc.
-      }) || [];
+      const spawns = findSpawnsForConditional(conditionalName);
       
-      // Sort spawns by their number
-      spawns.sort((a: any, b: any) => {
-        const aName = a.effective_variable_name || a.variable_hash;
-        const bName = b.effective_variable_name || b.variable_hash;
-        const aMatch = aName.match(/_(\d+)$/);
-        const bMatch = bName.match(/_(\d+)$/);
-        const aNum = aMatch ? parseInt(aMatch[1]) : 0;
-        const bNum = bMatch ? parseInt(bMatch[1]) : 0;
-        return aNum - bNum;
-      });
+      console.log('DEBUG: Loading spawns for conditional:', conditionalName);
+      console.log('DEBUG: Found spawns:', spawns);
       
       setConditionalSpawns(spawns);
+      
       setEditingConditional(true);
     } else {
       setContentSubTab("string");
@@ -610,11 +599,7 @@ export default function ProjectDetailPage() {
         // Check if this should be a conditional container but isn't marked as one
     if (!str.is_conditional_container && str.is_conditional) {
       const conditionalName = str.effective_variable_name || str.variable_hash;
-      const potentialSpawns = project.strings?.filter((s: any) => {
-        const effectiveName = s.effective_variable_name || s.variable_hash;
-        return effectiveName.startsWith(`${conditionalName}_`) && 
-               /^.+_\d+$/.test(effectiveName);
-      }) || [];
+      const potentialSpawns = findSpawnsForConditional(conditionalName);
       
       if (potentialSpawns.length > 0) {
         // Auto-repair: mark as conditional container since it has spawns
@@ -634,11 +619,7 @@ export default function ProjectDetailPage() {
     // If it's a conditional container, load its spawns
     if (str.is_conditional_container) {
       const conditionalName = str.effective_variable_name || str.variable_hash;
-      const spawns = project.strings?.filter((s: any) => {
-        const effectiveName = s.effective_variable_name || s.variable_hash;
-        return effectiveName.startsWith(`${conditionalName}_`) && 
-               /^.+_\d+$/.test(effectiveName);
-      }) || [];
+      const spawns = findSpawnsForConditional(conditionalName);
       
       spawns.sort((a: any, b: any) => {
         const aName = a.effective_variable_name || a.variable_hash;
@@ -1359,12 +1340,12 @@ export default function ProjectDetailPage() {
             const spawnName = spawn.effective_variable_name || spawn.variable_hash;
             return apiFetch('/api/dimension-values/', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
                 dimension: dimension.id,
                 value: spawnName,
-              }),
-            });
+          }),
+        });
           });
           
           await Promise.all(dimensionValuePromises);
@@ -1415,9 +1396,9 @@ export default function ProjectDetailPage() {
         
         setConditionalSpawns(prev => [...prev, newSpawn]);
         toast.success('Added new spawn');
-        return;
-      }
-      
+      return;
+    }
+    
       // For existing conditionals, find the existing dimension
       const existingDimension = project.dimensions?.find((dim: any) => dim.name === conditionalName);
       if (!existingDimension) {
@@ -1502,11 +1483,7 @@ export default function ProjectDetailPage() {
         }
 
         // Step 2: Find all existing spawns for this conditional
-        const existingSpawns = project.strings?.filter((s: any) => {
-          const effectiveName = s.effective_variable_name || s.variable_hash;
-          return effectiveName.startsWith(`${conditionalName}_`) && 
-                 /^.+_\d+$/.test(effectiveName); // Matches pattern like "name_1", "name_2", etc.
-        }) || [];
+        const existingSpawns = findSpawnsForConditional(conditionalName);
 
         // Step 3: Determine the next spawn number
         let nextSpawnNumber = 1;
@@ -2294,6 +2271,25 @@ export default function ProjectDetailPage() {
     }
   };
 
+  // Helper function to find spawns for a conditional using dimension relationships
+  const findSpawnsForConditional = (conditionalName: string) => {
+    // Find the dimension for this conditional
+    const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
+    
+    if (dimension && dimension.values) {
+      // Get all spawn variable names from dimension values
+      const spawnVariableNames = dimension.values.map((dv: any) => dv.value);
+      
+      // Find all strings that match these spawn variable names
+      return project.strings?.filter((s: any) => {
+        const effectiveName = s.effective_variable_name || s.variable_hash;
+        return spawnVariableNames.includes(effectiveName) && !s.is_conditional_container;
+      }) || [];
+    }
+    
+    return [];
+  };
+
   // Helper function to get variable value with dimension precedence over trait values and blank
   const getVariableValueWithDimensionPrecedence = (variable: any) => {
     // Check for dimension values only (traits are removed)
@@ -2431,24 +2427,24 @@ export default function ProjectDetailPage() {
       }
       
       // Expand string variables but leave dimension variables as {{variable}}
-      const variableMatches = processedContent.match(/{{([^}]+)}}/g) || [];
-      let result = processedContent;
-      
-      variableMatches.forEach((match) => {
-        const variableName = match.slice(2, -2);
-        const stringVariable = project.strings?.find((str: any) => 
-          str.effective_variable_name === variableName || 
-          str.variable_name === variableName || 
-          str.variable_hash === variableName
-        );
+        const variableMatches = processedContent.match(/{{([^}]+)}}/g) || [];
+        let result = processedContent;
         
-        if (stringVariable) {
-          const regex = new RegExp(`{{${variableName}}}`, 'g');
-          result = result.replace(regex, stringVariable.content);
-        }
-      });
-      
-      return result;
+        variableMatches.forEach((match) => {
+          const variableName = match.slice(2, -2);
+          const stringVariable = project.strings?.find((str: any) => 
+            str.effective_variable_name === variableName || 
+            str.variable_name === variableName || 
+            str.variable_hash === variableName
+          );
+          
+          if (stringVariable) {
+            const regex = new RegExp(`{{${variableName}}}`, 'g');
+            result = result.replace(regex, stringVariable.content);
+          }
+        });
+        
+        return result;
     }
     
     // In highlighter mode, return JSX with badges
@@ -2465,117 +2461,117 @@ export default function ProjectDetailPage() {
     // First process conditionals
     const conditionalProcessedContent = processConditionalVariables(content);
     
-    // Behavior depends on showStringVariables toggle
-    if (showStringVariables) {
-      // Show all variables as grey badges in {{variable}} format
-      const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
-      return parts.map((part: string, index: number) => {
-        if (part.match(/{{[^}]+}}/)) {
-          const variableName = part.slice(2, -2); // Remove {{ and }}
-          const stringVariable = project.strings?.find((str: any) => 
-            str.effective_variable_name === variableName || 
-            str.variable_name === variableName || 
-            str.variable_hash === variableName
-          );
-          return (
-            <Badge 
-              key={`${keyPrefix}${depth}-${index}-${variableName}`} 
-              variant="secondary" 
+      // Behavior depends on showStringVariables toggle
+      if (showStringVariables) {
+        // Show all variables as grey badges in {{variable}} format
+        const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
+        return parts.map((part: string, index: number) => {
+          if (part.match(/{{[^}]+}}/)) {
+            const variableName = part.slice(2, -2); // Remove {{ and }}
+            const stringVariable = project.strings?.find((str: any) => 
+              str.effective_variable_name === variableName || 
+              str.variable_name === variableName || 
+              str.variable_hash === variableName
+            );
+            return (
+              <Badge 
+                key={`${keyPrefix}${depth}-${index}-${variableName}`} 
+                variant="secondary" 
               className="mx-1 transition-colors cursor-default"
-              title={
-                stringVariable 
-                  ? `String variable \"${variableName}\" - tied to a string` 
-                  : `Variable \"${variableName}\" not found`
-              }
-            >
-              {part}
-            </Badge>
-          );
-        }
-        return part;
-      });
-    } else {
+                title={
+                  stringVariable 
+                    ? `String variable \"${variableName}\" - tied to a string` 
+                    : `Variable \"${variableName}\" not found`
+                }
+              >
+                {part}
+              </Badge>
+            );
+          }
+          return part;
+        });
+      } else {
       // Show string variables expanded (recursively)
-      const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
-      const result: (string | React.ReactNode)[] = [];
-      parts.forEach((part: string, index: number) => {
-        if (part.match(/{{[^}]+}}/)) {
-          const variableName = part.slice(2, -2); // Remove {{ and }}
-          const stringVariable = project.strings?.find((str: any) => 
-            str.effective_variable_name === variableName || 
-            str.variable_name === variableName || 
-            str.variable_hash === variableName
-          );
-          if (stringVariable) {
-            if (stringVariable.is_conditional_container) {
-              // For conditionals, render as clickable tags (no underline)
-              result.push(
-                <Badge
-                  key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                  variant="outline"
-                  className="mx-1 cursor-pointer transition-colors bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 inline-flex items-center gap-1"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openEditInCascadingDrawer(stringVariable);
-                  }}
-                  title={`Click to edit conditional "${variableName}"`}
-                >
-                  <Folder className="h-3 w-3" />
-                  {`{{${variableName}}}`}
-                </Badge>
-              );
-            } else {
-              // For regular string variables, check if content is empty
-              if (!stringVariable.content || stringVariable.content.trim() === '') {
-                // For empty string variables, render as purple badge (like conditionals but purple)
+        const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
+        const result: (string | React.ReactNode)[] = [];
+        parts.forEach((part: string, index: number) => {
+          if (part.match(/{{[^}]+}}/)) {
+            const variableName = part.slice(2, -2); // Remove {{ and }}
+            const stringVariable = project.strings?.find((str: any) => 
+              str.effective_variable_name === variableName || 
+              str.variable_name === variableName || 
+              str.variable_hash === variableName
+            );
+            if (stringVariable) {
+              if (stringVariable.is_conditional_container) {
+                // For conditionals, render as clickable tags (no underline)
                 result.push(
                   <Badge
                     key={`${keyPrefix}${depth}-${index}-${variableName}`}
                     variant="outline"
-                    className="mx-1 cursor-pointer transition-colors bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 inline-flex items-center gap-1"
+                    className="mx-1 cursor-pointer transition-colors bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 inline-flex items-center gap-1"
                     onClick={(e) => {
                       e.stopPropagation();
                       openEditInCascadingDrawer(stringVariable);
                     }}
-                    title={`Click to edit empty string variable "${variableName}"`}
+                    title={`Click to edit conditional "${variableName}"`}
                   >
-                    <Spool className="h-3 w-3" />
+                    <Folder className="h-3 w-3" />
                     {`{{${variableName}}}`}
                   </Badge>
                 );
               } else {
-                // For string variables with content, render as clickable underlined content
-                const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
-                result.push(
-                  <span
-                    key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                    className="cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 inline-block"
-                    style={{
-                      borderBottom: `2px solid currentColor`,
-                      paddingBottom: `${depth * 2}px`,
-                      marginBottom: `${depth * 2}px`
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openEditInCascadingDrawer(stringVariable);
-                    }}
-                    title={`Click to edit string variable "${variableName}"`}
-                  >
-                    {nestedParts}
-                  </span>
-                );
+                // For regular string variables, check if content is empty
+                if (!stringVariable.content || stringVariable.content.trim() === '') {
+                  // For empty string variables, render as purple badge (like conditionals but purple)
+                  result.push(
+                    <Badge
+                      key={`${keyPrefix}${depth}-${index}-${variableName}`}
+                      variant="outline"
+                      className="mx-1 cursor-pointer transition-colors bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 inline-flex items-center gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditInCascadingDrawer(stringVariable);
+                      }}
+                      title={`Click to edit empty string variable "${variableName}"`}
+                    >
+                      <Spool className="h-3 w-3" />
+                      {`{{${variableName}}}`}
+                    </Badge>
+                  );
+                } else {
+                  // For string variables with content, render as clickable underlined content
+                  const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
+                  result.push(
+                    <span
+                      key={`${keyPrefix}${depth}-${index}-${variableName}`}
+                      className="cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 inline-block"
+                      style={{
+                        borderBottom: `2px solid currentColor`,
+                        paddingBottom: `${depth * 2}px`,
+                        marginBottom: `${depth * 2}px`
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditInCascadingDrawer(stringVariable);
+                      }}
+                      title={`Click to edit string variable "${variableName}"`}
+                    >
+                      {nestedParts}
+                    </span>
+                  );
+                }
               }
+            } else {
+              // Variable not found, show as-is
+              result.push(part);
             }
           } else {
-            // Variable not found, show as-is
             result.push(part);
           }
-        } else {
-          result.push(part);
-        }
-      });
-      return result;
-    }
+        });
+        return result;
+      }
   };
 
   // Function to render content with badge styling for variables
@@ -2708,22 +2704,16 @@ export default function ProjectDetailPage() {
   };
 
   const filterStringsByDimensions = (strings: any[]) => {
-    // Show all strings including conditionals
+    // Show all strings including conditionals and embedded strings
     const allStrings = strings;
-    
-    // Filter out embedded strings (strings that are referenced by other strings)
-    const embeddedStringIds = getEmbeddedStringIds(strings);
-    const rootLevelStrings = allStrings.filter((str: any) => {
-      return !embeddedStringIds.has(str.id); // Only show root-level strings
-    });
     
     const selectedDimensions = Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null);
     
     if (selectedDimensions.length === 0) {
-      return rootLevelStrings; // No filters applied, show all root-level strings
+      return allStrings; // No filters applied, show all strings including embedded ones
     }
     
-    return rootLevelStrings.filter((str: any) => {
+    return allStrings.filter((str: any) => {
       // Check if string has dimension values
       if (!str.dimension_values || str.dimension_values.length === 0) {
         return false; // String has no dimension values, so it doesn't match any filter
@@ -3181,7 +3171,7 @@ export default function ProjectDetailPage() {
                 </div>
               )}
           </div>
-
+          
 
         </div>
       </aside>
@@ -3309,7 +3299,11 @@ export default function ProjectDetailPage() {
                         <div className="mt-2 flex items-center gap-2">
                           <Badge
                             variant="outline"
-                            className="cursor-pointer hover:bg-muted text-xs font-mono bg-purple-50 text-purple-700 border-purple-200 flex items-center gap-1"
+                            className={`cursor-pointer hover:bg-muted text-xs font-mono flex items-center gap-1 ${
+                              str.is_conditional_container 
+                                ? 'bg-orange-50 text-orange-700 border-orange-200' 
+                                : 'bg-purple-50 text-purple-700 border-purple-200'
+                            }`}
                             onClick={(e) => {
                               e.stopPropagation();
                               const varName = str.effective_variable_name || str.variable_hash;
@@ -3457,17 +3451,17 @@ export default function ProjectDetailPage() {
                     <div>
                       {/* Variable Type Selection */}
                       <div className="space-y-4">
-                        <div className="space-y-2">
+                      <div className="space-y-2">
                           <Label>Variable Type</Label>
                           <Select value={contentSubTab} onValueChange={(value: string) => setContentSubTab(value as "string" | "conditional")}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select variable type" />
-                            </SelectTrigger>
-                            <SelectContent>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select variable type" />
+                          </SelectTrigger>
+                          <SelectContent>
                               <SelectItem value="string">String</SelectItem>
                               <SelectItem value="conditional">Conditional</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          </SelectContent>
+                        </Select>
                         </div>
                       </div>
                     
@@ -3698,7 +3692,7 @@ export default function ProjectDetailPage() {
                             </div>
                           )}
                         </div>
-                      </div>
+                        </div>
                       </div>
                     )}
                     </div>
@@ -4362,7 +4356,7 @@ export default function ProjectDetailPage() {
                 {drawer.tab === "content" && (
                   <div className="space-y-4">
                     {drawer.isEditingConditional ? (
-                      <div className="space-y-4">
+                    <div className="space-y-4">
                         <h3 className="text-lg font-semibold">Conditional</h3>
                         <p className="text-sm text-muted-foreground">
                           Manage spawn string variables for this conditional
@@ -4378,7 +4372,7 @@ export default function ProjectDetailPage() {
                               </h4>
                             </div>
                             
-                            <div className="space-y-2">
+                        <div className="space-y-2">
                               <Label>Content</Label>
                               <Textarea
                                 value={spawn.content}
@@ -4631,8 +4625,8 @@ export default function ProjectDetailPage() {
                             </div>
                           </TabsContent>
                         </Tabs>
-                      </div>
-                    )}
+                            </div>
+                          )}
                   </div>
                 )}
 
@@ -4649,9 +4643,9 @@ export default function ProjectDetailPage() {
                     </div>
                   </div>
                 )}
-              </div>
+            </div>
 
-              {/* Footer with Save/Cancel */}
+            {/* Footer with Save/Cancel */}
               <div className="px-6 py-4 border-t bg-background">
                 <div className="flex gap-2 justify-end">
                   <Button 

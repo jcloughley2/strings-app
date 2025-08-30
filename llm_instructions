@@ -51,16 +51,12 @@
 
 ### Core Models
 1. **Project**: Container for all content (name, description, user)
-2. **Trait**: Context definitions for variable values (name, project) 
-3. **Variable**: Traditional trait variables (name, project, is_conditional)
-4. **VariableValue**: Trait-specific values (variable, trait, value)
-5. **String**: The "file" system - every string is automatically a variable
+2. **String**: The "file" system - every string is automatically a variable
    - Fields: content, project, variable_name (optional), variable_hash (auto), is_conditional, is_conditional_container
    - **Effective Variable Name**: Returns variable_name || variable_hash
-6. **Dimension**: Categories for organizing strings (name, project)
-7. **DimensionValue**: Predefined values for dimensions
-8. **StringDimensionValue**: Automatic inheritance from embedded variables
-9. **VariableDimensionValue**: Dimension-specific variable values
+3. **Dimension**: Categories for organizing strings (name, project)
+4. **DimensionValue**: Predefined values for dimensions
+5. **StringDimensionValue**: Automatic inheritance from embedded variables
 
 ### Key Relationships
 - Strings reference other strings via `{{variableName}}` embedding
@@ -88,17 +84,17 @@
 ### Variable Embedding
 - **Syntax**: `{{variableName}}` in any content
 - **Recursive**: Supports A→B→C chains with 10-level depth limit
-- **Mixed Types**: Embed both trait and string variables
-- **Context-Aware**: Uses current filter selections
+- **String Variables Only**: Embed string variables only (traits removed)
+- **Context-Aware**: Uses current dimension filter selections
 
 ---
 
 ## User Interface
 
 ### Layout (Three Panels)
-- **Left**: Filter Sidebar (360px) - dimensions and traits only
+- **Left**: Filter Sidebar (360px) - dimensions only
 - **Center**: Main Canvas - all strings including conditionals, semantic toggles
-- **Right**: Variables Sidebar (collapsible) - trait variable management
+- **Right**: Variables Sidebar (collapsible) - dimension variable management
 
 ### Cascading Drawer System ⭐
 **NEW FEATURE**: Deep nested editing with stacked drawers
@@ -293,12 +289,14 @@ const variableNames = matches.map(match => match.slice(2, -2));
 - **✅ Unified Main Canvas**: Conditional variables now appear in the main canvas alongside regular strings
 - **✅ Select Dropdown Interface**: Replaced String/Conditional tabs with a cleaner select dropdown for variable type selection
 - **✅ Streamlined Filtering**: Removed conditional variable filtering from export and processing functions
+- **✅ Removed Traits System**: Completely eliminated traits, trait variables, and trait-based filtering from the application
 
 ### Benefits
-- **Cleaner Interface**: Reduced sidebar complexity by removing redundant conditional management
+- **Cleaner Interface**: Reduced sidebar complexity by removing redundant conditional management and traits
 - **Unified Workflow**: All string management happens in one place (main canvas)
 - **Better UX**: Select dropdown is more compact and mobile-friendly than tabs
-- **Simplified Logic**: Fewer filtering mechanisms to maintain
+- **Simplified Logic**: Fewer filtering mechanisms to maintain, no trait complexity
+- **Focused Architecture**: System now focuses purely on string variables and dimensions
 
 ---
 

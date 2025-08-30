@@ -130,7 +130,6 @@ export default function Home() {
                         <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
                           <span>Strings: <span className="font-semibold">{project.strings?.length ?? 0}</span></span>
                           <span>Variables: <span className="font-semibold">{project.variables?.length ?? 0}</span></span>
-                          <span>Traits: <span className="font-semibold">{project.traits?.length ?? 0}</span></span>
                         </div>
                       </Card>
                     </Link>

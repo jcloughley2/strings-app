@@ -33,7 +33,6 @@ export default function ProjectDetailPage() {
   
   // Filter sidebar state
   const [selectedDimensionValues, setSelectedDimensionValues] = useState<{[dimensionId: number]: string | null}>({});
-  const [traitId, setTraitId] = useState<string>("blank");
   
   // Project edit/delete state
   const [editingProject, setEditingProject] = useState<any>(null);
@@ -180,7 +179,7 @@ export default function ProjectDetailPage() {
     apiFetch(`/api/projects/${id}/`)
       .then((data) => {
         setProject(sortProjectStrings(data));
-        // Keep traitId as "blank" by default, don't auto-select first trait
+
       })
       .catch((err) => setError(err.message || "Failed to load project"))
       .finally(() => setLoading(false));
@@ -2325,103 +2324,37 @@ export default function ProjectDetailPage() {
     return false;
   };
 
-  // Function to process string content based on selected trait and plaintext mode
+  // Function to process string content in plaintext mode
   const processStringContent = (content: string, stringVariables: any[]) => {
     // First process conditionals
     let processedContent = processConditionalVariables(content);
     
     if (isPlaintextMode) {
-      // In plaintext mode (default), behavior depends on showStringVariables toggle and trait selection
-      if (traitId === "blank" && showStringVariables) {
-        // When blank is selected and showStringVariables is ON, show variables as {{variable}} format
+      // In plaintext mode, behavior depends on showStringVariables toggle
+      if (showStringVariables) {
+        // Show variables as {{variable}} format
         return processedContent;
       }
       
-      if (traitId === "blank" && !showStringVariables) {
-        // When blank is selected and showStringVariables is OFF, expand string variables
-        // but leave trait variables as {{variable}}
-        const variableMatches = processedContent.match(/{{([^}]+)}}/g) || [];
-        let result = processedContent;
-        
-        variableMatches.forEach((match) => {
-          const variableName = match.slice(2, -2);
-          const projectVariable = (project.variables || []).find((v: any) => v.name === variableName);
-          const stringVariable = project.strings?.find((str: any) => 
-            str.effective_variable_name === variableName || 
-            str.variable_name === variableName || 
-            str.variable_hash === variableName
-          );
-          
-          if (stringVariable) {
-            const regex = new RegExp(`{{${variableName}}}`, 'g');
-            result = result.replace(regex, stringVariable.content);
-          }
-        });
-        
-        return result;
-      }
+      // Expand string variables but leave dimension variables as {{variable}}
+      const variableMatches = processedContent.match(/{{([^}]+)}}/g) || [];
+      let result = processedContent;
       
-      // Replace variables with their values (dimension values take precedence over trait values and blank)
-      const selectedTrait = (project.traits || []).find((t: any) => t.id.toString() === traitId);
-      const hasActiveDimensions = Object.values(selectedDimensionValues).some(val => val);
-      
-      if (selectedTrait || hasActiveDimensions) {
-        // Auto-detect all variables from content, not just the ones in stringVariables
-        const variableMatches = processedContent.match(/{{([^}]+)}}/g) || [];
-        const variableNames = variableMatches.map(match => match.slice(2, -2));
+      variableMatches.forEach((match) => {
+        const variableName = match.slice(2, -2);
+        const stringVariable = project.strings?.find((str: any) => 
+          str.effective_variable_name === variableName || 
+          str.variable_name === variableName || 
+          str.variable_hash === variableName
+        );
         
-        // Process variables recursively to handle nested string variables
-        const processVariablesRecursively = (content: string, depth: number = 0): string => {
-          if (depth > 10) return content; // Prevent infinite recursion
-          
-          const matches = content.match(/{{([^}]+)}}/g) || [];
-          let processedContent = content;
-          
-          matches.forEach((match) => {
-            const variableName = match.slice(2, -2);
-            const projectVariable = (project.variables || []).find((v: any) => v.name === variableName);
-            
-            const stringVariable = project.strings?.find((str: any) => 
-              str.effective_variable_name === variableName || 
-              str.variable_name === variableName || 
-              str.variable_hash === variableName
-            );
-            
-            if (stringVariable) {
-              // String variable found - behavior depends on showStringVariables toggle
-              let value = null;
-              if (showStringVariables) {
-                // Show as variable badge - don't replace, leave as {{variableName}}
-                value = null; // Skip replacement
-              } else {
-                // Show string content - get the variable content and process it recursively
-                value = processVariablesRecursively(stringVariable.content, depth + 1);
-              }
-              
-              // Only replace if we have a value (not when showing string variables)
-              if (value !== null) {
-                const regex = new RegExp(`{{${variableName}}}`, 'g');
-                processedContent = processedContent.replace(regex, value);
-              }
-            } else if (projectVariable) {
-              // Trait variable - use dimension values with precedence over trait values
-              const value = getVariableValueWithDimensionPrecedence(projectVariable) || projectVariable.name;
-              
-              // Only replace if we have a value (not when showing string variables)
-              if (value !== null) {
-                const regex = new RegExp(`{{${variableName}}}`, 'g');
-                processedContent = processedContent.replace(regex, value);
-              }
-            }
-          });
-          
-          return processedContent;
-        };
-        
-        processedContent = processVariablesRecursively(processedContent);
-      }
+        if (stringVariable) {
+          const regex = new RegExp(`{{${variableName}}}`, 'g');
+          result = result.replace(regex, stringVariable.content);
+        }
+      });
       
-      return processedContent;
+      return result;
     }
     
     // In highlighter mode, return JSX with badges
@@ -2438,290 +2371,117 @@ export default function ProjectDetailPage() {
     // First process conditionals
     const conditionalProcessedContent = processConditionalVariables(content);
     
-    // Check if we have dimension selections that should override blank behavior
-    const hasDimensionFilters = Object.values(selectedDimensionValues).some(val => val);
-    
-    if (traitId === "blank" && !hasDimensionFilters) {
-      // Behavior depends on showStringVariables toggle
-      if (showStringVariables) {
-        // Show all variables as grey badges in {{variable}} format
-        const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
-        return parts.map((part: string, index: number) => {
-          if (part.match(/{{[^}]+}}/)) {
-            const variableName = part.slice(2, -2); // Remove {{ and }}
-            const variable = (project.variables || []).find((v: any) => v.name === variableName);
-            const stringVariable = project.strings?.find((str: any) => 
-              str.effective_variable_name === variableName || 
-              str.variable_name === variableName || 
-              str.variable_hash === variableName
-            );
-            return (
-              <Badge 
-                key={`${keyPrefix}${depth}-${index}-${variableName}`} 
-                variant="secondary" 
-                className={`mx-1 transition-colors ${
-                  stringVariable 
-                    ? "cursor-default" 
-                    : "cursor-pointer hover:bg-secondary/80"
-                }`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Trait variables are no longer editable
-                }}
-                title={
-                  stringVariable 
-                    ? `String variable \"${variableName}\" - tied to a string` 
-                    : variable
-                    ? `Click to edit variable \"${variableName}\"`
-                    : `Variable \"${variableName}\" not found`
-                }
-              >
-                {part}
-              </Badge>
-            );
-          }
-          return part;
-        });
-      } else {
-        // Show string variables expanded (recursively), trait variables as badges
-        const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
-        const result: (string | React.ReactNode)[] = [];
-        parts.forEach((part: string, index: number) => {
-          if (part.match(/{{[^}]+}}/)) {
-            const variableName = part.slice(2, -2); // Remove {{ and }}
-            const variable = (project.variables || []).find((v: any) => v.name === variableName);
-            const stringVariable = project.strings?.find((str: any) => 
-              str.effective_variable_name === variableName || 
-              str.variable_name === variableName || 
-              str.variable_hash === variableName
-            );
-            if (stringVariable) {
-              if (stringVariable.is_conditional_container) {
-                // For conditionals, render as clickable tags (no underline)
-                result.push(
-                  <Badge
-                    key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                    variant="outline"
-                    className="mx-1 cursor-pointer transition-colors bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 inline-flex items-center gap-1"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openEditInCascadingDrawer(stringVariable);
-                    }}
-                    title={`Click to edit conditional "${variableName}"`}
-                  >
-                    <Folder className="h-3 w-3" />
-                    {`{{${variableName}}}`}
-                  </Badge>
-                );
-              } else {
-                // For regular string variables, check if content is empty
-                if (!stringVariable.content || stringVariable.content.trim() === '') {
-                  // For empty string variables, render as purple badge (like conditionals but purple)
-                  result.push(
-                    <Badge
-                      key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                      variant="outline"
-                      className="mx-1 cursor-pointer transition-colors bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 inline-flex items-center gap-1"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditInCascadingDrawer(stringVariable);
-                      }}
-                      title={`Click to edit empty string variable "${variableName}"`}
-                    >
-                      <Spool className="h-3 w-3" />
-                      {`{{${variableName}}}`}
-                    </Badge>
-                  );
-                } else {
-                  // For string variables with content, render as clickable underlined content
-                  const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
-                  result.push(
-                    <span
-                      key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                      className="cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 inline-block"
-                      style={{
-                        borderBottom: `2px solid currentColor`,
-                        paddingBottom: `${depth * 2}px`,
-                        marginBottom: `${depth * 2}px`
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditInCascadingDrawer(stringVariable);
-                      }}
-                      title={`Click to edit string variable "${variableName}"`}
-                    >
-                      {nestedParts}
-                    </span>
-                  );
-                }
+    // Behavior depends on showStringVariables toggle
+    if (showStringVariables) {
+      // Show all variables as grey badges in {{variable}} format
+      const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
+      return parts.map((part: string, index: number) => {
+        if (part.match(/{{[^}]+}}/)) {
+          const variableName = part.slice(2, -2); // Remove {{ and }}
+          const stringVariable = project.strings?.find((str: any) => 
+            str.effective_variable_name === variableName || 
+            str.variable_name === variableName || 
+            str.variable_hash === variableName
+          );
+          return (
+            <Badge 
+              key={`${keyPrefix}${depth}-${index}-${variableName}`} 
+              variant="secondary" 
+              className="mx-1 transition-colors cursor-default"
+              title={
+                stringVariable 
+                  ? `String variable \"${variableName}\" - tied to a string` 
+                  : `Variable \"${variableName}\" not found`
               }
-            } else if (variable) {
-              // For trait variables, show as grey badges
+            >
+              {part}
+            </Badge>
+          );
+        }
+        return part;
+      });
+    } else {
+      // Show string variables expanded (recursively)
+      const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
+      const result: (string | React.ReactNode)[] = [];
+      parts.forEach((part: string, index: number) => {
+        if (part.match(/{{[^}]+}}/)) {
+          const variableName = part.slice(2, -2); // Remove {{ and }}
+          const stringVariable = project.strings?.find((str: any) => 
+            str.effective_variable_name === variableName || 
+            str.variable_name === variableName || 
+            str.variable_hash === variableName
+          );
+          if (stringVariable) {
+            if (stringVariable.is_conditional_container) {
+              // For conditionals, render as clickable tags (no underline)
               result.push(
-                <Badge 
-                  key={`${keyPrefix}${depth}-${index}-${variableName}`} 
-                  variant="secondary" 
-                  className="mx-1 transition-colors cursor-pointer hover:bg-secondary/80"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // Trait variables are no longer editable
-                  }}
-                  title={`Click to edit variable \"${variable.name}\"`}
-                >
-                  {part}
-                </Badge>
-              );
-            } else {
-              // Variable not found, show as-is
-              result.push(part);
-            }
-          } else {
-            result.push(part);
-          }
-        });
-        return result;
-      }
-    }
-
-    // When a trait is selected OR dimension values are selected, process variables recursively
-    const selectedTrait = (project.traits || []).find((t: any) => t.id.toString() === traitId);
-    const hasDimensionSelection = Object.values(selectedDimensionValues).some(val => val);
-    
-    if (!selectedTrait && !hasDimensionSelection) {
-      return [conditionalProcessedContent];
-    }
-
-    // Find all variables in the content
-    const variableMatches = conditionalProcessedContent.match(/{{([^}]+)}}/g) || [];
-    if (variableMatches.length === 0) {
-      return [conditionalProcessedContent];
-    }
-
-    const parts: (string | React.ReactNode)[] = [];
-    let lastIndex = 0;
-
-    variableMatches.forEach((match: string, matchIndex: number) => {
-      const variableName = match.slice(2, -2); // Remove {{ and }}
-      const variable = (project.variables || []).find((v: any) => v.name === variableName);
-      const currentIndex = conditionalProcessedContent.indexOf(match, lastIndex);
-      
-      // Add text before the variable
-      if (currentIndex > lastIndex) {
-        parts.push(conditionalProcessedContent.substring(lastIndex, currentIndex));
-      }
-
-      const stringVariable = project.strings?.find((str: any) => 
-        str.effective_variable_name === variableName || 
-        str.variable_name === variableName || 
-        str.variable_hash === variableName
-      );
-      
-      if (stringVariable) {
-        if (!showStringVariables) {
-          if (stringVariable.is_conditional_container) {
-            // For conditionals, render as clickable tags (no underline)
-            parts.push(
-              <Badge
-                key={`${keyPrefix}${depth}-trait-${matchIndex}-${variableName}`}
-                variant="outline"
-                className="mx-1 cursor-pointer transition-colors bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 inline-flex items-center gap-1"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openEditInCascadingDrawer(stringVariable);
-                }}
-                title={`Click to edit conditional "${variableName}"`}
-              >
-                <Folder className="h-3 w-3" />
-                {`{{${variableName}}}`}
-              </Badge>
-            );
-          } else {
-            // For regular string variables, check if content is empty
-            if (!stringVariable.content || stringVariable.content.trim() === '') {
-              // For empty string variables, render as purple badge (like conditionals but purple)
-              parts.push(
                 <Badge
-                  key={`${keyPrefix}${depth}-trait-${matchIndex}-${variableName}`}
+                  key={`${keyPrefix}${depth}-${index}-${variableName}`}
                   variant="outline"
-                  className="mx-1 cursor-pointer transition-colors bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 inline-flex items-center gap-1"
+                  className="mx-1 cursor-pointer transition-colors bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 inline-flex items-center gap-1"
                   onClick={(e) => {
                     e.stopPropagation();
                     openEditInCascadingDrawer(stringVariable);
                   }}
-                  title={`Click to edit empty string variable "${variableName}"`}
+                  title={`Click to edit conditional "${variableName}"`}
                 >
-                  <Spool className="h-3 w-3" />
+                  <Folder className="h-3 w-3" />
                   {`{{${variableName}}}`}
                 </Badge>
               );
             } else {
-              // For string variables with content, render as clickable underlined content
-              const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
-              parts.push(
-                <span
-                  key={`${keyPrefix}${depth}-trait-${matchIndex}-${variableName}`}
-                  className="cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 inline-block"
-                  style={{
-                    borderBottom: `2px solid currentColor`,
-                    paddingBottom: `${depth * 2}px`,
-                    marginBottom: `${depth * 2}px`
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openEditInCascadingDrawer(stringVariable);
-                  }}
-                  title={`Click to edit string variable "${variableName}"`}
-                >
-                  {nestedParts}
-                </span>
-              );
+              // For regular string variables, check if content is empty
+              if (!stringVariable.content || stringVariable.content.trim() === '') {
+                // For empty string variables, render as purple badge (like conditionals but purple)
+                result.push(
+                  <Badge
+                    key={`${keyPrefix}${depth}-${index}-${variableName}`}
+                    variant="outline"
+                    className="mx-1 cursor-pointer transition-colors bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 inline-flex items-center gap-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditInCascadingDrawer(stringVariable);
+                    }}
+                    title={`Click to edit empty string variable "${variableName}"`}
+                  >
+                    <Spool className="h-3 w-3" />
+                    {`{{${variableName}}}`}
+                  </Badge>
+                );
+              } else {
+                // For string variables with content, render as clickable underlined content
+                const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
+                result.push(
+                  <span
+                    key={`${keyPrefix}${depth}-${index}-${variableName}`}
+                    className="cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 inline-block"
+                    style={{
+                      borderBottom: `2px solid currentColor`,
+                      paddingBottom: `${depth * 2}px`,
+                      marginBottom: `${depth * 2}px`
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditInCascadingDrawer(stringVariable);
+                    }}
+                    title={`Click to edit string variable "${variableName}"`}
+                  >
+                    {nestedParts}
+                  </span>
+                );
+              }
             }
+          } else {
+            // Variable not found, show as-is
+            result.push(part);
           }
         } else {
-          // When showStringVariables is on, expand normally
-          const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
-          parts.push(...nestedParts);
+          result.push(part);
         }
-      } else if (variable) {
-        // For trait variables, use dimension values with precedence over trait values
-        const variableValue = getVariableValueWithDimensionPrecedence(variable);
-        const hasValue = variableHasAnyValue(variable);
-        
-        if (hasValue && variableValue) {
-          // If the variable has a value, render it as mixed content (may contain embedded variables)
-          const nestedParts = renderContentRecursively(variableValue, depth + 1, `${keyPrefix}${variableName}-val-`);
-          parts.push(...nestedParts);
-        } else {
-          // If no value, show variable name as a red badge
-          parts.push(
-            <Badge 
-              key={`${keyPrefix}${depth}-trait-${matchIndex}-${variableName}`} 
-              variant="outline" 
-              className="mx-1 bg-red-100 text-red-800 border-red-200 hover:bg-red-200 cursor-pointer transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                // Trait variables are no longer editable
-              }}
-              title={`Click to edit variable "${variable.name}"`}
-            >
-              {variable.name}
-            </Badge>
-          );
-        }
-      } else {
-        // Variable not found, show as-is
-        parts.push(match);
-      }
-
-      lastIndex = currentIndex + match.length;
-    });
-
-    // Add any remaining text
-    if (lastIndex < conditionalProcessedContent.length) {
-      parts.push(conditionalProcessedContent.substring(lastIndex));
+      });
+      return result;
     }
-
-    return parts;
   };
 
   // Function to render content with badge styling for variables
@@ -2790,7 +2550,6 @@ export default function ProjectDetailPage() {
         },
         credentials: 'include',
         body: JSON.stringify({
-          trait_id: traitId,
           selected_dimension_values: selectedDimensionValues,
         }),
       });
@@ -3105,21 +2864,7 @@ export default function ProjectDetailPage() {
     }
   };
 
-  // Helper function to get variable value for current trait
-  const getVariableValueForCurrentTrait = (variable: any) => {
-    // Don't show values when "blank" trait is selected
-    if (traitId === "blank") {
-      return null;
-    }
 
-    // For trait variables, get the value for the current trait
-    if (traitId && traitId !== "blank") {
-      const variableValue = variable.values?.find((value: any) => value.trait.toString() === traitId);
-      return variableValue ? variableValue.value : null;
-    }
-
-    return null;
-  };
 
   // Helper function to check if a dimension value is inherited from variables in the string content
   const isDimensionValueInheritedFromVariables = (dimensionId: number, dimensionValue: string, content?: string, visited = new Set<number>()): boolean => {
@@ -3342,76 +3087,7 @@ export default function ProjectDetailPage() {
                 </div>
               )}
           </div>
-          
-          {/* Traits Section */}
-          <div className="space-y-3">
-            <div className="group">
-              <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
-                <div className="flex items-center gap-2">
-                  <SwatchBook className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="font-medium text-sm">Traits</h3>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
-                  onClick={() => {
-                    // Trait creation is no longer available
-                  }}
-                >
-                  <Plus className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2 ml-6">
-              <div className="group">
-                <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="radio"
-                      id="trait-blank"
-                      name="trait"
-                      checked={traitId === "blank"}
-                      onChange={() => setTraitId("blank")}
-                      className="rounded-full"
-                    />
-                    <Label htmlFor="trait-blank" className="text-sm cursor-pointer">
-                      Blank (Variables)
-                    </Label>
-                  </div>
-                </div>
-              </div>
-              {(project.traits || []).map((trait: any) => (
-                <div key={trait.id} className="group">
-                  <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        id={`trait-${trait.id}`}
-                        name="trait"
-                        checked={traitId === trait.id.toString()}
-                        onChange={() => setTraitId(trait.id.toString())}
-                        className="rounded-full"
-                      />
-                      <Label htmlFor={`trait-${trait.id}`} className="text-sm cursor-pointer">
-                        {trait.name}
-                      </Label>
-                    </div>
-                                          <Button
-                        variant="ghost"
-                        size="sm"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
-                        onClick={() => {
-                          // Trait editing is no longer available
-                        }}
-                      >
-                        <Edit2 className="h-3 w-3" />
-                      </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+
 
         </div>
       </aside>
@@ -5252,14 +4928,7 @@ export default function ProjectDetailPage() {
             <div className="bg-muted/50 p-4 rounded-lg space-y-3">
               <h4 className="font-medium text-sm">Current Filters:</h4>
               
-              {/* Trait filter */}
-              <div className="text-sm">
-                <span className="font-medium">Trait: </span>
-                <span className="text-muted-foreground">
-                  {traitId === "blank" ? "Blank (Variables)" : 
-                   (project.traits || []).find((t: any) => t.id.toString() === traitId)?.name || "None"}
-                </span>
-              </div>
+
               
               {/* Dimension filters */}
               {Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null).length > 0 && (

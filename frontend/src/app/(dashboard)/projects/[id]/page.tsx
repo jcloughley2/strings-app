@@ -148,8 +148,8 @@ export default function ProjectDetailPage() {
         const defaultSpawn = {
           id: Date.now(), // Temporary ID for new spawn
           content: stringContent || "Default content",
-          effective_variable_name: `${(stringVariableName || "variable").toLowerCase().replace(/\s+/g, '_')}_1`,
-          variable_hash: `${(stringVariableName || "variable").toLowerCase().replace(/\s+/g, '_')}_1`,
+          effective_variable_name: null, // Let backend generate hash
+          variable_hash: null, // Let backend generate hash
           is_conditional_container: false
         };
         setConditionalSpawns([defaultSpawn]);
@@ -158,8 +158,8 @@ export default function ProjectDetailPage() {
         const defaultSpawn = {
           id: Date.now(), // Temporary ID for new spawn
           content: "Default content",
-          effective_variable_name: "new_variable_1",
-          variable_hash: "new_variable_1",
+          effective_variable_name: null, // Let backend generate hash
+          variable_hash: null, // Let backend generate hash
           is_conditional_container: false
         };
         setConditionalSpawns([defaultSpawn]);
@@ -587,7 +587,7 @@ export default function ProjectDetailPage() {
     
     pushDrawer(
       `spawn-${spawn.id}`,
-      `Edit Spawn: ${spawn.effective_variable_name || spawn.variable_hash}`,
+      `Edit Spawn: ${spawn.effective_variable_name || spawn.variable_hash || 'New Spawn'}`,
       'spawn-edit',
       spawn
     );
@@ -733,7 +733,7 @@ export default function ProjectDetailPage() {
 
         // Save all spawns
         const stringPromises = drawer.conditionalSpawns.map(async (spawn) => {
-          const spawnContent = spawn.content?.trim() || `Default content for ${spawn.effective_variable_name || spawn.variable_hash}`;
+          const spawnContent = spawn.content?.trim() || 'Default spawn content';
           
           if (spawn._isTemporary || 
               String(spawn.id).startsWith('temp-') || 
@@ -744,7 +744,7 @@ export default function ProjectDetailPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 content: spawnContent,
-                variable_name: (spawn.effective_variable_name || spawn.variable_hash || spawn.variable_name)?.trim() || null,
+                // Don't specify variable_name - let backend generate random hash
                 is_conditional: spawn.is_conditional || false,
                 is_conditional_container: false,
                 project: id,
@@ -757,7 +757,7 @@ export default function ProjectDetailPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 content: spawnContent,
-                variable_name: (spawn.effective_variable_name || spawn.variable_hash || spawn.variable_name)?.trim() || null,
+                // Don't specify variable_name - let backend generate random hash
                 is_conditional: spawn.is_conditional || false,
               }),
             });
@@ -1225,7 +1225,7 @@ export default function ProjectDetailPage() {
         }),
       });
       
-      toast.success(`Updated spawn "${spawn.effective_variable_name || spawn.variable_hash}"`);
+      toast.success(`Updated spawn "${spawn.effective_variable_name || spawn.variable_hash || 'spawn'}"`);
     } catch (err) {
       console.error('Failed to update spawn:', err);
       toast.error('Failed to update spawn. Please try again.');
@@ -1257,7 +1257,7 @@ export default function ProjectDetailPage() {
           console.log('DEBUG: Creating new spawn variable with POST');
           const payload = {
             content: spawn.content,
-            variable_name: spawn.effective_variable_name || spawn.variable_hash || spawn.variable_name,
+            // Don't specify variable_name - let backend generate random hash
             is_conditional: spawn.is_conditional,
             is_conditional_container: false,
             project: id,
@@ -1317,24 +1317,10 @@ export default function ProjectDetailPage() {
         throw new Error('Cannot find dimension for conditional');
       }
 
-      // Determine the next spawn number
-      let nextSpawnNumber = 1;
-      if (conditionalSpawns.length > 0) {
-        const spawnNumbers = conditionalSpawns.map((spawn: any) => {
-          const effectiveName = spawn.effective_variable_name || spawn.variable_hash;
-          const match = effectiveName.match(/_(\d+)$/);
-          return match ? parseInt(match[1]) : 0;
-        });
-        nextSpawnNumber = Math.max(...spawnNumbers) + 1;
-      }
-
-      // Create the new spawn name
-      const newSpawnName = `${conditionalName}_${nextSpawnNumber}`;
-      
       // Get content from the first existing spawn (they should all have the same content)
       const firstSpawnContent = conditionalSpawns.length > 0 ? conditionalSpawns[0].content : '';
       const safeCopyContent = firstSpawnContent && firstSpawnContent.trim() ? firstSpawnContent.trim() : '';
-      const contentToCopy = safeCopyContent || `Content for ${newSpawnName}`;
+      const contentToCopy = safeCopyContent || 'Default spawn content';
       
       // Additional safety check
       if (!contentToCopy || contentToCopy.trim() === '') {
@@ -1346,26 +1332,27 @@ export default function ProjectDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: contentToCopy,
-          variable_name: newSpawnName,
+          // Don't specify variable_name - let backend generate random hash
           is_conditional: editingNestedString.is_conditional,
           project: parseInt(id as string),
         }),
       });
 
-      // Create dimension value for the new spawn
+      // Create dimension value for the new spawn using the generated hash
+      const spawnVariableName = newSpawn.effective_variable_name || newSpawn.variable_hash;
       await apiFetch('/api/dimension-values/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           dimension: existingDimension.id,
-          value: newSpawnName,
+          value: spawnVariableName,
         }),
       });
 
       // Add to local state
       setConditionalSpawns(prev => [...prev, newSpawn]);
       
-      toast.success(`Added new spawn "${newSpawnName}"`);
+      toast.success(`Added new spawn "${spawnVariableName}"`);
     } catch (err) {
       console.error('Failed to add spawn:', err);
       toast.error('Failed to add spawn. Please try again.');
@@ -3552,7 +3539,7 @@ export default function ProjectDetailPage() {
                               const isTemporary = spawn._isTemporary || 
                                                  spawn.id.toString().startsWith('temp-') || 
                                                  (typeof spawn.id === 'number' && spawn.id > 1000000000000);
-                              const variableName = spawn.effective_variable_name || spawn.variable_hash;
+                              const variableName = spawn.effective_variable_name || spawn.variable_hash || (isTemporary ? 'new_variable' : 'unknown');
                               
                               return (
                                 <div 
@@ -3653,7 +3640,7 @@ export default function ProjectDetailPage() {
                                     <Spool className="h-3 w-3" />
                                   </div>
                                   <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
-                                    {`{{${spawn.effective_variable_name || spawn.variable_hash}}}`}
+                                    {`{{${spawn.effective_variable_name || spawn.variable_hash || 'new_variable'}}}`}
                                   </Badge>
                                   {spawn.is_conditional && (
                                     <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
@@ -4279,7 +4266,7 @@ export default function ProjectDetailPage() {
                             <div className="flex items-center justify-between">
                               <h4 className="font-medium flex items-center gap-2">
                                 <Badge variant="outline" className="text-xs font-mono">
-                                  {`{{${spawn.effective_variable_name || spawn.variable_hash}}}`}
+                                  {`{{${spawn.effective_variable_name || spawn.variable_hash || 'new_variable'}}}`}
                                 </Badge>
                               </h4>
                             </div>
@@ -4483,7 +4470,7 @@ export default function ProjectDetailPage() {
                                   const isTemporary = spawn._isTemporary || 
                                                      spawn.id.toString().startsWith('temp-') || 
                                                      (typeof spawn.id === 'number' && spawn.id > 1000000000000);
-                                  const variableName = spawn.effective_variable_name || spawn.variable_hash;
+                                  const variableName = spawn.effective_variable_name || spawn.variable_hash || (isTemporary ? 'new_variable' : 'unknown');
                                   
                                   return (
                                     <div 

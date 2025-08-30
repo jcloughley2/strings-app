@@ -25,7 +25,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedConditionalVariables, setSelectedConditionalVariables] = useState<string[]>([]);
+
   const [isPlaintextMode, setIsPlaintextMode] = useState(false);
   const [showDimensions, setShowDimensions] = useState(true);
   const [showStringVariables, setShowStringVariables] = useState(false);
@@ -314,13 +314,7 @@ export default function ProjectDetailPage() {
         str.variable_hash === variableName
       );
       
-      if (stringVariable?.is_conditional) {
-        const stringVarId = `s${stringVariable.id}`;
-        if (!selectedConditionalVariables.includes(stringVarId)) {
-          const regex = new RegExp(`{{${variableName}}}`, 'g');
-          processedContent = processedContent.replace(regex, '');
-        }
-      }
+
     });
     
     return processedContent;
@@ -2797,7 +2791,6 @@ export default function ProjectDetailPage() {
         credentials: 'include',
         body: JSON.stringify({
           trait_id: traitId,
-          selected_conditional_variables: selectedConditionalVariables,
           selected_dimension_values: selectedDimensionValues,
         }),
       });
@@ -2862,14 +2855,12 @@ export default function ProjectDetailPage() {
   };
 
   const filterStringsByDimensions = (strings: any[]) => {
-    // First, filter out conditionals
-    const nonSplitStrings = strings.filter((str: any) => {
-      return !str.is_conditional_container; // Hide conditionals from main list
-    });
+    // Show all strings including conditionals
+    const allStrings = strings;
     
     // Filter out embedded strings (strings that are referenced by other strings)
     const embeddedStringIds = getEmbeddedStringIds(strings);
-    const rootLevelStrings = nonSplitStrings.filter((str: any) => {
+    const rootLevelStrings = allStrings.filter((str: any) => {
       return !embeddedStringIds.has(str.id); // Only show root-level strings
     });
     
@@ -3421,102 +3412,7 @@ export default function ProjectDetailPage() {
               ))}
             </div>
           </div>
-          
-                    {/* Conditionals Section */}
-          {(() => {
-            const conditionalTraitVariables = (project.variables || []).filter((variable: any) => variable.is_conditional);
-            const conditionalStringVariables = project.strings?.filter((str: any) => str.is_conditional) || [];
-            const hasConditionals = conditionalTraitVariables.length > 0 || conditionalStringVariables.length > 0;
-            
-            if (!hasConditionals) return null;
-            
-            return (
-              <div className="space-y-3">
-                <div className="group">
-                  <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
-                    <div className="flex items-center gap-2">
-                      <Signpost className="h-4 w-4 text-muted-foreground" />
-                      <h3 className="font-medium text-sm">Conditionals</h3>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2 ml-6">
-                  {/* Trait Variables */}
-                  {conditionalTraitVariables.map((variable: any) => (
-                    <div key={`trait-${variable.id}`} className="group">
-                      <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id={`conditional-${variable.id}`}
-                            checked={selectedConditionalVariables.includes(variable.id.toString())}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedConditionalVariables(prev => [...prev, variable.id.toString()]);
-                              } else {
-                                setSelectedConditionalVariables(prev => prev.filter(id => id !== variable.id.toString()));
-                              }
-                            }}
-                            className="rounded border-gray-300"
-                          />
-                          <Label htmlFor={`conditional-${variable.id}`} className="text-sm cursor-pointer">
-                            {variable.name}
-                          </Label>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
-                          onClick={() => {
-                            // Trait variables are no longer editable
-                          }}
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {/* String Variables */}
-                  {conditionalStringVariables.map((stringVar: any) => (
-                    <div key={`string-${stringVar.id}`} className="group">
-                      <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id={`conditional-s${stringVar.id}`}
-                            checked={selectedConditionalVariables.includes(`s${stringVar.id}`)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedConditionalVariables(prev => [...prev, `s${stringVar.id}`]);
-                              } else {
-                                setSelectedConditionalVariables(prev => prev.filter(id => id !== `s${stringVar.id}`));
-                              }
-                            }}
-                            className="rounded border-gray-300"
-                          />
-                          <Label htmlFor={`conditional-s${stringVar.id}`} className="text-sm cursor-pointer">
-                            {stringVar.effective_variable_name || stringVar.variable_hash}
-                          </Label>
-                          <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200 p-1">
-                            <Spool className="h-3 w-3" />
-                          </Badge>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
-                          onClick={() => openEditInCascadingDrawer(stringVar)}
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
+
         </div>
       </aside>
 
@@ -3596,7 +3492,7 @@ export default function ProjectDetailPage() {
           <div className="flex-1 overflow-y-auto p-6">
           {filteredStrings.length === 0 ? (
             <div className="text-muted-foreground text-center">
-              {(project?.strings || []).filter((str: any) => !str.is_conditional_container).length === 0 
+              {(project?.strings || []).length === 0 
                 ? "No strings found in this project." 
                 : "No strings match the current filters."
               }
@@ -3787,16 +3683,26 @@ export default function ProjectDetailPage() {
               {stringDialogTab === "content" && currentDrawerLevel === 0 && (
                 <div className="space-y-4">
                   {!editingString ? (
-                    // Show tabs only for new string creation
+                    // Show select dropdown for new string creation
                     <div>
-                      {/* Content Sub-tabs for root level */}
-                      <Tabs value={contentSubTab} onValueChange={(value) => setContentSubTab(value as "string" | "conditional")} className="w-full">
-                        <TabsList className="grid w-full grid-cols-2">
-                          <TabsTrigger value="string">String</TabsTrigger>
-                          <TabsTrigger value="conditional">Conditional</TabsTrigger>
-                        </TabsList>
+                      {/* Variable Type Selection */}
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Variable Type</Label>
+                          <Select value={contentSubTab} onValueChange={(value: string) => setContentSubTab(value as "string" | "conditional")}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select variable type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="string">String</SelectItem>
+                              <SelectItem value="conditional">Conditional</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                     
-                    <TabsContent value="string" className="mt-4">
+                    {contentSubTab === "string" && (
+                      <div className="mt-4">
                       <div className="space-y-4">
                         <div className="space-y-2">
                           <Label htmlFor="string-content">Content</Label>
@@ -3929,9 +3835,11 @@ export default function ProjectDetailPage() {
                         
 
                       </div>
-                    </TabsContent>
+                      </div>
+                    )}
                     
-                    <TabsContent value="conditional" className="mt-4">
+                    {contentSubTab === "conditional" && (
+                      <div className="mt-4">
                       <div className="space-y-4">
                         {/* Conditional Header */}
                         <div className="flex items-center justify-between">
@@ -4021,8 +3929,8 @@ export default function ProjectDetailPage() {
                           )}
                         </div>
                       </div>
-                        </TabsContent>
-                      </Tabs>
+                      </div>
+                    )}
                     </div>
                   ) : (
                     // Show direct content for editing existing strings (no tabs)
@@ -5372,18 +5280,7 @@ export default function ProjectDetailPage() {
                 </div>
               )}
               
-              {/* Conditional filters */}
-              {selectedConditionalVariables.length > 0 && (
-                <div className="text-sm">
-                  <span className="font-medium">Conditionals: </span>
-                  <span className="text-muted-foreground">
-                    {selectedConditionalVariables.map(varId => {
-                      const variable = (project.variables || []).find((v: any) => v.id.toString() === varId);
-                      return variable?.name;
-                    }).join(', ')}
-                  </span>
-                </div>
-              )}
+
               
               {/* Show filtered count */}
               <div className="text-sm">
@@ -5392,10 +5289,9 @@ export default function ProjectDetailPage() {
               </div>
               
               {/* Show message if no filters */}
-              {Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null).length === 0 &&
-               selectedConditionalVariables.length === 0 && (
+              {Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null).length === 0 && (
                 <div className="text-sm text-muted-foreground">
-                  No dimension or conditional filters applied. All {(project.strings || []).filter((str: any) => !str.is_conditional_container).length} strings will be exported.
+                  No dimension filters applied. All {(project.strings || []).length} strings will be exported.
                 </div>
               )}
             </div>

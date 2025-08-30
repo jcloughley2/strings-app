@@ -3,7 +3,7 @@ import secrets
 import string
 from django.db import models
 from django.contrib.auth.models import User
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
 
 class Project(models.Model):
@@ -145,6 +145,20 @@ class StringDimensionValue(models.Model):
 
 
 # Signals to automatically update string dimension values
+@receiver(pre_save, sender=String)
+def track_old_variable_name(sender, instance, **kwargs):
+    """
+    Track the old variable name before save to handle variable renaming.
+    """
+    if instance.pk:  # Only for existing instances (updates)
+        try:
+            old_instance = String.objects.get(pk=instance.pk)
+            instance._old_effective_variable_name = old_instance.effective_variable_name
+        except String.DoesNotExist:
+            instance._old_effective_variable_name = None
+    else:
+        instance._old_effective_variable_name = None
+
 @receiver(post_save, sender=String)
 def update_dependent_strings_when_string_variable_changes(sender, instance, **kwargs):
     """
@@ -182,6 +196,29 @@ def update_dependent_strings_when_string_variable_changes(sender, instance, **kw
                 sync_conditional_dimension(parent_conditional)
             except String.DoesNotExist:
                 pass  # Parent not found, might not exist yet
+    
+    # Handle variable renaming - update content references
+    old_name = getattr(instance, '_old_effective_variable_name', None)
+    new_name = instance.effective_variable_name
+    
+    if old_name and old_name != new_name:
+        # Variable was renamed, update all content that references the old name
+        variable_pattern = re.compile(r'{{([^}]+)}}')
+        old_reference = f'{{{{{old_name}}}}}'
+        new_reference = f'{{{{{new_name}}}}}'
+        
+        for string in instance.project.strings.all():
+            if string.id == instance.id:
+                continue  # Skip self
+            
+            if old_reference in string.content:
+                # Update the content to use the new variable name
+                new_content = string.content.replace(old_reference, new_reference)
+                # Use update() to avoid triggering signals again
+                String.objects.filter(id=string.id).update(content=new_content)
+                print(f"Updated variable reference in string {string.id}: {old_name} -> {new_name}")
+                # Refresh the instance to reflect the change
+                string.content = new_content
     
     # All strings are now variables, so check if any string references this one
     variable_pattern = re.compile(r'{{([^}]+)}}')

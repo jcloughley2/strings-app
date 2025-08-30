@@ -96,8 +96,8 @@
 ## User Interface
 
 ### Layout (Three Panels)
-- **Left**: Filter Sidebar (360px) - dimensions, traits, conditionals
-- **Center**: Main Canvas - root-level strings only, semantic toggles
+- **Left**: Filter Sidebar (360px) - dimensions and traits only
+- **Center**: Main Canvas - all strings including conditionals, semantic toggles
 - **Right**: Variables Sidebar (collapsible) - trait variable management
 
 ### Cascading Drawer System ⭐
@@ -129,12 +129,12 @@ Nested String 2 (Stacked Drawer)
 ```
 
 ### String Editing Interface ⭐
-**UNIFIED TABBED INTERFACE**: All variable editing (create/edit/nested) uses consistent pattern
+**UNIFIED INTERFACE**: All variable editing (create/edit/nested) uses consistent pattern
 
 #### Content Tab Structure
-- **String/Conditional Tabs**: Replace toggle switches with clear mode selection
-  - **String Tab**: Text content editing + variable detection boxes
-  - **Conditional Tab**: Spawn management with yellow/purple variable boxes
+- **Variable Type Selection**: Select dropdown for choosing String or Conditional mode
+  - **String Mode**: Text content editing + variable detection boxes
+  - **Conditional Mode**: Spawn management with yellow/purple variable boxes
 - **Three Main Tabs**: Content, Dimensions, Advanced
 - **Variable Name Display**: Shows at top with type badges  
 - **ShadCN Close Buttons**: Single X button (removed custom duplicates)
@@ -283,6 +283,22 @@ for (const id of ids) {
 const matches = content.match(/{{([^}]+)}}/g) || [];
 const variableNames = matches.map(match => match.slice(2, -2));
 ```
+
+---
+
+## Recent Changes (2025)
+
+### UI Simplification Updates
+- **✅ Removed Conditionals Sidebar Section**: Eliminated the dedicated "Conditionals" section from the left filter sidebar
+- **✅ Unified Main Canvas**: Conditional variables now appear in the main canvas alongside regular strings
+- **✅ Select Dropdown Interface**: Replaced String/Conditional tabs with a cleaner select dropdown for variable type selection
+- **✅ Streamlined Filtering**: Removed conditional variable filtering from export and processing functions
+
+### Benefits
+- **Cleaner Interface**: Reduced sidebar complexity by removing redundant conditional management
+- **Unified Workflow**: All string management happens in one place (main canvas)
+- **Better UX**: Select dropdown is more compact and mobile-friendly than tabs
+- **Simplified Logic**: Fewer filtering mechanisms to maintain
 
 ---
 

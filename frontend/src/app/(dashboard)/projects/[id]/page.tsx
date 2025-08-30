@@ -744,7 +744,7 @@ export default function ProjectDetailPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 content: spawnContent,
-                // Don't specify variable_name - let backend generate random hash
+                variable_name: null, // Explicitly set to null to let backend generate random hash
                 is_conditional: spawn.is_conditional || false,
                 is_conditional_container: false,
                 project: id,
@@ -757,7 +757,7 @@ export default function ProjectDetailPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 content: spawnContent,
-                // Don't specify variable_name - let backend generate random hash
+                variable_name: null, // Explicitly set to null to let backend generate random hash
                 is_conditional: spawn.is_conditional || false,
               }),
             });
@@ -1244,7 +1244,37 @@ export default function ProjectDetailPage() {
     }
     
     try {
-      // Create or update all spawns
+      // Step 1: Create the conditional container if we're creating a new conditional
+      let conditionalContainer = null;
+      if (!editingString) {
+        console.log('DEBUG: Creating new conditional container');
+        conditionalContainer = await apiFetch('/api/strings/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: stringContent || 'Conditional variable',
+            variable_name: stringVariableName || null,
+            is_conditional: true,
+            is_conditional_container: true,
+            project: id,
+          }),
+        });
+        console.log('DEBUG: Created conditional container:', conditionalContainer);
+        
+        // Step 2: Create dimension for the conditional
+        const conditionalName = conditionalContainer.effective_variable_name || conditionalContainer.variable_hash;
+        console.log('DEBUG: Creating dimension for conditional:', conditionalName);
+        await apiFetch('/api/dimensions/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: conditionalName,
+            project: id,
+          }),
+        });
+      }
+      
+      // Step 3: Create or update all spawns
               const updatePromises = conditionalSpawns.map(spawn => {
           // Detect temporary spawns: _isTemporary flag, temp- prefix, or timestamp-like IDs (> 1000000000000)
           const isTemporary = spawn._isTemporary || 
@@ -1257,7 +1287,7 @@ export default function ProjectDetailPage() {
           console.log('DEBUG: Creating new spawn variable with POST');
           const payload = {
             content: spawn.content,
-            // Don't specify variable_name - let backend generate random hash
+            variable_name: null, // Explicitly set to null to let backend generate random hash
             is_conditional: spawn.is_conditional,
             is_conditional_container: false,
             project: id,
@@ -1291,16 +1321,43 @@ export default function ProjectDetailPage() {
         }
       });
 
-      await Promise.all(updatePromises);
+      const createdSpawns = await Promise.all(updatePromises);
+      
+      // Step 4: Create dimension values for new spawns if we created a new conditional
+      if (!editingString && conditionalContainer) {
+        const conditionalName = conditionalContainer.effective_variable_name || conditionalContainer.variable_hash;
+        console.log('DEBUG: Creating dimension values for spawns');
+        
+        // Find the dimension we just created
+        const updatedProject = await apiFetch(`/api/projects/${id}/`);
+        const dimension = updatedProject.dimensions?.find((d: any) => d.name === conditionalName);
+        
+        if (dimension) {
+          // Create dimension values for each spawn
+          const dimensionValuePromises = createdSpawns.map(async (spawn: any) => {
+            const spawnName = spawn.effective_variable_name || spawn.variable_hash;
+            return apiFetch('/api/dimension-values/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                dimension: dimension.id,
+                value: spawnName,
+              }),
+            });
+          });
+          
+          await Promise.all(dimensionValuePromises);
+        }
+      }
 
       // Refresh project data
-      const updatedProject = await apiFetch(`/api/projects/${id}/`);
-      setProject(sortProjectStrings(updatedProject));
+      const finalProject = await apiFetch(`/api/projects/${id}/`);
+      setProject(sortProjectStrings(finalProject));
       
       // Close dialog
-      closeNestedStringDialog();
+      closeStringDialog();
       
-      toast.success('Split variable spawns updated successfully!');
+      toast.success(editingString ? 'Split variable spawns updated successfully!' : 'Conditional variable created successfully!');
     } catch (err) {
       console.error('Failed to update conditional spawns:', err);
       toast.error('Failed to update spawns. Please try again.');
@@ -1332,7 +1389,7 @@ export default function ProjectDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: contentToCopy,
-          // Don't specify variable_name - let backend generate random hash
+          variable_name: null, // Explicitly set to null to let backend generate random hash
           is_conditional: editingNestedString.is_conditional,
           project: parseInt(id as string),
         }),

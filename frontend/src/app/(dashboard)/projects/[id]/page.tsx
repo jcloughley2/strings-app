@@ -1248,30 +1248,51 @@ export default function ProjectDetailPage() {
       let conditionalContainer = null;
       if (!editingString) {
         console.log('DEBUG: Creating new conditional container');
-        conditionalContainer = await apiFetch('/api/strings/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content: stringContent || 'Conditional variable',
-            variable_name: stringVariableName || null,
-            is_conditional: true,
-            is_conditional_container: true,
-            project: id,
-          }),
-        });
-        console.log('DEBUG: Created conditional container:', conditionalContainer);
+        try {
+          conditionalContainer = await apiFetch('/api/strings/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: stringContent || 'Conditional variable',
+              variable_name: stringVariableName || null,
+              is_conditional: true,
+              is_conditional_container: true,
+              project: id,
+            }),
+          });
+          console.log('DEBUG: Created conditional container:', conditionalContainer);
+        } catch (containerError) {
+          console.error('DEBUG: Failed to create conditional container:', containerError);
+          throw containerError;
+        }
         
-        // Step 2: Create dimension for the conditional
+        // Step 2: Create dimension for the conditional (if it doesn't already exist)
         const conditionalName = conditionalContainer.effective_variable_name || conditionalContainer.variable_hash;
         console.log('DEBUG: Creating dimension for conditional:', conditionalName);
-        await apiFetch('/api/dimensions/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: conditionalName,
-            project: id,
-          }),
-        });
+        
+        // Fetch latest project data to check for existing dimensions
+        const latestProject = await apiFetch(`/api/projects/${id}/`);
+        const existingDimension = latestProject.dimensions?.find((d: any) => d.name === conditionalName);
+        
+        if (!existingDimension) {
+          try {
+            console.log('DEBUG: Attempting to create dimension with payload:', { name: conditionalName, project: id });
+            await apiFetch('/api/dimensions/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: conditionalName,
+                project: id,
+              }),
+            });
+            console.log('DEBUG: Successfully created new dimension:', conditionalName);
+          } catch (dimensionError) {
+            console.error('DEBUG: Dimension creation failed:', dimensionError);
+            // Continue anyway - the dimension might have been created by another process
+          }
+        } else {
+          console.log('DEBUG: Dimension already exists:', conditionalName);
+        }
       }
       
       // Step 3: Create or update all spawns

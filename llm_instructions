@@ -300,4 +300,13 @@ const variableNames = matches.map(match => match.slice(2, -2));
 
 ---
 
+## Development Workflow
+
+### Git Operations
+- **IMPORTANT**: Do NOT commit or push code changes unless explicitly requested by the user
+- Only make the requested code changes and let the user handle git operations when ready
+- User prefers to control their own commit timing and messages
+
+---
+
 **CORE PRINCIPLE**: This is a file system for text content. Every string is a file, conditionals are directories, and the cascading drawer system enables deep navigation through the hierarchy. Maintain this analogy for intuitive user experience.

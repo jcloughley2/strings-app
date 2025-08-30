@@ -1226,9 +1226,30 @@ export default function ProjectDetailPage() {
     }
     
     try {
-      // Step 1: Create the conditional container if we're creating a new conditional
+      // Step 1: Handle conditional container creation or conversion
       let conditionalContainer = null;
-      if (!editingString) {
+      
+      if (editingString && !editingString.is_conditional_container) {
+        // Converting existing string to conditional
+        console.log('DEBUG: Converting existing string to conditional container');
+        try {
+          conditionalContainer = await apiFetch(`/api/strings/${editingString.id}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: stringContent || editingString.content,
+              variable_name: stringVariableName || editingString.variable_name,
+              is_conditional: true,
+              is_conditional_container: true,
+            }),
+          });
+          console.log('DEBUG: Converted string to conditional container:', conditionalContainer);
+        } catch (conversionError) {
+          console.error('DEBUG: Failed to convert string to conditional:', conversionError);
+          throw conversionError;
+        }
+      } else if (!editingString) {
+        // Creating new conditional from scratch
         console.log('DEBUG: Creating new conditional container');
         try {
           conditionalContainer = await apiFetch('/api/strings/', {
@@ -1247,34 +1268,38 @@ export default function ProjectDetailPage() {
           console.error('DEBUG: Failed to create conditional container:', containerError);
           throw containerError;
         }
+      } else if (editingString && editingString.is_conditional_container) {
+        // Already a conditional, just use the existing one
+        conditionalContainer = editingString;
+        console.log('DEBUG: Using existing conditional container:', conditionalContainer);
+      }
         
-        // Step 2: Create dimension for the conditional (if it doesn't already exist)
-        const conditionalName = conditionalContainer.effective_variable_name || conditionalContainer.variable_hash;
-        console.log('DEBUG: Creating dimension for conditional:', conditionalName);
-        
-        // Fetch latest project data to check for existing dimensions
-        const latestProject = await apiFetch(`/api/projects/${id}/`);
-        const existingDimension = latestProject.dimensions?.find((d: any) => d.name === conditionalName);
-        
-        if (!existingDimension) {
-          try {
-            console.log('DEBUG: Attempting to create dimension with payload:', { name: conditionalName, project: id });
-            await apiFetch('/api/dimensions/', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                name: conditionalName,
-                project: id,
-              }),
-            });
-            console.log('DEBUG: Successfully created new dimension:', conditionalName);
-          } catch (dimensionError) {
-            console.error('DEBUG: Dimension creation failed:', dimensionError);
-            // Continue anyway - the dimension might have been created by another process
-          }
-        } else {
-          console.log('DEBUG: Dimension already exists:', conditionalName);
+      // Step 2: Create dimension for the conditional (if it doesn't already exist)
+      const conditionalName = conditionalContainer.effective_variable_name || conditionalContainer.variable_hash;
+      console.log('DEBUG: Creating dimension for conditional:', conditionalName);
+      
+      // Fetch latest project data to check for existing dimensions
+      const latestProject = await apiFetch(`/api/projects/${id}/`);
+      const existingDimension = latestProject.dimensions?.find((d: any) => d.name === conditionalName);
+      
+      if (!existingDimension) {
+        try {
+          console.log('DEBUG: Attempting to create dimension with payload:', { name: conditionalName, project: id });
+          await apiFetch('/api/dimensions/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: conditionalName,
+              project: id,
+            }),
+          });
+          console.log('DEBUG: Successfully created new dimension:', conditionalName);
+        } catch (dimensionError) {
+          console.error('DEBUG: Dimension creation failed:', dimensionError);
+          // Continue anyway - the dimension might have been created by another process
         }
+      } else {
+        console.log('DEBUG: Dimension already exists:', conditionalName);
       }
       
       // Step 3: Create or update all spawns
@@ -3722,9 +3747,52 @@ export default function ProjectDetailPage() {
                     )}
                     </div>
                   ) : (
-                    // Show direct content for editing existing strings (no tabs)
+                    // Show content for editing existing strings with variable type selection
                     <div className="space-y-4">
-                      {editingString.is_conditional_container ? (
+                      {/* Variable Type Selection for existing strings */}
+                      <div className="space-y-2">
+                        <Label>Variable Type</Label>
+                        <Select 
+                          value={editingString.is_conditional_container ? "conditional" : "string"} 
+                          onValueChange={(value: string) => {
+                            if (value === "conditional" && !editingString.is_conditional_container) {
+                              // Converting to conditional - initialize conditional mode
+                              setContentSubTab("conditional");
+                              setEditingConditional(true);
+                              // Initialize with a default spawn if none exist
+                              if (conditionalSpawns.length === 0) {
+                                const defaultSpawn = {
+                                  id: `temp-${Date.now()}`,
+                                  content: stringContent || 'Default spawn content',
+                                  project: project.id,
+                                  variable_name: null,
+                                  variable_hash: null,
+                                  effective_variable_name: null,
+                                  is_conditional: false,
+                                  is_conditional_container: false,
+                                  isTemporary: true
+                                };
+                                setConditionalSpawns([defaultSpawn]);
+                              }
+                            } else if (value === "string" && editingString.is_conditional_container) {
+                              // Converting back to string
+                              setContentSubTab("string");
+                              setEditingConditional(false);
+                              setConditionalSpawns([]);
+                            }
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select variable type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="string">String</SelectItem>
+                            <SelectItem value="conditional">Conditional</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {editingString.is_conditional_container || contentSubTab === "conditional" ? (
                         // Split variable editing content
                         <div className="space-y-4">
                           {/* Conditional Header */}
@@ -4310,8 +4378,15 @@ export default function ProjectDetailPage() {
                     <Button type="button" variant="secondary" onClick={closeStringDialog}>
                       Cancel
                     </Button>
-                                    <Button type="submit" onClick={contentSubTab === "conditional" ? handleSplitVariableSubmit : handleStringSubmit}>
-                  {contentSubTab === "conditional" ? "Save Conditional" : (editingString ? "Save Changes" : "Create String")}
+                                    <Button type="submit" onClick={
+                      (contentSubTab === "conditional" || (editingString && editingString.is_conditional_container)) 
+                        ? handleSplitVariableSubmit 
+                        : handleStringSubmit
+                    }>
+                      {(contentSubTab === "conditional" || (editingString && editingString.is_conditional_container)) 
+                        ? "Save Conditional" 
+                        : (editingString ? "Save Changes" : "Create String")
+                      }
                     </Button>
                   </>
                 )}
@@ -4415,38 +4490,128 @@ export default function ProjectDetailPage() {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {/* String/Conditional Mode Tabs */}
-                        <Tabs 
-                          value={(drawer.isConditional || drawer.isConditionalContainer) ? "conditional" : "string"} 
-                          onValueChange={(value) => {
-                            const isConditional = value === "conditional";
-                            const updates: any = { isConditional };
-                            
-                            // When switching TO conditional mode, initialize spawns if empty
-                            if (isConditional && drawer.conditionalSpawns.length === 0) {
-                              const parentName = drawer.stringData.effective_variable_name || drawer.stringData.variable_hash;
-                              const firstSpawn = {
-                                id: `temp-spawn-${Date.now()}`,
-                                content: drawer.content || "First spawn content",
-                                variable_name: `${parentName}_1`,
-                                variable_hash: `${parentName}_1`,
-                                effective_variable_name: `${parentName}_1`,
-                                is_conditional: false,
-                                is_conditional_container: false,
-                                _isTemporary: true
-                              };
-                              updates.conditionalSpawns = [firstSpawn];
-                            }
-                            updateCascadingDrawer(drawer.id, updates);
-                          }} 
-                          className="w-full"
-                        >
-                          <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="string">String</TabsTrigger>
-                            <TabsTrigger value="conditional">Conditional</TabsTrigger>
-                          </TabsList>
-                          
-                          <TabsContent value="string" className="mt-4">
+                        {/* Variable Type Selection */}
+                        <div className="space-y-2">
+                          <Label>Variable Type</Label>
+                          <Select 
+                            value={(drawer.isConditional || drawer.isConditionalContainer) ? "conditional" : "string"} 
+                            onValueChange={(value: string) => {
+                              const isConditional = value === "conditional";
+                              const updates: any = { isConditional };
+                              
+                              // When switching TO conditional mode, initialize spawns if empty
+                              if (isConditional && drawer.conditionalSpawns.length === 0) {
+                                const defaultSpawn = {
+                                  id: `temp-spawn-${Date.now()}`,
+                                  content: drawer.content || "Default spawn content",
+                                  variable_name: null,
+                                  variable_hash: null,
+                                  effective_variable_name: null,
+                                  is_conditional: false,
+                                  is_conditional_container: false,
+                                  _isTemporary: true
+                                };
+                                updates.conditionalSpawns = [defaultSpawn];
+                              }
+                              updateCascadingDrawer(drawer.id, updates);
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select variable type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="string">String</SelectItem>
+                              <SelectItem value="conditional">Conditional</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        {(drawer.isConditional || drawer.isConditionalContainer) ? (
+                          // Conditional mode content
+                          <div className="space-y-4">
+                            {/* Conditional Header */}
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h3 className="text-lg font-semibold">Conditional</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  Manage spawn string variables for this conditional
+                                </p>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const newSpawn = {
+                                    id: `temp-spawn-${Date.now()}`,
+                                    content: "New spawn content",
+                                    variable_name: null,
+                                    variable_hash: null,
+                                    effective_variable_name: null,
+                                    is_conditional: false,
+                                    is_conditional_container: false,
+                                    _isTemporary: true
+                                  };
+                                  updateCascadingDrawer(drawer.id, { 
+                                    conditionalSpawns: [...drawer.conditionalSpawns, newSpawn] 
+                                  });
+                                }}
+                                className="flex items-center gap-2"
+                              >
+                                <Plus className="h-4 w-4" />
+                                Add Spawn
+                              </Button>
+                            </div>
+
+                            {/* Spawn Variables */}
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between">
+                                <Label>Spawn Variables</Label>
+                                <Badge variant="outline" className="text-xs">
+                                  {drawer.conditionalSpawns.length} spawn{drawer.conditionalSpawns.length !== 1 ? 's' : ''}
+                                </Badge>
+                              </div>
+
+                              {drawer.conditionalSpawns.map((spawn: any, index: number) => {
+                                const isTemporary = spawn._isTemporary || String(spawn.id).startsWith('temp-');
+                                const variableName = spawn.effective_variable_name || spawn.variable_hash || (isTemporary ? 'new_variable' : 'unknown');
+                                
+                                return (
+                                  <div key={spawn.id} className="border rounded-lg p-4 space-y-3">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      {isTemporary ? (
+                                        <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 p-1 rounded border border-yellow-200">
+                                          <Plus className="h-3 w-3" />
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
+                                          <Spool className="h-3 w-3" />
+                                        </div>
+                                      )}
+                                      <Badge variant="outline" className={`text-xs font-mono ${
+                                        isTemporary 
+                                          ? 'bg-yellow-50 text-yellow-700 border-yellow-200' 
+                                          : 'bg-purple-50 text-purple-700 border-purple-200'
+                                      }`}>
+                                        {`{{${variableName}}}`}
+                                      </Badge>
+                                      {isTemporary && (
+                                        <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
+                                          New variable!
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    {!isTemporary && (
+                                      <p className="text-sm text-muted-foreground line-clamp-2">
+                                        {spawn.content || "Empty content"}
+                                      </p>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          // String mode content
                             <div className="space-y-4">
                               <div className="space-y-2">
                                 <Label htmlFor="content">Content</Label>
@@ -4551,107 +4716,9 @@ export default function ProjectDetailPage() {
                           );
                         })()}
                             </div>
-                          </TabsContent>
-                          
-                          <TabsContent value="conditional" className="mt-4">
-                            <div className="space-y-4">
-                              <div>
-                                <h3 className="text-lg font-semibold">Conditional</h3>
-                                <p className="text-sm text-muted-foreground">
-                                  Manage spawn string variables for this conditional
-                                </p>
-                              </div>
-                              
-                              <div className="flex items-center justify-between">
-                                <Label>Spawn Variables</Label>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    const parentName = drawer.stringData.effective_variable_name || drawer.stringData.variable_hash;
-                                    const spawnNumber = drawer.conditionalSpawns.length + 1;
-                                    const newSpawn = {
-                                      id: `temp-spawn-${Date.now()}`,
-                                      content: `Spawn ${spawnNumber} content`,
-                                      variable_name: `${parentName}_${spawnNumber}`,
-                                      variable_hash: `${parentName}_${spawnNumber}`,
-                                      effective_variable_name: `${parentName}_${spawnNumber}`,
-                                      is_conditional: false,
-                                      is_conditional_container: false,
-                                      _isTemporary: true
-                                    };
-                                    updateCascadingDrawer(drawer.id, { 
-                                      conditionalSpawns: [...drawer.conditionalSpawns, newSpawn] 
-                                    });
-                                  }}
-                                  className="flex items-center gap-2"
-                                >
-                                  <Plus className="h-4 w-4" />
-                                  Add Spawn
-                                </Button>
-                              </div>
-                              
-                              <div className="grid gap-3">
-                                {drawer.conditionalSpawns.map((spawn: any) => {
-                                  const isTemporary = spawn._isTemporary || 
-                                                     spawn.id.toString().startsWith('temp-') || 
-                                                     (typeof spawn.id === 'number' && spawn.id > 1000000000000);
-                                  const variableName = spawn.effective_variable_name || spawn.variable_hash || (isTemporary ? 'new_variable' : 'unknown');
-                                  
-                                  return (
-                                    <div 
-                                      key={spawn.id} 
-                                      className={`border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer ${
-                                        isTemporary 
-                                          ? 'bg-yellow-50/50 border-yellow-200' 
-                                          : 'bg-purple-50/50 border-purple-200'
-                                      }`}
-                                      onClick={() => openEditInCascadingDrawer(spawn)}
-                                    >
-                                      <div className="flex items-center gap-2 mb-2">
-                                        {isTemporary ? (
-                                          <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 p-1 rounded border border-yellow-200">
-                                            <Plus className="h-3 w-3" />
-                                          </div>
-                                        ) : (
-                                          <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
-                                            <Spool className="h-3 w-3" />
-                                          </div>
-                                        )}
-                                        <Badge variant="outline" className={`text-xs font-mono ${
-                                          isTemporary 
-                                            ? 'bg-yellow-50 text-yellow-700 border-yellow-200' 
-                                            : 'bg-purple-50 text-purple-700 border-purple-200'
-                                        }`}>
-                                          {`{{${variableName}}}`}
-                                        </Badge>
-                                        {isTemporary && (
-                                          <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
-                                            New variable!
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      {!isTemporary && (
-                                        <p className="text-sm text-muted-foreground line-clamp-2">
-                                          {spawn.content || "Empty content"}
-                                        </p>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                                
-                                {drawer.conditionalSpawns.length === 0 && (
-                                  <div className="text-center py-8 text-muted-foreground">
-                                    <p className="text-sm">No spawn variables yet</p>
-                                    <p className="text-xs">Click "Add Spawn" to create the first spawn</p>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </TabsContent>
-                        </Tabs>
-                            </div>
-                          )}
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

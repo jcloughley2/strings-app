@@ -6,7 +6,7 @@ router = DefaultRouter()
 router.register(r'projects', views.ProjectViewSet, basename='project')
 router.register(r'strings', views.StringViewSet, basename='string')
 
-router.register(r'conditionals', views.ConditionalViewSet, basename='conditional')
+
 router.register(r'dimensions', views.DimensionViewSet, basename='dimension')
 router.register(r'dimension-values', views.DimensionValueViewSet, basename='dimension-value')
 router.register(r'string-dimension-values', views.StringDimensionValueViewSet, basename='string-dimension-value')

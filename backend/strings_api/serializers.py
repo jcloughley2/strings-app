@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Project, String, Conditional, Dimension, DimensionValue, StringDimensionValue
+from .models import Project, String, Dimension, DimensionValue, StringDimensionValue
 import re
 from django.db import models
 
@@ -103,13 +103,7 @@ class StringSerializer(serializers.ModelSerializer):
         instance.update_dimension_values_from_variables()
         return instance
 
-class ConditionalSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Conditional
-        fields = ['id', 'name', 'default_value', 'project', 'created_at', 'updated_at']
-        extra_kwargs = {
-            'project': {'write_only': True}
-        }
+
 
 class DimensionValueSerializer(serializers.ModelSerializer):
     class Meta:
@@ -179,9 +173,8 @@ class StringDimensionValueSerializer(serializers.ModelSerializer):
 
 class ProjectSerializer(serializers.ModelSerializer):
     strings = StringSerializer(many=True, read_only=True)
-    conditionals = ConditionalSerializer(many=True, read_only=True)
     dimensions = DimensionSerializer(many=True, read_only=True)
     
     class Meta:
         model = Project
-        fields = ['id', 'name', 'description', 'strings', 'conditionals', 'dimensions', 'created_at', 'updated_at'] 
+        fields = ['id', 'name', 'description', 'strings', 'dimensions', 'created_at', 'updated_at'] 

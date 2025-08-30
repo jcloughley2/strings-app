@@ -1,4 +1,4 @@
-from django.shortcuts import render
+
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
@@ -12,11 +12,10 @@ from django.utils.encoding import force_bytes, force_str
 from django.template.loader import render_to_string
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.db import models
-from .models import Project, String, Conditional, Dimension, DimensionValue, StringDimensionValue
+from .models import Project, String, Dimension, DimensionValue, StringDimensionValue
 from .serializers import (
     ProjectSerializer,
     StringSerializer,
-    ConditionalSerializer,
     DimensionSerializer,
     DimensionValueSerializer,
     StringDimensionValueSerializer
@@ -197,7 +196,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
         project = self.get_object()
         
         # Get filter parameters from request
-        selected_conditional_variables = request.data.get('selected_conditional_variables', [])
         selected_dimension_values = request.data.get('selected_dimension_values', {})
         
         # Get all strings for the project
@@ -238,7 +236,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
             processed_content = self._process_string_content(
                 string.content, 
                 project, 
-                selected_conditional_variables,
                 selected_dimension_values
             )
             processed_strings.append({
@@ -271,14 +268,12 @@ class ProjectViewSet(viewsets.ModelViewSet):
         
         return response
     
-    def _process_string_content(self, content, project, selected_conditional_variables, selected_dimension_values=None):
+    def _process_string_content(self, content, project, selected_dimension_values=None):
         """
-        Process string content based on conditional and dimension selections.
+        Process string content by replacing variable references with their values.
         """
-        # First, process conditional variables - remove unselected conditionals
-        processed_content = self._process_conditional_variables(content, project, selected_conditional_variables)
-        
-        # Then process string variables
+        # Process string variables by replacing {{variableName}} with their content
+        processed_content = content
         variable_pattern = re.compile(r'{{([^}]+)}}')
         variables_in_content = variable_pattern.findall(processed_content)
         
@@ -293,38 +288,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 replacement_value = self._process_string_content(
                     string_variable.content, 
                     project, 
-                    selected_conditional_variables, 
                     selected_dimension_values
                 )
                 processed_content = processed_content.replace(f'{{{{{variable_name}}}}}', replacement_value)
         
         return processed_content
     
-    def _process_conditional_variables(self, content, project, selected_conditional_variables):
-        """
-        Remove conditional variables that are not selected.
-        This includes only string variables now.
-        """
-        variable_pattern = re.compile(r'{{([^}]+)}}')
-        variables_in_content = variable_pattern.findall(content)
-        processed_content = content
-        
-        for variable_name in variables_in_content:
-            # Check string variables
-            string_variable = project.strings.filter(
-                models.Q(variable_name=variable_name) | models.Q(variable_hash=variable_name)
-            ).first()
-            
-            if string_variable:
-                effective_name = string_variable.variable_name if string_variable.variable_name else string_variable.variable_hash
-                if effective_name == variable_name and string_variable.is_conditional:
-                    # Create a unique ID for string variables using 's' prefix and string ID
-                    string_var_id = f"s{string_variable.id}"
-                    if string_var_id not in selected_conditional_variables:
-                        # Remove this conditional string variable from content
-                        processed_content = processed_content.replace(f'{{{{{variable_name}}}}}', '')
-        
-        return processed_content
+
 
     @action(detail=True, methods=['post'], url_path='duplicate')
     def duplicate(self, request, pk=None):
@@ -434,19 +404,7 @@ class StringViewSet(viewsets.ModelViewSet):
 
 
 
-class ConditionalViewSet(viewsets.ModelViewSet):
-    serializer_class = ConditionalSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
-        return Conditional.objects.filter(project__user=self.request.user)
-
-    def perform_create(self, serializer):
-        project_id = self.request.data.get('project')
-        project = Project.objects.filter(id=project_id, user=self.request.user).first()
-        if not project:
-            raise serializers.ValidationError({'project': 'Project not found or you do not have permission to add conditionals to it.'})
-        serializer.save(project=project)
 
 class DimensionViewSet(viewsets.ModelViewSet):
     serializer_class = DimensionSerializer

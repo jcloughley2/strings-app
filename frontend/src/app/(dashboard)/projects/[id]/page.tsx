@@ -771,12 +771,29 @@ export default function ProjectDetailPage() {
     try {
       if (drawer.isEditingConditional) {
         // Handle conditional saving logic
-
+        let conditionalContainer;
         
-        // First, convert the existing string to a conditional container if needed
-        if (!drawer.stringData.is_conditional_container) {
-
-          await apiFetch(`/api/strings/${drawer.stringData.id}/`, {
+        // Check if this is a new/temporary string or an existing string
+        const isTemporary = drawer.stringData._isTemporary || 
+                           String(drawer.stringData.id).startsWith('temp-') || 
+                           (typeof drawer.stringData.id === 'number' && drawer.stringData.id > 1000000000000);
+        
+        if (isTemporary) {
+          // Create new conditional container string
+          conditionalContainer = await apiFetch('/api/strings/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: drawer.content || drawer.stringData.content,
+              variable_name: drawer.variableName?.trim() || null,
+              project: id,
+              is_conditional: true,
+              is_conditional_container: true,
+            }),
+          });
+        } else if (!drawer.stringData.is_conditional_container) {
+          // Convert existing string to conditional container
+          conditionalContainer = await apiFetch(`/api/strings/${drawer.stringData.id}/`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -786,9 +803,12 @@ export default function ProjectDetailPage() {
               is_conditional_container: true,
             }),
           });
+        } else {
+          // Already a conditional container, use existing data
+          conditionalContainer = drawer.stringData;
         }
         
-        const conditionalName = drawer.stringData.effective_variable_name || drawer.stringData.variable_hash;
+        const conditionalName = conditionalContainer.effective_variable_name || conditionalContainer.variable_hash;
 
         
         // Create dimension for the conditional (if it doesn't already exist)
@@ -900,14 +920,21 @@ export default function ProjectDetailPage() {
               
 
             } catch (error) {
-              console.error('DEBUG: Failed to create dimension value for spawn:', spawnName, error);
+              console.error('Failed to create dimension value for spawn:', spawnName, error);
               // Continue with other spawns even if one fails
         }
           }
         }
         
-        // Conditional container was already created/updated at the beginning of this function
-        console.log('DEBUG: Conditional conversion completed successfully');
+        // Remove from pending variables if this was a new conditional
+        if (isTemporary) {
+          const variableName = conditionalContainer.effective_variable_name || conditionalContainer.variable_hash;
+          setPendingStringVariables(prev => {
+            const newPending = { ...prev };
+            delete newPending[variableName];
+            return newPending;
+          });
+        }
         
         // Refresh project data to show the new conditional and spawns
         const updatedProject = await apiFetch(`/api/projects/${id}/`);

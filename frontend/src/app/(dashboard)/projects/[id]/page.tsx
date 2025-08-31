@@ -395,7 +395,7 @@ export default function ProjectDetailPage() {
     // Set up basic editing state
     setStringContent(str.content);
     setEditingString(str);
-    setStringVariableName(str.variable_name || "");
+    setStringVariableName(str.effective_variable_name || str.variable_hash || str.variable_name || "");
     setStringIsConditional(str.is_conditional || false);
     setPendingStringVariables({});
     setIsStringDrawerOpen(true);
@@ -615,7 +615,7 @@ export default function ProjectDetailPage() {
     
     // Set up all string editing state for the spawn
     setStringContent(spawn.content || '');
-    setStringVariableName(spawn.variable_name || '');
+    setStringVariableName(spawn.effective_variable_name || spawn.variable_hash || spawn.variable_name || '');
     setStringIsConditional(spawn.is_conditional || false);
     setStringDialogTab("content");
     setContentSubTab("string");
@@ -660,7 +660,7 @@ export default function ProjectDetailPage() {
       id: `string-${str.id}-${Date.now()}`,
       stringData: str,
       content: str.content || "",
-      variableName: str.variable_name || "",
+      variableName: str.effective_variable_name || str.variable_hash || str.variable_name || "",
       isConditional: str.is_conditional || false,
       isConditionalContainer: str.is_conditional_container || false,
       tab: "content",
@@ -813,11 +813,10 @@ export default function ProjectDetailPage() {
         
         // Create dimension for the conditional (if it doesn't already exist)
         const latestProject = await apiFetch(`/api/projects/${id}/`);
-        const existingDimension = latestProject.dimensions?.find((d: any) => d.name === conditionalName);
+        let conditionalDimension = latestProject.dimensions?.find((d: any) => d.name === conditionalName);
         
-        if (!existingDimension) {
+        if (!conditionalDimension) {
           try {
-
             await apiFetch('/api/dimensions/', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -826,9 +825,15 @@ export default function ProjectDetailPage() {
                 project: id,
               }),
             });
+            
+            // Fetch updated project to get the newly created dimension
+            const updatedProject = await apiFetch(`/api/projects/${id}/`);
+            conditionalDimension = updatedProject.dimensions?.find((d: any) => d.name === conditionalName);
           } catch (dimensionError) {
-
             // Continue anyway - the dimension might have been created by another process
+            // Try to get it from the latest project data
+            const retryProject = await apiFetch(`/api/projects/${id}/`);
+            conditionalDimension = retryProject.dimensions?.find((d: any) => d.name === conditionalName);
           }
         }
         
@@ -889,35 +894,45 @@ export default function ProjectDetailPage() {
 
         
         // Create dimension values for each spawn
-        const projectForDimensions = await apiFetch(`/api/projects/${id}/`);
-        const dimension = projectForDimensions.dimensions?.find((d: any) => d.name === conditionalName);
-        
-        if (dimension) {
+        if (conditionalDimension) {
           for (let i = 0; i < savedSpawns.length; i++) {
             const savedSpawn = savedSpawns[i];
             const spawnName = savedSpawn.effective_variable_name || savedSpawn.variable_hash;
             
             try {
-              // Create dimension value for this spawn
-              const dimensionValue = await apiFetch('/api/dimension-values/', {
+              // Check if dimension value already exists for this spawn
+              let dimensionValue = conditionalDimension.values?.find((dv: any) => dv.value === spawnName);
+              
+              if (!dimensionValue) {
+                // Create new dimension value if it doesn't exist
+                dimensionValue = await apiFetch('/api/dimension-values/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                  dimension: dimension.id,
-                  value: spawnName,
+                    dimension: conditionalDimension.id,
+                    value: spawnName,
             }),
           });
+              }
               
-              // Link the spawn to the dimension value
-              await apiFetch('/api/string-dimension-values/', {
-                method: 'POST',
+              // Check if StringDimensionValue link already exists
+              const existingLink = savedSpawn.dimension_values?.find((dv: any) => 
+                dv.dimension_value && 
+                dv.dimension_value.dimension === conditionalDimension.id && 
+                dv.dimension_value.value === spawnName
+              );
+              
+              if (!existingLink) {
+                // Link the spawn to the dimension value
+                await apiFetch('/api/string-dimension-values/', {
+                  method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                  string: savedSpawn.id,
-                  dimension_value: dimensionValue.id,
+                    string: savedSpawn.id,
+                    dimension_value: dimensionValue.id,
             }),
           });
-              
+        }
 
             } catch (error) {
               console.error('Failed to create dimension value for spawn:', spawnName, error);

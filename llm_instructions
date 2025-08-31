@@ -95,6 +95,7 @@
 ### Layout (Three Panels)
 - **Left**: Filter Sidebar (360px) - dimensions only (traits removed)
 - **Center**: Main Canvas - all strings including conditionals and embedded strings, orange/purple badges
+  - **"Show variables" toggle**: Controls whether conditional variables show as badges or resolved content
 - **Right**: Variables Sidebar (collapsible) - dimension variable management
 
 ### Cascading Drawer System ⭐
@@ -318,6 +319,34 @@ const variableNames = matches.map(match => match.slice(2, -2));
 
 ## Development Workflow
 
+### Recent Major Updates (Latest)
+
+#### "Show Variables" Toggle & Dimension-Based Spawn Selection
+- **"Show variables" toggle button** in canvas header (inactive by default, orange styling when active)
+- **Dynamic conditional resolution**: When toggle is OFF, shows actual spawn content instead of variable badges
+- **Real-time dimension control**: Selecting different dimension values changes displayed content instantly
+- **Two display modes**:
+  - Toggle OFF: Shows resolved content (e.g., "My favorite color is blue")
+  - Toggle ON: Shows variable structure with orange badges (e.g., "My favorite color is {{color}}")
+
+#### Always-Selected Dimensions System
+- **Automatic default selection**: Each dimension always has one value selected (uses first value as default)
+- **No deselection allowed**: Removed X buttons, users can only switch between dimension values
+- **Streamlined filtering**: All strings always visible, dimensions control spawn resolution only
+- **Improved UX**: Consistent state, no confusing "nothing selected" scenarios
+
+#### Enhanced Cascading Drawer System
+- **Fixed conditional creation**: Proper handling of new vs existing strings in cascading drawers
+- **Robust spawn management**: Added existence checks to prevent dimension value conflicts
+- **Variable name population**: Advanced tab now shows current variable names for existing variables
+- **Unified interface**: Consistent select dropdown for String/Conditional mode across all drawer types
+
+#### Technical Improvements
+- **Dimension-spawn lookup**: Fixed spawn content resolution using variable name matching
+- **Uniqueness constraint handling**: Prevents "fields must make a unique set" errors when adding spawns
+- **Temporary string detection**: Proper POST vs PATCH API calls for new vs existing strings
+- **Advanced tab fixes**: Variable name field now pre-populated with effective_variable_name/variable_hash
+
 ### Git Operations
 - **IMPORTANT**: Do NOT commit or push code changes unless explicitly requested by the user
 - Only make the requested code changes and let the user handle git operations when ready
@@ -326,3 +355,9 @@ const variableNames = matches.map(match => match.slice(2, -2));
 ---
 
 **CORE PRINCIPLE**: This is a file system for text content. Every string is a file, conditionals are directories, and the cascading drawer system enables deep navigation through the hierarchy. Maintain this analogy for intuitive user experience.
+
+Here is an example of a setup in a project:
+
+So lets say I have conditional variable, {{color-option}} and its spawn strings are {{option-1}} and {{option-2}}. The content of {{option-1}} is "blue" and the content of {{option-2}} is "green". Therefore we also have a dimension called "color-option" with dimension values of "option-1" and "option-2" 
+
+Lets say I have the sentence "My favorite color is {{color-option}}". If option-1 dimension value is selected, the sentence reads "My favorite color is blue". If option-2 dimension value is selected, the sentence reads "My favorite color is green".

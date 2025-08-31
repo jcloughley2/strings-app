@@ -31,6 +31,7 @@ export default function ProjectDetailPage() {
   const [isPlaintextMode, setIsPlaintextMode] = useState(false);
   const [showDimensions, setShowDimensions] = useState(true);
   const [showStringVariables, setShowStringVariables] = useState(false);
+  const [showVariableBadges, setShowVariableBadges] = useState(false);
   const [isStringDrawerOpen, setIsStringDrawerOpen] = useState(false);
   
   // Filter sidebar state
@@ -187,6 +188,29 @@ export default function ProjectDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  // Initialize default dimension values when project loads
+  useEffect(() => {
+    if (project && project.dimensions) {
+      const initialDimensionValues: {[dimensionId: number]: string | null} = {};
+      
+      project.dimensions.forEach((dimension: any) => {
+        // Only set default if not already set and dimension has values
+        if (selectedDimensionValues[dimension.id] === undefined && dimension.values && dimension.values.length > 0) {
+          // Select the first dimension value as default
+          initialDimensionValues[dimension.id] = dimension.values[0].value;
+        }
+      });
+      
+      // Only update if we have new defaults to set
+      if (Object.keys(initialDimensionValues).length > 0) {
+        setSelectedDimensionValues(prev => ({
+          ...prev,
+          ...initialDimensionValues
+        }));
+      }
+    }
+  }, [project]);
+
   // Auto-focus content textarea when string dialog opens
   useEffect(() => {
     if ((createDialog === "String" || editingString) && textareaRef) {
@@ -299,7 +323,7 @@ export default function ProjectDetailPage() {
   if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
   if (!project) return <div className="p-8 text-center">Project not found.</div>;
 
-  // Function to process conditional variables - removes conditional variables that are not selected
+    // Function to process conditional variables - behavior depends on showVariableBadges toggle
   const processConditionalVariables = (content: string) => {
     // Find all variables in content
     const variableMatches = content.match(/{{([^}]+)}}/g) || [];
@@ -308,14 +332,45 @@ export default function ProjectDetailPage() {
     variableMatches.forEach((match) => {
       const variableName = match.slice(2, -2);
       
-      // Check string variables only
-      const stringVariable = project.strings?.find((str: any) => 
+      // Check if this is a conditional variable
+      const conditionalVariable = project.strings?.find((str: any) => 
+        str.is_conditional_container && (
         str.effective_variable_name === variableName || 
         str.variable_name === variableName || 
         str.variable_hash === variableName
+        )
       );
       
-
+      if (conditionalVariable) {
+        if (showVariableBadges) {
+          // Keep as {{variable_name}} - will show as orange badge
+          // No replacement needed, keep original match
+        } else {
+          // Replace with the content of the selected spawn string
+          const dimension = project.dimensions?.find((d: any) => d.name === variableName);
+          
+          if (dimension) {
+            // Get the selected dimension value for this dimension (e.g., "option-1")
+            const selectedValue = selectedDimensionValues[dimension.id];
+            
+            if (selectedValue) {
+              // Find spawn by matching variable name/hash to dimension value
+              const spawnString = project.strings?.find((str: any) => {
+                const variableName = str.effective_variable_name || str.variable_hash;
+                return variableName === selectedValue;
+              });
+              
+              if (spawnString && spawnString.content) {
+                // Use the spawn string's content (e.g., "blue")
+                processedContent = processedContent.replace(match, spawnString.content);
+              } else {
+                // Fallback to dimension value if no spawn content found
+                processedContent = processedContent.replace(match, selectedValue);
+              }
+            }
+          }
+        }
+      }
     });
     
     return processedContent;
@@ -367,6 +422,10 @@ export default function ProjectDetailPage() {
     const dimensionValues: {[dimensionId: number]: string[]} = {};
     if (str.dimension_values) {
       str.dimension_values.forEach((dv: any) => {
+        // Safety check for dimension_value structure
+        if (!dv.dimension_value || !dv.dimension_value.dimension) {
+          return;
+        }
         const dimensionId = dv.dimension_value.dimension;
         if (!dimensionValues[dimensionId]) {
           dimensionValues[dimensionId] = [];
@@ -566,6 +625,10 @@ export default function ProjectDetailPage() {
     const dimensionValues: {[dimensionId: number]: string[]} = {};
     if (spawn.dimension_values) {
       spawn.dimension_values.forEach((dv: any) => {
+        // Safety check for dimension_value structure
+        if (!dv.dimension_value || !dv.dimension_value.dimension) {
+          return;
+        }
         const dimensionId = dv.dimension_value.dimension;
         if (!dimensionValues[dimensionId]) {
           dimensionValues[dimensionId] = [];
@@ -2217,6 +2280,10 @@ export default function ProjectDetailPage() {
         
         // Delete existing dimension values that are not in our new set and not inherited
         for (const dv of existingDimensionValues) {
+          // Safety check for dimension_value structure
+          if (!dv.dimension_value || !dv.dimension_value.dimension) {
+            continue;
+          }
           const dimensionId = dv.dimension_value.dimension;
           const dimensionValue = dv.dimension_value.value;
           const key = `${dimensionId}:${dimensionValue}`;
@@ -2241,6 +2308,7 @@ export default function ProjectDetailPage() {
                 if (value.trim()) {
                   // Check if this dimension value already exists (either manually or inherited)
                   const existingAssignment = existingDimensionValues.find((dv: any) => 
+                    dv.dimension_value && 
                     dv.dimension_value.dimension === parseInt(dimensionId) && 
                     dv.dimension_value.value === value.trim()
                   );
@@ -2522,7 +2590,9 @@ export default function ProjectDetailPage() {
             );
             if (stringVariable) {
               if (stringVariable.is_conditional_container) {
-                // For conditionals, render as clickable tags (no underline)
+                // For conditionals, behavior depends on showVariableBadges toggle
+                if (showVariableBadges) {
+                  // Show as orange badge when toggle is ON
                 result.push(
                   <Badge
                     key={`${keyPrefix}${depth}-${index}-${variableName}`}
@@ -2538,6 +2608,11 @@ export default function ProjectDetailPage() {
                     {`{{${variableName}}}`}
                   </Badge>
                 );
+                } else {
+                  // When toggle is OFF, this should have been replaced by processConditionalVariables
+                  // If we still see it here, it means no spawn was found, so show the variable name as plain text
+                  result.push(part);
+                }
               } else {
                 // For regular string variables, check if content is empty
                 if (!stringVariable.content || stringVariable.content.trim() === '') {
@@ -2731,42 +2806,18 @@ export default function ProjectDetailPage() {
           // Add these strings to the embedded set
           referencedStrings.forEach(referencedStr => {
             embeddedIds.add(referencedStr.id);
-          });
         });
+      });
       }
     });
     
     return embeddedIds;
   };
 
-  const filterStringsByDimensions = (strings: any[]) => {
-    // Show all strings including conditionals and embedded strings
-    const allStrings = strings;
-    
-    const selectedDimensions = Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null);
-    
-    if (selectedDimensions.length === 0) {
-      return allStrings; // No filters applied, show all strings including embedded ones
-    }
-    
-    return allStrings.filter((str: any) => {
-      // Check if string has dimension values
-      if (!str.dimension_values || str.dimension_values.length === 0) {
-        return false; // String has no dimension values, so it doesn't match any filter
-      }
-      
-      // Check if string matches ALL selected dimension filters
-      return selectedDimensions.every(([dimensionId, selectedValue]) => {
-        return str.dimension_values.some((dv: any) => {
-          return dv.dimension_value.dimension.toString() === dimensionId && 
-                 dv.dimension_value.value === selectedValue;
-        });
-      });
-    });
-  };
 
-  // Apply dimension filtering to strings
-  const filteredStrings = project?.strings ? filterStringsByDimensions(project.strings) : [];
+
+  // Show all strings (no dimension filtering - dimensions now control spawn selection instead)
+  const filteredStrings = project?.strings || [];
 
   // Bulk selection helper functions
   const handleSelectString = (stringId: number, checked: boolean) => {
@@ -2783,7 +2834,7 @@ export default function ProjectDetailPage() {
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      const allFilteredIds = new Set(filteredStrings.map((str: any) => str.id));
+      const allFilteredIds = new Set<number>(filteredStrings.map((str: any) => str.id));
       setSelectedStringIds(allFilteredIds);
     } else {
       setSelectedStringIds(new Set());
@@ -2992,6 +3043,7 @@ export default function ProjectDetailPage() {
         // Check if the string variable has this dimension value directly
         if (stringVariable.dimension_values) {
           const hasValue = stringVariable.dimension_values.some((dv: any) => 
+            dv.dimension_value && 
             dv.dimension_value.dimension === dimensionId && 
             dv.dimension_value.value === dimensionValue
           );
@@ -3127,27 +3179,17 @@ export default function ProjectDetailPage() {
                   const isSelected = selectedDimensionValues[dimension.id] === dimensionValue.value;
                   
                   if (isSelected) {
-                    // Selected badge with close button
+                    // Selected badge (no close button - always one selected)
                     return (
                       <div
                         key={dimensionValue.id}
-                        className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200"
+                        className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors bg-blue-100 border-blue-300 text-blue-800"
                       >
                         <span>{dimensionValue.value}</span>
-                        <button
-                          onClick={() => setSelectedDimensionValues(prev => ({
-                            ...prev,
-                            [dimension.id]: null
-                          }))}
-                          className="inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-300 transition-colors"
-                          aria-label={`Remove ${dimensionValue.value} filter`}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
                       </div>
                     );
                   } else {
-                    // Unselected badge
+                    // Unselected badge - clicking switches selection
                     return (
                       <Badge
                         key={dimensionValue.id}
@@ -3223,6 +3265,19 @@ export default function ProjectDetailPage() {
               >
                 <Globe className="h-4 w-4" />
                 Dimensions
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowVariableBadges(!showVariableBadges)}
+                className={`flex items-center gap-2 transition-colors ${
+                  showVariableBadges 
+                    ? 'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100' 
+                    : 'hover:bg-muted'
+                }`}
+              >
+                <Folder className="h-4 w-4" />
+                Show variables
               </Button>
               <Button onClick={openCreateString} size="sm">
                 + New String
@@ -4965,21 +5020,21 @@ export default function ProjectDetailPage() {
         <DialogContent>
           <DialogTitle>Download Filtered CSV</DialogTitle>
           <div className="space-y-4">
-            <p>This will download a CSV file containing all strings that match your current filters.</p>
+            <p>This will download a CSV file containing all strings with conditional variables resolved based on your dimension selections.</p>
             
-            {/* Show current filter state */}
+            {/* Show current dimension selections */}
             <div className="bg-muted/50 p-4 rounded-lg space-y-3">
-              <h4 className="font-medium text-sm">Current Filters:</h4>
+              <h4 className="font-medium text-sm">Dimension Selections:</h4>
               
 
               
-              {/* Dimension filters */}
-              {Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null).length > 0 && (
+              {/* Dimension selections */}
+              {Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null && value !== undefined).length > 0 && (
                 <div className="text-sm">
-                  <span className="font-medium">Dimensions: </span>
+                  <span className="font-medium">Selected spawns for conditionals: </span>
                   <div className="ml-2 space-y-1">
                     {Object.entries(selectedDimensionValues)
-                      .filter(([_, value]) => value !== null)
+                      .filter(([_, value]) => value !== null && value !== undefined)
                       .map(([dimensionId, value]) => {
                         const dimension = (project.dimensions || []).find((d: any) => d.id.toString() === dimensionId);
                         return (
@@ -4994,16 +5049,20 @@ export default function ProjectDetailPage() {
               
 
               
-              {/* Show filtered count */}
+              {/* Show total count */}
               <div className="text-sm">
                 <span className="font-medium">Strings to export: </span>
                 <span className="text-muted-foreground">{filteredStrings.length}</span>
               </div>
               
-              {/* Show message if no filters */}
-              {Object.entries(selectedDimensionValues).filter(([_, value]) => value !== null).length === 0 && (
+              {/* Show message about conditional behavior */}
+              {project?.dimensions && project.dimensions.length > 0 ? (
                 <div className="text-sm text-muted-foreground">
-                  No dimension filters applied. All {(project.strings || []).length} strings will be exported.
+                  Conditional variables will be resolved using the selected dimension values above.
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  No dimensions in this project. All strings will be exported as-is.
                 </div>
               )}
             </div>

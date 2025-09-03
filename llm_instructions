@@ -414,6 +414,23 @@ const variableNames = matches.map(match => match.slice(2, -2));
 - **Uniqueness constraint handling**: Prevents "fields must make a unique set" errors when adding spawns
 - **Temporary string detection**: Proper POST vs PATCH API calls for new vs existing strings
 - **Advanced tab fixes**: Variable name field now pre-populated with effective_variable_name/variable_hash
+- **Independent variable naming**: Fixed spawn strings reverting to hash names when parent conditional is renamed
+- **Spawn name preservation**: Added comprehensive frontend logic to preserve spawn variable names during conditional renaming
+  - **Multi-path coverage**: Protection added to both main drawer (`handleStringSubmit`) and cascading drawer (`saveCascadingDrawer`) flows
+  - **Early detection**: Spawn names captured before backend operations trigger
+  - **Race condition handling**: Wait for backend signals to complete, then restore any corrupted names
+  - **Robust debugging**: Extensive console logging to trace spawn name preservation process
+
+#### Architecture Analysis
+- **Drawer system complexity**: Identified 4+ different drawer systems with significant code duplication
+  - Main String Drawer (`handleStringSubmit`)
+  - Cascading Drawers (`saveCascadingDrawer`) 
+  - Legacy Drawer Stack (spawn editing)
+  - Nested String Sheet (`handleNestedSplitVariable`)
+  - Disabled main sheet (commented out)
+- **Consolidation opportunity**: All drawers follow same pattern (Header → 3 tabs → Content → Footer)
+- **Code duplication issues**: JSX structure, form logic, validation, and save functions repeated across systems
+- **Future improvement**: Consider consolidating into single reusable drawer component with unified save logic
 
 ### Git Operations
 - **IMPORTANT**: Do NOT commit or push code changes unless explicitly requested by the user

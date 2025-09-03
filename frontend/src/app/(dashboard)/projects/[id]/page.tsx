@@ -111,6 +111,7 @@ export default function ProjectDetailPage() {
   // Conditional editing state
   const [editingConditional, setEditingConditional] = useState(false);
   const [conditionalSpawns, setConditionalSpawns] = useState<any[]>([]);
+  const [includeHiddenOption, setIncludeHiddenOption] = useState(false);
 
   // Cascading drawer system for infinite nesting
   const [cascadingDrawers, setCascadingDrawers] = useState<Array<{
@@ -354,19 +355,25 @@ export default function ProjectDetailPage() {
             const selectedValue = selectedDimensionValues[dimension.id];
             
             if (selectedValue) {
-              // Find spawn by matching variable name/hash to dimension value
-              const spawnString = project.strings?.find((str: any) => {
-                const spawnVariableName = str.effective_variable_name || str.variable_hash;
-                return spawnVariableName === selectedValue;
-              });
-              
-              if (spawnString && spawnString.content) {
-                // Use the spawn string's content (e.g., "blue") and recursively process it
-                const resolvedContent = processConditionalVariables(spawnString.content);
-                processedContent = processedContent.replace(match, resolvedContent);
+              // Check if "Hidden" is selected - treat as empty content
+              if (selectedValue === "Hidden") {
+                // Replace with empty string to make the conditional invisible
+                processedContent = processedContent.replace(match, "");
               } else {
-                // Fallback to dimension value if no spawn content found
-                processedContent = processedContent.replace(match, selectedValue);
+                // Find spawn by matching variable name/hash to dimension value
+                const spawnString = project.strings?.find((str: any) => {
+                  const spawnVariableName = str.effective_variable_name || str.variable_hash;
+                  return spawnVariableName === selectedValue;
+                });
+                
+                if (spawnString && spawnString.content) {
+                  // Use the spawn string's content (e.g., "blue") and recursively process it
+                  const resolvedContent = processConditionalVariables(spawnString.content);
+                  processedContent = processedContent.replace(match, resolvedContent);
+                } else {
+                  // Fallback to dimension value if no spawn content found
+                  processedContent = processedContent.replace(match, selectedValue);
+                }
               }
             } else {
               // No dimension value selected, keep the conditional variable as-is
@@ -389,6 +396,7 @@ export default function ProjectDetailPage() {
     setContentSubTab("string");
     setEditingConditional(false);
     setConditionalSpawns([]);
+    setIncludeHiddenOption(false); // Reset hidden option checkbox
     setCreateDialog("String");
     setIsStringDrawerOpen(true);
   };
@@ -411,7 +419,10 @@ export default function ProjectDetailPage() {
       const conditionalName = str.effective_variable_name || str.variable_hash;
       const spawns = findSpawnsForConditional(conditionalName);
       
-
+      // Check if this conditional has a "Hidden" dimension value
+      const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
+      const hasHiddenOption = dimension?.values?.some((v: any) => v.value === "Hidden") || false;
+      setIncludeHiddenOption(hasHiddenOption);
       
       setConditionalSpawns(spawns);
       
@@ -420,6 +431,7 @@ export default function ProjectDetailPage() {
       setContentSubTab("string");
       setEditingConditional(false);
       setConditionalSpawns([]);
+      setIncludeHiddenOption(false); // Reset checkbox for non-conditional strings
     }
     
     // Populate dimension values - now supporting multiple values per dimension
@@ -485,6 +497,7 @@ export default function ProjectDetailPage() {
     setStringDialogTab("content");
     setContentSubTab("string");
     setPendingStringVariables({});
+    setIncludeHiddenOption(false); // Reset hidden option checkbox
     setEditingConditional(false);
     setConditionalSpawns([]);
     setIsStringDrawerOpen(false);
@@ -812,29 +825,90 @@ export default function ProjectDetailPage() {
           const oldVariableName = drawer.stringData.effective_variable_name || drawer.stringData.variable_hash || drawer.stringData.variable_name;
           const newVariableName = drawer.variableName?.trim() || drawer.stringData.variable_name;
           
-          if (oldVariableName && newVariableName && oldVariableName !== newVariableName) {
-            // Check if this was a spawn string by looking for it in dimension values
-            for (const dimension of project.dimensions || []) {
-              const dimensionValue = dimension.values?.find((dv: any) => dv.value === oldVariableName);
-              if (dimensionValue) {
-                try {
-                  await apiFetch(`/api/dimension-values/${dimensionValue.id}/`, {
-                    method: 'PATCH',
+          // Check if this was a spawn string by looking for it in dimension values
+          // We need to maintain this relationship even when the name doesn't change
+          let wasSpawnOfDimension = null;
+          for (const dimension of project.dimensions || []) {
+            const dimensionValue = dimension.values?.find((dv: any) => dv.value === oldVariableName);
+            if (dimensionValue) {
+              wasSpawnOfDimension = { dimension, dimensionValue };
+              break;
+            }
+          }
+          
+          if (wasSpawnOfDimension) {
+            try {
+              if (oldVariableName && newVariableName && oldVariableName !== newVariableName) {
+                // Case 1: Variable name changed - update the dimension value
+                await apiFetch(`/api/dimension-values/${wasSpawnOfDimension.dimensionValue.id}/`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ value: newVariableName }),
+                });
+                console.log(`Updated dimension value from "${oldVariableName}" to "${newVariableName}" during conditional conversion`);
+              } else {
+                // Case 2: Variable name didn't change - ensure dimension value still exists
+                // (Backend might have removed it due to is_conditional_container filter)
+                const currentDimensionValue = wasSpawnOfDimension.dimension.values?.find((dv: any) => dv.value === oldVariableName);
+                if (!currentDimensionValue) {
+                  // Recreate the dimension value that the backend removed
+                  await apiFetch('/api/dimension-values/', {
+                    method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ value: newVariableName }),
+                    body: JSON.stringify({
+                      dimension: wasSpawnOfDimension.dimension.id,
+                      value: oldVariableName,
+                    }),
                   });
-                  console.log(`Updated dimension value from "${oldVariableName}" to "${newVariableName}" during conditional conversion`);
-                  break;
-                } catch (err) {
-                  console.error('Failed to update dimension value during conditional conversion:', err);
+                  console.log(`Recreated dimension value "${oldVariableName}" after conditional conversion`);
                 }
               }
+            } catch (err) {
+              console.error('Failed to sync dimension value during conditional conversion:', err);
             }
           }
         } else {
           // Already a conditional container, potentially update its name
           const oldVariableName = drawer.stringData.effective_variable_name || drawer.stringData.variable_hash || drawer.stringData.variable_name;
           const newVariableName = drawer.variableName?.trim();
+          
+          // CRITICAL: Preserve spawn names BEFORE any backend operations if this is a rename
+          let spawnNameMap = new Map();
+          if (oldVariableName && newVariableName && oldVariableName !== newVariableName) {
+            console.log('🔍 EARLY CASCADING DEBUG: Conditional rename detected, preserving spawn names...');
+            console.log('🔍 EARLY CASCADING DEBUG: Renaming from', oldVariableName, 'to', newVariableName);
+            
+            // Find the old dimension to capture current spawn names
+            const oldDimension = project.dimensions?.find((d: any) => d.name === oldVariableName);
+            if (oldDimension) {
+              console.log('🔍 EARLY CASCADING DEBUG: Found old dimension:', { id: oldDimension.id, name: oldDimension.name });
+              
+              // Capture current spawn names before ANY backend operations
+              const currentSpawnStrings = project.strings?.filter((s: any) => {
+                return s.dimension_values?.some((sdv: any) => 
+                  sdv.dimension_value?.dimension?.id === oldDimension.id
+                );
+              }) || [];
+
+              console.log(`🔍 EARLY CASCADING DEBUG: Found ${currentSpawnStrings.length} spawn strings to preserve:`, 
+                currentSpawnStrings.map((s: any) => ({
+                  id: s.id,
+                  variable_name: s.variable_name,
+                  variable_hash: s.variable_hash,
+                  effective_name: s.effective_variable_name || s.variable_hash
+                }))
+              );
+              
+              currentSpawnStrings.forEach((spawn: any) => {
+                if (spawn.variable_name) {
+                  spawnNameMap.set(spawn.id, spawn.variable_name);
+                  console.log(`🔍 EARLY CASCADING DEBUG: Storing spawn name mapping: ${spawn.id} -> ${spawn.variable_name}`);
+                }
+              });
+            } else {
+              console.log('🔍 EARLY CASCADING DEBUG: No old dimension found for', oldVariableName);
+            }
+          }
           
           if (oldVariableName && newVariableName && oldVariableName !== newVariableName) {
             // Update the conditional container's variable name
@@ -846,6 +920,47 @@ export default function ProjectDetailPage() {
                 variable_name: newVariableName,
               }),
             });
+
+            // After string update, wait for backend signals and then restore spawn names
+            if (spawnNameMap.size > 0) {
+              console.log('🔍 EARLY CASCADING DEBUG: Waiting for backend signals...');
+              await new Promise(resolve => setTimeout(resolve, 300));
+              
+              // Re-fetch project to see current state after backend operations
+              const latestProjectAfterUpdate = await apiFetch(`/api/projects/${id}/`);
+              console.log('🔍 EARLY CASCADING DEBUG: Re-fetched project after string update');
+              
+              // Check each spawn and restore name if it was changed
+              for (const [spawnId, originalName] of spawnNameMap.entries()) {
+                const currentSpawn = latestProjectAfterUpdate.strings?.find((s: any) => s.id === spawnId);
+                if (currentSpawn) {
+                  console.log(`🔍 EARLY CASCADING DEBUG: Checking spawn ${spawnId}:`, {
+                    originalName,
+                    currentVariableName: currentSpawn.variable_name,
+                    currentHash: currentSpawn.variable_hash,
+                    currentEffective: currentSpawn.effective_variable_name || currentSpawn.variable_hash
+                  });
+                  
+                  if (currentSpawn.variable_name !== originalName) {
+                    console.log(`🚨 EARLY CASCADING DEBUG: Spawn name changed! Restoring ${originalName} for spawn ${spawnId}`);
+                    try {
+                      await apiFetch(`/api/strings/${spawnId}/`, {
+                        method: 'PATCH', 
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                          variable_name: originalName
+                        }),
+                      });
+                      console.log(`✅ EARLY CASCADING DEBUG: Successfully restored spawn name: ${originalName}`);
+                    } catch (err) {
+                      console.error(`❌ EARLY CASCADING DEBUG: Failed to restore spawn name for ${originalName}:`, err);
+                    }
+                  } else {
+                    console.log(`✅ EARLY CASCADING DEBUG: Spawn name unchanged: ${originalName}`);
+                  }
+                }
+              }
+            }
 
             // Dimension renaming will be handled later in the dimension lookup section
           } else {
@@ -904,10 +1019,76 @@ export default function ProjectDetailPage() {
                   });
                   console.log(`Successfully renamed dimension from "${oldVariableName}" to "${conditionalName}" in conditional flow`);
                   
+                  // CRITICAL: Preserve spawn string names when conditional is renamed in cascading drawer
+                  console.log('🔍 CASCADING DEBUG: Starting spawn name preservation...');
+                  
+                  // Store spawn names from CURRENT project state (before backend signals mess with them)
+                  const currentSpawnStrings = project.strings?.filter((s: any) => {
+                    return s.dimension_values?.some((sdv: any) => 
+                      sdv.dimension_value?.dimension?.id === oldDimension.id
+                    );
+                  }) || [];
+
+                  console.log(`🔍 CASCADING DEBUG: Found ${currentSpawnStrings.length} spawn strings to preserve:`, 
+                    currentSpawnStrings.map((s: any) => ({
+                      id: s.id,
+                      variable_name: s.variable_name,
+                      variable_hash: s.variable_hash,
+                      effective_name: s.effective_variable_name || s.variable_hash
+                    }))
+                  );
+                  
+                  // Store spawn names before any backend operations
+                  const spawnNameMap = new Map();
+                  currentSpawnStrings.forEach((spawn: any) => {
+                    if (spawn.variable_name) {
+                      spawnNameMap.set(spawn.id, spawn.variable_name);
+                      console.log(`🔍 CASCADING DEBUG: Storing spawn name mapping: ${spawn.id} -> ${spawn.variable_name}`);
+                    }
+                  });
+                  
                   // Fetch updated project to get the renamed dimension
                   const renamedProject = await apiFetch(`/api/projects/${id}/`);
                   conditionalDimension = renamedProject.dimensions?.find((d: any) => d.name === conditionalName);
                   console.log('DEBUG: After rename, found dimension:', conditionalDimension ? { id: conditionalDimension.id, name: conditionalDimension.name } : 'null');
+                  
+                  // Wait a bit for backend signals to complete
+                  await new Promise(resolve => setTimeout(resolve, 200));
+                  
+                  // Re-fetch project to see current state after backend operations
+                  const latestProjectAfterSignals = await apiFetch(`/api/projects/${id}/`);
+                  console.log('🔍 CASCADING DEBUG: Re-fetched project after backend signals');
+                  
+                  // Check each spawn and restore name if it was changed
+                  for (const [spawnId, originalName] of spawnNameMap.entries()) {
+                    const currentSpawn = latestProjectAfterSignals.strings?.find((s: any) => s.id === spawnId);
+                    if (currentSpawn) {
+                      console.log(`🔍 CASCADING DEBUG: Checking spawn ${spawnId}:`, {
+                        originalName,
+                        currentVariableName: currentSpawn.variable_name,
+                        currentHash: currentSpawn.variable_hash,
+                        currentEffective: currentSpawn.effective_variable_name || currentSpawn.variable_hash
+                      });
+                      
+                      if (currentSpawn.variable_name !== originalName) {
+                        console.log(`🚨 CASCADING DEBUG: Spawn name changed! Restoring ${originalName} for spawn ${spawnId}`);
+                        try {
+                          await apiFetch(`/api/strings/${spawnId}/`, {
+                            method: 'PATCH', 
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                              variable_name: originalName
+                            }),
+                          });
+                          console.log(`✅ CASCADING DEBUG: Successfully restored spawn name: ${originalName}`);
+                        } catch (err) {
+                          console.error(`❌ CASCADING DEBUG: Failed to restore spawn name for ${originalName}:`, err);
+                        }
+                      } else {
+                        console.log(`✅ CASCADING DEBUG: Spawn name unchanged: ${originalName}`);
+                      }
+                    }
+                  }
                 } else {
                   console.warn(`Cannot rename dimension from "${oldVariableName}" to "${conditionalName}" - target name already exists`);
                   toast.error(`Cannot rename to "${conditionalName}" - a dimension with this name already exists`);
@@ -1031,14 +1212,28 @@ export default function ProjectDetailPage() {
               
               if (!dimensionValue) {
                 // Create new dimension value if it doesn't exist
-                dimensionValue = await apiFetch('/api/dimension-values/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                    dimension: conditionalDimension.id,
-                    value: spawnName,
-            }),
-          });
+                try {
+                  dimensionValue = await apiFetch('/api/dimension-values/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      dimension: conditionalDimension.id,
+                      value: spawnName,
+                    }),
+                  });
+                } catch (dimensionValueError: any) {
+                  // If dimension value already exists (race condition), fetch it
+                  if (dimensionValueError?.message?.includes('already exists') || 
+                      dimensionValueError?.detail?.includes('already exists')) {
+                    console.log(`Dimension value ${spawnName} already exists, fetching it`);
+                    // Refetch the latest project data to get the existing dimension value
+                    const latestProjectForDimValue = await apiFetch(`/api/projects/${id}/`);
+                    const latestDimension = latestProjectForDimValue.dimensions?.find((d: any) => d.id === conditionalDimension.id);
+                    dimensionValue = latestDimension?.values?.find((dv: any) => dv.value === spawnName);
+                  } else {
+                    throw dimensionValueError; // Re-throw if it's a different error
+                  }
+                }
               }
               
               // Check if StringDimensionValue link already exists
@@ -1069,10 +1264,16 @@ export default function ProjectDetailPage() {
                 }
               }
 
-            } catch (error) {
-              console.error('Failed to create dimension value for spawn:', spawnName, error);
-              // Continue with other spawns even if one fails
-        }
+            } catch (error: any) {
+              // Check if it's a unique constraint error we can safely ignore
+              if (error?.non_field_errors?.some((err: string) => err.includes('unique set')) ||
+                  error?.message?.includes('unique set')) {
+                console.log(`Dimension relationship already exists for spawn ${spawnName}, skipping`);
+              } else {
+                console.error('Failed to create dimension value for spawn:', spawnName, error);
+                // Continue with other spawns even if one fails
+              }
+            }
           }
         }
         
@@ -1569,18 +1770,67 @@ export default function ProjectDetailPage() {
       if (editingString && !editingString.is_conditional_container) {
         // Converting existing string to conditional
         console.log('DEBUG: Converting existing string to conditional container');
+        
+        // Before conversion, check if this was a spawn of another conditional
+        const oldVariableName = editingString.effective_variable_name || editingString.variable_hash || editingString.variable_name;
+        const newVariableName = stringVariableName || editingString.variable_name;
+        let wasSpawnOfDimension = null;
+        
+        for (const dimension of project.dimensions || []) {
+          const dimensionValue = dimension.values?.find((dv: any) => dv.value === oldVariableName);
+          if (dimensionValue) {
+            wasSpawnOfDimension = { dimension, dimensionValue };
+            break;
+          }
+        }
+        
         try {
           conditionalContainer = await apiFetch(`/api/strings/${editingString.id}/`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               content: stringContent || editingString.content,
-              variable_name: stringVariableName || editingString.variable_name,
+              variable_name: newVariableName,
               is_conditional: true,
               is_conditional_container: true,
             }),
           });
           console.log('DEBUG: Converted string to conditional container:', conditionalContainer);
+          
+          // After conversion, ensure dimension value relationship is preserved
+          if (wasSpawnOfDimension) {
+            try {
+              if (oldVariableName && newVariableName && oldVariableName !== newVariableName) {
+                // Case 1: Variable name changed - update the dimension value
+                await apiFetch(`/api/dimension-values/${wasSpawnOfDimension.dimensionValue.id}/`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ value: newVariableName }),
+                });
+                console.log(`Updated dimension value from "${oldVariableName}" to "${newVariableName}" during main conditional conversion`);
+              } else {
+                // Case 2: Variable name didn't change - ensure dimension value still exists
+                // (Backend might have removed it due to is_conditional_container filter)
+                const latestProject = await apiFetch(`/api/projects/${id}/`);
+                const currentDimension = latestProject.dimensions?.find((d: any) => d.id === wasSpawnOfDimension.dimension.id);
+                const currentDimensionValue = currentDimension?.values?.find((dv: any) => dv.value === oldVariableName);
+                if (!currentDimensionValue) {
+                  // Recreate the dimension value that the backend removed
+                  await apiFetch('/api/dimension-values/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      dimension: wasSpawnOfDimension.dimension.id,
+                      value: oldVariableName,
+                    }),
+                  });
+                  console.log(`Recreated dimension value "${oldVariableName}" after main conditional conversion`);
+                }
+              }
+            } catch (err) {
+              console.error('Failed to sync dimension value during main conditional conversion:', err);
+            }
+          }
         } catch (conversionError) {
           console.error('DEBUG: Failed to convert string to conditional:', conversionError);
           throw conversionError;
@@ -1713,6 +1963,49 @@ export default function ProjectDetailPage() {
           
           await Promise.all(dimensionValuePromises);
         }
+      }
+
+      // Step 4: Handle "Hidden" dimension value based on checkbox state
+      try {
+        // Get the latest dimension to ensure we have the correct ID
+        const updatedProject = await apiFetch(`/api/projects/${id}/`);
+        const dimension = updatedProject.dimensions?.find((d: any) => d.name === conditionalName);
+        
+        if (dimension) {
+          const existingHiddenValue = dimension.values?.find((v: any) => v.value === "Hidden");
+          
+          if (includeHiddenOption) {
+            // Create "Hidden" dimension value if checkbox is checked
+            console.log('DEBUG: Creating "Hidden" dimension value');
+            if (!existingHiddenValue) {
+              await apiFetch('/api/dimension-values/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  dimension: dimension.id,
+                  value: "Hidden",
+                }),
+              });
+              console.log('DEBUG: Successfully created "Hidden" dimension value');
+            } else {
+              console.log('DEBUG: "Hidden" dimension value already exists');
+            }
+          } else {
+            // Remove "Hidden" dimension value if checkbox is unchecked
+            console.log('DEBUG: Removing "Hidden" dimension value');
+            if (existingHiddenValue) {
+              await apiFetch(`/api/dimension-values/${existingHiddenValue.id}/`, {
+                method: 'DELETE',
+              });
+              console.log('DEBUG: Successfully removed "Hidden" dimension value');
+            } else {
+              console.log('DEBUG: "Hidden" dimension value does not exist');
+            }
+          }
+        }
+      } catch (hiddenValueError) {
+        console.error('DEBUG: Failed to handle "Hidden" dimension value:', hiddenValueError);
+        // Don't fail the whole operation for this
       }
 
       // Refresh project data
@@ -2524,6 +2817,72 @@ export default function ProjectDetailPage() {
                       d.id === dimension.id ? { ...d, name: newVariableName } : d
                     )
                   } : prev);
+
+                  // CRITICAL: Preserve spawn string names when conditional is renamed
+                  // The backend sync_conditional_dimension might reset spawn names to hashes
+                  // So we need to ensure all spawn strings keep their variable_name set
+                  console.log('🔍 DEBUG: Starting spawn name preservation...');
+                  console.log('🔍 DEBUG: Dimension being renamed:', dimension);
+                  
+                  const spawnStrings = project.strings?.filter((s: any) => {
+                    return s.dimension_values?.some((sdv: any) => 
+                      sdv.dimension_value?.dimension?.id === dimension.id
+                    );
+                  }) || [];
+
+                  console.log(`🔍 DEBUG: Found ${spawnStrings.length} spawn strings to preserve:`, spawnStrings.map((s: any) => ({
+                    id: s.id,
+                    variable_name: s.variable_name,
+                    variable_hash: s.variable_hash,
+                    effective_name: s.effective_variable_name || s.variable_hash
+                  })));
+                  
+                  // Store spawn names before any backend operations
+                  const spawnNameMap = new Map();
+                  spawnStrings.forEach((spawn: any) => {
+                    if (spawn.variable_name) {
+                      spawnNameMap.set(spawn.id, spawn.variable_name);
+                      console.log(`🔍 DEBUG: Storing spawn name mapping: ${spawn.id} -> ${spawn.variable_name}`);
+                    }
+                  });
+                  
+                  // Wait a bit for backend signals to complete
+                  await new Promise(resolve => setTimeout(resolve, 100));
+                  
+                  // Re-fetch project to see current state after backend operations
+                  const latestProject = await apiFetch(`/api/projects/${id}/`);
+                  console.log('🔍 DEBUG: Re-fetched project after backend signals');
+                  
+                  // Check each spawn and restore name if it was changed
+                  for (const [spawnId, originalName] of spawnNameMap.entries()) {
+                    const currentSpawn = latestProject.strings?.find((s: any) => s.id === spawnId);
+                    if (currentSpawn) {
+                      console.log(`🔍 DEBUG: Checking spawn ${spawnId}:`, {
+                        originalName,
+                        currentVariableName: currentSpawn.variable_name,
+                        currentHash: currentSpawn.variable_hash,
+                        currentEffective: currentSpawn.effective_variable_name || currentSpawn.variable_hash
+                      });
+                      
+                      if (currentSpawn.variable_name !== originalName) {
+                        console.log(`🚨 DEBUG: Spawn name changed! Restoring ${originalName} for spawn ${spawnId}`);
+                        try {
+                          await apiFetch(`/api/strings/${spawnId}/`, {
+                            method: 'PATCH', 
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                              variable_name: originalName
+                            }),
+                          });
+                          console.log(`✅ DEBUG: Successfully restored spawn name: ${originalName}`);
+                        } catch (err) {
+                          console.error(`❌ DEBUG: Failed to restore spawn name for ${originalName}:`, err);
+                        }
+                      } else {
+                        console.log(`✅ DEBUG: Spawn name unchanged: ${originalName}`);
+                      }
+                    }
+                  }
                 } catch (err) {
                   console.error('Failed to update dimension name:', err);
                   toast.error(`Failed to update dimension name: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -2666,9 +3025,10 @@ export default function ProjectDetailPage() {
       const spawnVariableNames = dimension.values.map((dv: any) => dv.value);
       
       // Find all strings that match these spawn variable names
+      // NOTE: A string can be both a spawn AND a conditional container (nested conditionals)
       return project.strings?.filter((s: any) => {
         const effectiveName = s.effective_variable_name || s.variable_hash;
-        return spawnVariableNames.includes(effectiveName) && !s.is_conditional_container;
+        return spawnVariableNames.includes(effectiveName);
       }) || [];
     }
     
@@ -3734,7 +4094,15 @@ export default function ProjectDetailPage() {
                       <div className="space-y-4">
                       <div className="space-y-2">
                           <Label>Variable Type</Label>
-                          <Select value={contentSubTab} onValueChange={(value: string) => setContentSubTab(value as "string" | "conditional")}>
+                          <Select value={contentSubTab} onValueChange={(value: string) => {
+                            setContentSubTab(value as "string" | "conditional");
+                            if (value === "string") {
+                              // Reset conditional state when switching to string mode
+                              setIncludeHiddenOption(false);
+                              setEditingConditional(false);
+                              setConditionalSpawns([]);
+                            }
+                          }}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select variable type" />
                           </SelectTrigger>
@@ -3905,7 +4273,22 @@ export default function ProjectDetailPage() {
                           </Button>
                         </div>
 
-
+                        {/* Include Hidden Option Checkbox */}
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="includeHiddenOption"
+                            checked={includeHiddenOption}
+                            onChange={(e) => setIncludeHiddenOption(e.target.checked)}
+                            className="rounded border-gray-300"
+                          />
+                          <Label htmlFor="includeHiddenOption" className="text-sm font-medium">
+                            Include option to hide
+                          </Label>
+                          <p className="text-xs text-muted-foreground ml-2">
+                            Adds a "Hidden" option that makes this conditional invisible when selected
+                          </p>
+                        </div>
 
                         {/* Spawn Variables */}
                         <div className="space-y-4">
@@ -4010,6 +4393,7 @@ export default function ProjectDetailPage() {
                               setContentSubTab("string");
                               setEditingConditional(false);
                               setConditionalSpawns([]);
+                              setIncludeHiddenOption(false); // Reset hidden option when converting to string
                             }
                           }}
                         >
@@ -4043,6 +4427,23 @@ export default function ProjectDetailPage() {
                               <Plus className="h-4 w-4" />
                               Add Spawn
                             </Button>
+                          </div>
+
+                          {/* Include Hidden Option Checkbox for Editing */}
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id="includeHiddenOptionEdit"
+                              checked={includeHiddenOption}
+                              onChange={(e) => setIncludeHiddenOption(e.target.checked)}
+                              className="rounded border-gray-300"
+                            />
+                            <Label htmlFor="includeHiddenOptionEdit" className="text-sm font-medium">
+                              Include option to hide
+                            </Label>
+                            <p className="text-xs text-muted-foreground ml-2">
+                              Adds a "Hidden" option that makes this conditional invisible when selected
+                            </p>
                           </div>
 
                           {/* Spawn Variables */}

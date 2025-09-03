@@ -340,12 +340,14 @@ export default function ProjectDetailPage() {
       );
       
       if (conditionalVariable) {
-        if (showVariableBadges) {
+        if (showVariableBadges && !isPlaintextMode) {
           // Keep as {{variable_name}} - will show as orange badge
           // No replacement needed, keep original match
         } else {
           // Replace with the content of the selected spawn string
-          const dimension = project.dimensions?.find((d: any) => d.name === variableName);
+          // Find dimension by the conditional variable's effective name
+          const conditionalName = conditionalVariable.effective_variable_name || conditionalVariable.variable_hash;
+          const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
           
           if (dimension) {
             // Get the selected dimension value for this dimension (e.g., "option-1")
@@ -354,17 +356,21 @@ export default function ProjectDetailPage() {
             if (selectedValue) {
               // Find spawn by matching variable name/hash to dimension value
               const spawnString = project.strings?.find((str: any) => {
-                const variableName = str.effective_variable_name || str.variable_hash;
-                return variableName === selectedValue;
+                const spawnVariableName = str.effective_variable_name || str.variable_hash;
+                return spawnVariableName === selectedValue;
               });
               
               if (spawnString && spawnString.content) {
-                // Use the spawn string's content (e.g., "blue")
-                processedContent = processedContent.replace(match, spawnString.content);
+                // Use the spawn string's content (e.g., "blue") and recursively process it
+                const resolvedContent = processConditionalVariables(spawnString.content);
+                processedContent = processedContent.replace(match, resolvedContent);
               } else {
                 // Fallback to dimension value if no spawn content found
                 processedContent = processedContent.replace(match, selectedValue);
               }
+            } else {
+              // No dimension value selected, keep the conditional variable as-is
+              // This will show as {{variableName}}
             }
           }
         }
@@ -2813,7 +2819,9 @@ export default function ProjectDetailPage() {
           
           if (stringVariable) {
             const regex = new RegExp(`{{${variableName}}}`, 'g');
-            result = result.replace(regex, stringVariable.content);
+            // Process conditional variables in the embedded string content too
+            const processedEmbeddedContent = processConditionalVariables(stringVariable.content);
+            result = result.replace(regex, processedEmbeddedContent);
           }
         });
         

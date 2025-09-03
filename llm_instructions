@@ -309,6 +309,23 @@ const strings = project?.strings || [];
 const [cascadingDrawers, setCascadingDrawers] = useState([]);
 ```
 
+### Conditional Variable Resolution
+Conditional variables in plaintext mode require special handling for nested/embedded strings:
+
+```javascript
+// In processStringContent() for plaintext mode:
+if (stringVariable) {
+  const regex = new RegExp(`{{${variableName}}}`, 'g');
+  // CRITICAL: Process conditional variables in embedded string content
+  const processedEmbeddedContent = processConditionalVariables(stringVariable.content);
+  result = result.replace(regex, processedEmbeddedContent);
+}
+```
+
+**Issue**: When a string variable contains conditional variables (e.g., `{{MRCZFN}}` contains `"a {{Options}} {{animals}}"`), the nested conditional variables weren't being processed during plaintext expansion.
+
+**Solution**: Always call `processConditionalVariables()` on embedded string content before insertion, ensuring conditional variables resolve at any nesting level.
+
 ### API Integration  
 ```javascript
 // Use apiFetch helper for all API calls
@@ -354,6 +371,8 @@ const variableNames = matches.map(match => match.slice(2, -2));
 - **✅ String Ordering**: Added default ordering (newest first) for consistent string display
 - **✅ Project Duplication Issues**: Fixed dimension values not being copied during project duplication
 - **✅ Identifier Preservation**: Variable names/hashes now preserved during project duplication for user familiarity
+- **✅ Drawer UI Scrolling**: Fixed footer being pushed out of viewport when tab content gets too long
+- **✅ Conditional Variables in Plaintext Mode**: Fixed conditional variables not resolving to spawn content in nested/embedded strings when in plaintext mode
 
 ### Benefits
 - **Cleaner Interface**: Reduced sidebar complexity by removing redundant conditional management and traits

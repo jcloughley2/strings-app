@@ -3663,7 +3663,7 @@ export default function ProjectDetailPage() {
 
       {/* String Edit Sheets - Right-hand Drawers */}
       <Sheet open={isStringDrawerOpen} onOpenChange={v => !v && closeStringDialog()}>
-        <SheetContent side="right" className="w-[800px] max-w-[90vw] flex flex-col p-0">
+        <SheetContent side="right" className="w-[800px] max-w-[90vw] flex flex-col p-0 max-h-screen overflow-hidden">
           <SheetHeader className="px-6 py-4 border-b bg-background">
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
@@ -3703,7 +3703,7 @@ export default function ProjectDetailPage() {
           </SheetHeader>
 
           {/* Sidebar Content */}
-          <div className="flex flex-col flex-1">
+          <div className="flex flex-col flex-1 min-h-0">
             {/* Main Tabs - show at all levels */}
             <div className="px-6 py-4 border-b">
               <Tabs value={stringDialogTab} onValueChange={setStringDialogTab} className="w-full">
@@ -3715,8 +3715,8 @@ export default function ProjectDetailPage() {
               </Tabs>
             </div>
 
-            {/* Content Area */}
-            <div className="flex-1 overflow-y-auto p-6">
+            {/* Scrollable Content Area */}
+            <div className="flex-1 overflow-y-auto p-6 min-h-0">
               {stringDialogTab === "content" && currentDrawerLevel === 0 && (
                 <div className="space-y-4">
                   {!editingString ? (
@@ -4549,7 +4549,9 @@ export default function ProjectDetailPage() {
               )}
             </div>
 
-            {/* Footer */}
+            </div>
+            
+            {/* Fixed Footer */}
             <div className="border-t p-6 bg-background">
               <div className="flex justify-end gap-2">
                 {currentDrawerLevel > 0 ? (
@@ -4615,7 +4617,6 @@ export default function ProjectDetailPage() {
                 )}
               </div>
             </div>
-          </div>
         </SheetContent>
       </Sheet>
 
@@ -4624,7 +4625,7 @@ export default function ProjectDetailPage() {
         <Sheet key={drawer.id} open={true} onOpenChange={v => !v && closeCascadingDrawer(drawer.id)}>
           <SheetContent 
             side="right" 
-            className="w-[800px] max-w-[90vw] flex flex-col p-0"
+            className="w-[800px] max-w-[90vw] flex flex-col p-0 max-h-screen overflow-hidden"
             style={{
               zIndex: 50 + index
             }}
@@ -4662,7 +4663,7 @@ export default function ProjectDetailPage() {
             </SheetHeader>
 
             {/* Drawer Content */}
-            <div className="flex flex-col flex-1">
+            <div className="flex flex-col flex-1 min-h-0">
               {/* Main Tabs */}
               <div className="px-6 py-4 border-b">
                 <Tabs value={drawer.tab} onValueChange={(value) => updateCascadingDrawer(drawer.id, { tab: value })} className="w-full">
@@ -4675,7 +4676,7 @@ export default function ProjectDetailPage() {
               </div>
 
               {/* Content Area */}
-              <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex-1 overflow-y-auto p-6 min-h-0">
                 {drawer.tab === "content" && (
                   <div className="space-y-4">
                     {/* Always use the new select dropdown interface */}
@@ -4931,22 +4932,22 @@ export default function ProjectDetailPage() {
                   </div>
                 )}
             </div>
-
-            {/* Footer with Save/Cancel */}
-              <div className="px-6 py-4 border-t bg-background">
-                <div className="flex gap-2 justify-end">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => closeCascadingDrawer(drawer.id)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    onClick={() => saveCascadingDrawer(drawer.id)}
-                  >
-                    Save Changes
-                  </Button>
-                </div>
+            </div>
+            
+            {/* Fixed Footer */}
+            <div className="px-6 py-4 border-t bg-background">
+              <div className="flex gap-2 justify-end">
+                <Button 
+                  variant="outline" 
+                  onClick={() => closeCascadingDrawer(drawer.id)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={() => saveCascadingDrawer(drawer.id)}
+                >
+                  Save Changes
+                </Button>
               </div>
             </div>
           </SheetContent>

@@ -256,39 +256,31 @@ def sync_conditional_dimension(conditional_string):
             defaults={'name': conditional_name}
         )
     
-    # Update spawn variables if conditional was renamed
-    if old_name and old_name != conditional_name:
-        # Update any spawn variables that reference the old name
-        old_spawn_pattern = re.compile(rf'^{re.escape(old_name)}_(\d+)$')
-        for string in project.strings.all():
-            if old_spawn_pattern.match(string.effective_variable_name):
-                # Update spawn variable name to match new parent name
-                spawn_number = old_spawn_pattern.match(string.effective_variable_name).group(1)
-                new_spawn_name = f"{conditional_name}_{spawn_number}"
-                
-                if string.variable_name:
-                    string.variable_name = new_spawn_name
-                else:
-                    string.variable_hash = new_spawn_name
-                string.save()
-                print(f"Renamed spawn variable from '{string.effective_variable_name}' to '{new_spawn_name}'")
+    # Note: We don't automatically rename spawn variables when conditional is renamed
+    # Users should have control over their spawn variable names
+    # Only the dimension name is updated to match the new conditional name
     
-    # Find all spawn variables for this conditional (pattern: conditionalName_1, conditionalName_2, etc.)
-    spawn_pattern = re.compile(rf'^{re.escape(conditional_name)}_(\d+)$')
+    # Find all spawn variables for this conditional by checking which strings have dimension values for this dimension
     spawn_strings = []
     
+    # Get all strings that have dimension values for this conditional's dimension
     for string in project.strings.all():
-        string_name = string.effective_variable_name
-        if spawn_pattern.match(string_name):
-            spawn_strings.append(string)
+        if string.is_conditional_container:
+            continue  # Skip other conditional containers
+        
+        # Check if this string has a dimension value for our conditional's dimension
+        for sdv in string.dimension_values.all():
+            if sdv.dimension_value.dimension == dimension:
+                spawn_strings.append(string)
+                break  # Found a match, no need to check other dimension values for this string
     
-    # Sort spawns by their number
-    spawn_strings.sort(key=lambda s: int(spawn_pattern.match(s.effective_variable_name).group(1)))
+    # Sort spawns by their effective variable name for consistent ordering
+    spawn_strings.sort(key=lambda s: s.effective_variable_name)
     
     # Get existing dimension values
     existing_values = set(dimension.values.values_list('value', flat=True))
     
-    # Create dimension values for each spawn
+    # Create dimension values for each spawn using their actual effective variable names
     for spawn_string in spawn_strings:
         spawn_name = spawn_string.effective_variable_name
         if spawn_name not in existing_values:

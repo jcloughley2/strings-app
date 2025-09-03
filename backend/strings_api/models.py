@@ -30,6 +30,7 @@ class String(models.Model):
 
     class Meta:
         unique_together = ['variable_name', 'project']
+        ordering = ['-created_at']  # Newest first by default
 
     def save(self, *args, **kwargs):
         # Generate hash for new strings if not provided
@@ -232,20 +233,32 @@ def sync_conditional_dimension(conditional_string):
     conditional_name = conditional_string.effective_variable_name
     project = conditional_string.project
     
-    # Get or create the dimension
-    dimension, created = Dimension.objects.get_or_create(
-        name=conditional_name,
-        project=project,
-        defaults={'name': conditional_name}
-    )
+    # Check if there's an old name and find existing dimension
+    old_name = getattr(conditional_string, '_old_effective_variable_name', None)
+    dimension = None
     
-    # If dimension exists but name is different, update it
-    if not created and dimension.name != conditional_name:
-        old_name = dimension.name
-        dimension.name = conditional_name
-        dimension.save()
-        
-        # Also update any spawn variables that reference the old name
+    if old_name and old_name != conditional_name:
+        # Variable was renamed - find the existing dimension by old name
+        try:
+            dimension = Dimension.objects.get(name=old_name, project=project)
+            dimension.name = conditional_name
+            dimension.save()
+            print(f"Renamed dimension from '{old_name}' to '{conditional_name}'")
+        except Dimension.DoesNotExist:
+            # Old dimension doesn't exist, will create new one below
+            pass
+    
+    # If we didn't find an existing dimension, get or create with current name
+    if not dimension:
+        dimension, created = Dimension.objects.get_or_create(
+            name=conditional_name,
+            project=project,
+            defaults={'name': conditional_name}
+        )
+    
+    # Update spawn variables if conditional was renamed
+    if old_name and old_name != conditional_name:
+        # Update any spawn variables that reference the old name
         old_spawn_pattern = re.compile(rf'^{re.escape(old_name)}_(\d+)$')
         for string in project.strings.all():
             if old_spawn_pattern.match(string.effective_variable_name):
@@ -258,6 +271,7 @@ def sync_conditional_dimension(conditional_string):
                 else:
                     string.variable_hash = new_spawn_name
                 string.save()
+                print(f"Renamed spawn variable from '{string.effective_variable_name}' to '{new_spawn_name}'")
     
     # Find all spawn variables for this conditional (pattern: conditionalName_1, conditionalName_2, etc.)
     spawn_pattern = re.compile(rf'^{re.escape(conditional_name)}_(\d+)$')
@@ -278,14 +292,20 @@ def sync_conditional_dimension(conditional_string):
     for spawn_string in spawn_strings:
         spawn_name = spawn_string.effective_variable_name
         if spawn_name not in existing_values:
-            DimensionValue.objects.create(
+            # Use get_or_create to avoid unique constraint errors
+            dimension_value, created = DimensionValue.objects.get_or_create(
                 dimension=dimension,
                 value=spawn_name
             )
+            if created:
+                print(f"Created dimension value '{spawn_name}' for dimension '{dimension.name}'")
     
     # Remove dimension values that no longer have corresponding spawns
     current_spawn_names = {s.effective_variable_name for s in spawn_strings}
-    dimension.values.exclude(value__in=current_spawn_names).delete()
+    old_values = dimension.values.exclude(value__in=current_spawn_names)
+    if old_values.exists():
+        print(f"Removing old dimension values: {list(old_values.values_list('value', flat=True))}")
+        old_values.delete()
     
     return dimension
 

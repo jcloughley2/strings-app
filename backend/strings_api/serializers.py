@@ -172,8 +172,13 @@ class StringDimensionValueSerializer(serializers.ModelSerializer):
         return representation
 
 class ProjectSerializer(serializers.ModelSerializer):
-    strings = StringSerializer(many=True, read_only=True)
+    strings = serializers.SerializerMethodField()
     dimensions = DimensionSerializer(many=True, read_only=True)
+    
+    def get_strings(self, obj):
+        # Explicitly order strings by creation date (newest first)
+        strings = obj.strings.order_by('-created_at')
+        return StringSerializer(strings, many=True).data
     
     class Meta:
         model = Project

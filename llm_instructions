@@ -20,6 +20,14 @@
 - **Variable References = File Includes**: Strings embed other strings using `{{variableName}}` syntax
 - **Cascading Drawers = Deep Navigation**: Click nested variables to drill down with stacked editors
 
+### Example Project Setup
+
+Here is an example of how a project might be structured:
+
+Say I have a conditional variable `{{color-option}}` and its spawn strings are `{{option-1}}` and `{{option-2}}`. The content of `{{option-1}}` is "blue" and the content of `{{option-2}}` is "green". Therefore we also have a dimension called "color-option" with dimension values of "option-1" and "option-2".
+
+Let's say I have the sentence "My favorite color is `{{color-option}}`". If option-1 dimension value is selected, the sentence reads "My favorite color is blue". If option-2 dimension value is selected, the sentence reads "My favorite color is green".
+
 ### Key Features
 
 - **Every String is a Variable**: Automatic variable creation with 6-character hash or custom name
@@ -39,11 +47,17 @@
 - **Framework**: Next.js 14 with App Router, Tailwind CSS, ShadCN/UI
 - **State**: React useState/useEffect, cookie-based auth
 - **Pattern**: Null-safe operations (`project?.strings`)
+- **Development Server**: `npm run dev` (from frontend directory)
 
 ### Backend (Django)
 - **Location**: `/backend/`  
 - **Framework**: Django with DRF, SQLite, session auth
 - **Pattern**: Comprehensive validation with meaningful errors
+- **Development Server**: 
+  ```bash
+  source backend/env/bin/activate
+  python backend/manage.py runserver
+  ```
 
 ---
 
@@ -355,9 +369,3 @@ const variableNames = matches.map(match => match.slice(2, -2));
 ---
 
 **CORE PRINCIPLE**: This is a file system for text content. Every string is a file, conditionals are directories, and the cascading drawer system enables deep navigation through the hierarchy. Maintain this analogy for intuitive user experience.
-
-Here is an example of a setup in a project:
-
-So lets say I have conditional variable, {{color-option}} and its spawn strings are {{option-1}} and {{option-2}}. The content of {{option-1}} is "blue" and the content of {{option-2}} is "green". Therefore we also have a dimension called "color-option" with dimension values of "option-1" and "option-2" 
-
-Lets say I have the sentence "My favorite color is {{color-option}}". If option-1 dimension value is selected, the sentence reads "My favorite color is blue". If option-2 dimension value is selected, the sentence reads "My favorite color is green".

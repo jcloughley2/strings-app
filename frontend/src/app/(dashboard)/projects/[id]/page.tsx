@@ -29,8 +29,6 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [isPlaintextMode, setIsPlaintextMode] = useState(false);
-  const [showDimensions, setShowDimensions] = useState(true);
-  const [showStringVariables, setShowStringVariables] = useState(false);
   const [showVariableBadges, setShowVariableBadges] = useState(false);
   const [isStringDrawerOpen, setIsStringDrawerOpen] = useState(false);
   
@@ -803,17 +801,139 @@ export default function ProjectDetailPage() {
               is_conditional_container: true,
             }),
           });
+
+          // Sync dimension value when converting a spawn string to conditional (if it was a spawn)
+          const oldVariableName = drawer.stringData.effective_variable_name || drawer.stringData.variable_hash || drawer.stringData.variable_name;
+          const newVariableName = drawer.variableName?.trim() || drawer.stringData.variable_name;
+          
+          if (oldVariableName && newVariableName && oldVariableName !== newVariableName) {
+            // Check if this was a spawn string by looking for it in dimension values
+            for (const dimension of project.dimensions || []) {
+              const dimensionValue = dimension.values?.find((dv: any) => dv.value === oldVariableName);
+              if (dimensionValue) {
+                try {
+                  await apiFetch(`/api/dimension-values/${dimensionValue.id}/`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: newVariableName }),
+                  });
+                  console.log(`Updated dimension value from "${oldVariableName}" to "${newVariableName}" during conditional conversion`);
+                  break;
+                } catch (err) {
+                  console.error('Failed to update dimension value during conditional conversion:', err);
+                }
+              }
+            }
+          }
         } else {
-          // Already a conditional container, use existing data
-          conditionalContainer = drawer.stringData;
+          // Already a conditional container, potentially update its name
+          const oldVariableName = drawer.stringData.effective_variable_name || drawer.stringData.variable_hash || drawer.stringData.variable_name;
+          const newVariableName = drawer.variableName?.trim();
+          
+          if (oldVariableName && newVariableName && oldVariableName !== newVariableName) {
+            // Update the conditional container's variable name
+            conditionalContainer = await apiFetch(`/api/strings/${drawer.stringData.id}/`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                content: drawer.content || drawer.stringData.content,
+                variable_name: newVariableName,
+              }),
+            });
+
+            // Dimension renaming will be handled later in the dimension lookup section
+          } else {
+            // No name change, use existing data
+            conditionalContainer = drawer.stringData;
+          }
         }
         
         const conditionalName = conditionalContainer.effective_variable_name || conditionalContainer.variable_hash;
 
         
-        // Create dimension for the conditional (if it doesn't already exist)
+        // Find or create dimension for the conditional
         const latestProject = await apiFetch(`/api/projects/${id}/`);
-        let conditionalDimension = latestProject.dimensions?.find((d: any) => d.name === conditionalName);
+        
+        // Debug information
+        console.log('DEBUG: Dimension lookup start');
+        console.log('DEBUG: conditionalName:', conditionalName);
+        console.log('DEBUG: drawer.stringData._isTemporary:', drawer.stringData._isTemporary);
+        console.log('DEBUG: drawer.stringData:', {
+          id: drawer.stringData.id,
+          effective_variable_name: drawer.stringData.effective_variable_name,
+          variable_hash: drawer.stringData.variable_hash,
+          variable_name: drawer.stringData.variable_name,
+          _isTemporary: drawer.stringData._isTemporary
+        });
+        console.log('DEBUG: available dimensions:', latestProject.dimensions?.map((d: any) => ({ id: d.id, name: d.name })));
+        
+        // For existing conditionals, check if we need to rename the variable's own dimension
+        let conditionalDimension = null;
+        
+        if (!drawer.stringData._isTemporary) {
+          const oldVariableName = drawer.stringData.effective_variable_name || drawer.stringData.variable_hash || drawer.stringData.variable_name;
+          console.log('DEBUG: oldVariableName:', oldVariableName);
+          console.log('DEBUG: conditionalName !== oldVariableName:', conditionalName !== oldVariableName);
+          
+          if (oldVariableName && oldVariableName !== conditionalName) {
+            // Look for the dimension that belongs to this variable (with the old name)
+            const oldDimension = latestProject.dimensions?.find((d: any) => d.name === oldVariableName);
+            console.log('DEBUG: Found dimension with old name:', oldDimension ? { id: oldDimension.id, name: oldDimension.name } : 'null');
+            
+            if (oldDimension) {
+              // Try to rename the existing dimension instead of creating a new one
+              try {
+                // Check if target dimension name already exists
+                const existingDimensionWithNewName = latestProject.dimensions?.find((d: any) => 
+                  d.name === conditionalName && d.id !== oldDimension.id
+                );
+                console.log('DEBUG: existingDimensionWithNewName:', existingDimensionWithNewName ? { id: existingDimensionWithNewName.id, name: existingDimensionWithNewName.name } : 'null');
+                
+                if (!existingDimensionWithNewName) {
+                  console.log('DEBUG: Attempting to rename dimension from', oldVariableName, 'to', conditionalName);
+                  await apiFetch(`/api/dimensions/${oldDimension.id}/`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: conditionalName }),
+                  });
+                  console.log(`Successfully renamed dimension from "${oldVariableName}" to "${conditionalName}" in conditional flow`);
+                  
+                  // Fetch updated project to get the renamed dimension
+                  const renamedProject = await apiFetch(`/api/projects/${id}/`);
+                  conditionalDimension = renamedProject.dimensions?.find((d: any) => d.name === conditionalName);
+                  console.log('DEBUG: After rename, found dimension:', conditionalDimension ? { id: conditionalDimension.id, name: conditionalDimension.name } : 'null');
+                } else {
+                  console.warn(`Cannot rename dimension from "${oldVariableName}" to "${conditionalName}" - target name already exists`);
+                  toast.error(`Cannot rename to "${conditionalName}" - a dimension with this name already exists`);
+                  // Keep using the old dimension
+                  conditionalDimension = oldDimension;
+                }
+              } catch (err) {
+                console.error('Failed to rename dimension in conditional flow:', err);
+                toast.error(`Failed to rename dimension: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                // Keep using the old dimension
+                conditionalDimension = oldDimension;
+              }
+            } else {
+              console.log('DEBUG: No dimension found with old name', oldVariableName);
+              // Look for dimension with new name as fallback
+              conditionalDimension = latestProject.dimensions?.find((d: any) => d.name === conditionalName);
+              console.log('DEBUG: Fallback - found dimension with new name:', conditionalDimension ? { id: conditionalDimension.id, name: conditionalDimension.name } : 'null');
+            }
+          } else {
+            console.log('DEBUG: No rename needed - names are the same or no old name');
+            // Look for dimension with the current name
+            conditionalDimension = latestProject.dimensions?.find((d: any) => d.name === conditionalName);
+            console.log('DEBUG: Found dimension with current name:', conditionalDimension ? { id: conditionalDimension.id, name: conditionalDimension.name } : 'null');
+          }
+        } else {
+          console.log('DEBUG: New conditional - looking for dimension with new name');
+          // For new conditionals, just look for existing dimension with the new name
+          conditionalDimension = latestProject.dimensions?.find((d: any) => d.name === conditionalName);
+          console.log('DEBUG: Found dimension with new name:', conditionalDimension ? { id: conditionalDimension.id, name: conditionalDimension.name } : 'null');
+        }
+        
+        console.log('DEBUG: Final conditionalDimension before creation check:', conditionalDimension ? { id: conditionalDimension.id, name: conditionalDimension.name } : 'null');
         
         if (!conditionalDimension) {
           try {
@@ -923,16 +1043,25 @@ export default function ProjectDetailPage() {
               );
               
               if (!existingLink) {
-                // Link the spawn to the dimension value
-                await apiFetch('/api/string-dimension-values/', {
-                  method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                    string: savedSpawn.id,
-                    dimension_value: dimensionValue.id,
-            }),
-          });
-        }
+                try {
+                  // Link the spawn to the dimension value
+                  await apiFetch('/api/string-dimension-values/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      string: savedSpawn.id,
+                      dimension_value: dimensionValue.id,
+                    }),
+                  });
+                } catch (linkError: any) {
+                  // If it's a unique constraint error, the relationship already exists (created by backend signals)
+                  if (linkError?.non_field_errors?.some((err: string) => err.includes('unique set'))) {
+                    console.log(`StringDimensionValue relationship already exists for spawn ${spawnName}, skipping`);
+                  } else {
+                    throw linkError; // Re-throw if it's a different error
+                  }
+                }
+              }
 
             } catch (error) {
               console.error('Failed to create dimension value for spawn:', spawnName, error);
@@ -958,7 +1087,12 @@ export default function ProjectDetailPage() {
         // Close this drawer (skip auto-save since we already saved)
         closeCascadingDrawer(drawerId, true);
         
-        toast.success('Conditional variable created successfully!');
+        // Show appropriate success message based on whether this was a creation or update
+        const wasTemporary = drawer.stringData._isTemporary || 
+                           String(drawer.stringData.id).startsWith('temp-') || 
+                           (typeof drawer.stringData.id === 'number' && drawer.stringData.id > 1000000000000);
+        
+        toast.success(wasTemporary ? 'Conditional variable created successfully!' : 'Conditional variable updated successfully!');
         return; // Exit early since we've handled the conditional case
       } else {
         // Regular string saving
@@ -995,6 +1129,58 @@ export default function ProjectDetailPage() {
               is_conditional: drawer.isConditional,
             }),
           });
+
+          // Sync dimension/dimension value names when variables are renamed in cascading drawer
+          const oldVariableName = drawer.stringData.effective_variable_name || drawer.stringData.variable_hash || drawer.stringData.variable_name;
+          const newVariableName = drawer.variableName?.trim();
+          
+          if (oldVariableName && newVariableName && oldVariableName !== newVariableName) {
+            if (drawer.stringData.is_conditional_container) {
+              // This is a conditional variable being renamed - update the corresponding dimension
+              const dimension = project.dimensions?.find((d: any) => d.name === oldVariableName);
+              if (dimension) {
+                // Check if target dimension name already exists
+                const existingDimensionWithNewName = project.dimensions?.find((d: any) => 
+                  d.name === newVariableName && d.id !== dimension.id
+                );
+                
+                if (existingDimensionWithNewName) {
+                  console.warn(`Cannot rename dimension from "${oldVariableName}" to "${newVariableName}" - dimension name already exists (cascading drawer)`);
+                  toast.error(`Cannot rename to "${newVariableName}" - a dimension with this name already exists`);
+                } else {
+                  try {
+                    await apiFetch(`/api/dimensions/${dimension.id}/`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ name: newVariableName }),
+                    });
+                    console.log(`Updated dimension name from "${oldVariableName}" to "${newVariableName}" (cascading drawer)`);
+                  } catch (err) {
+                    console.error('Failed to update dimension name in cascading drawer:', err);
+                    toast.error(`Failed to update dimension name: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                  }
+                }
+              }
+            } else {
+              // This might be a spawn string being renamed - update the corresponding dimension value
+              for (const dimension of project.dimensions || []) {
+                const dimensionValue = dimension.values?.find((dv: any) => dv.value === oldVariableName);
+                if (dimensionValue) {
+                  try {
+                    await apiFetch(`/api/dimension-values/${dimensionValue.id}/`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ value: newVariableName }),
+                    });
+                    console.log(`Updated dimension value from "${oldVariableName}" to "${newVariableName}" in dimension "${dimension.name}" (cascading drawer)`);
+                    break;
+                  } catch (err) {
+                    console.error('Failed to update dimension value in cascading drawer:', err);
+                  }
+                }
+              }
+            }
+          }
         }
       }
 
@@ -2298,6 +2484,71 @@ export default function ProjectDetailPage() {
         toast.success('String created successfully!');
       }
 
+      // Sync dimension/dimension value names when conditional variables or spawns are renamed
+      if (editingString && stringVariableName && stringVariableName !== editingString.variable_name) {
+        const oldVariableName = editingString.effective_variable_name || editingString.variable_hash || editingString.variable_name;
+        const newVariableName = stringVariableName;
+        
+        if (oldVariableName && oldVariableName !== newVariableName) {
+          if (editingString.is_conditional_container) {
+            // This is a conditional variable being renamed - update the corresponding dimension
+            const dimension = project.dimensions?.find((d: any) => d.name === oldVariableName);
+            if (dimension) {
+              // Check if target dimension name already exists
+              const existingDimensionWithNewName = project.dimensions?.find((d: any) => 
+                d.name === newVariableName && d.id !== dimension.id
+              );
+              
+              if (existingDimensionWithNewName) {
+                console.warn(`Cannot rename dimension from "${oldVariableName}" to "${newVariableName}" - dimension name already exists`);
+                toast.error(`Cannot rename to "${newVariableName}" - a dimension with this name already exists`);
+              } else {
+                try {
+                  await apiFetch(`/api/dimensions/${dimension.id}/`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newVariableName }),
+                  });
+                  console.log(`Updated dimension name from "${oldVariableName}" to "${newVariableName}"`);
+                  
+                  // Update local project state immediately for consistency
+                  setProject((prev: any) => prev ? {
+                    ...prev,
+                    dimensions: prev.dimensions?.map((d: any) => 
+                      d.id === dimension.id ? { ...d, name: newVariableName } : d
+                    )
+                  } : prev);
+                } catch (err) {
+                  console.error('Failed to update dimension name:', err);
+                  toast.error(`Failed to update dimension name: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                  // Don't fail the entire operation for this
+                }
+              }
+            }
+          } else {
+            // This might be a spawn string being renamed - update the corresponding dimension value
+            // Find if this string is a spawn for any conditional by checking dimension values
+            for (const dimension of project.dimensions || []) {
+              const dimensionValue = dimension.values?.find((dv: any) => dv.value === oldVariableName);
+              if (dimensionValue) {
+                try {
+                  await apiFetch(`/api/dimension-values/${dimensionValue.id}/`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: newVariableName }),
+                  });
+                  console.log(`Updated dimension value from "${oldVariableName}" to "${newVariableName}" in dimension "${dimension.name}"`);
+                  break; // Only update the first match
+                } catch (err) {
+                  console.error('Failed to update dimension value:', err);
+                  // Don't fail the entire operation for this
+                }
+              }
+            }
+          }
+        }
+      }
+
       // Handle dimension values - only manage manually added values
       // The backend will automatically handle inherited values from variables
       const stringId = stringResponse.id || editingString?.id;
@@ -2548,13 +2799,7 @@ export default function ProjectDetailPage() {
     let processedContent = processConditionalVariables(content);
     
     if (isPlaintextMode) {
-      // In plaintext mode, behavior depends on showStringVariables toggle
-      if (showStringVariables) {
-        // Show variables as {{variable}} format
-        return processedContent;
-      }
-      
-      // Expand string variables but leave dimension variables as {{variable}}
+      // In plaintext mode, expand string variables but leave dimension variables as {{variable}}
         const variableMatches = processedContent.match(/{{([^}]+)}}/g) || [];
         let result = processedContent;
         
@@ -2589,9 +2834,9 @@ export default function ProjectDetailPage() {
     // First process conditionals
     const conditionalProcessedContent = processConditionalVariables(content);
     
-      // Behavior depends on showStringVariables toggle
-      if (showStringVariables) {
-        // Show all variables as grey badges in {{variable}} format
+      // Behavior depends on showVariableBadges toggle (unified for all variable types)
+      if (showVariableBadges) {
+        // Show all variables as colored badges in {{variable}} format
         const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
         return parts.map((part: string, index: number) => {
           if (part.match(/{{[^}]+}}/)) {
@@ -2601,41 +2846,10 @@ export default function ProjectDetailPage() {
               str.variable_name === variableName || 
               str.variable_hash === variableName
             );
+            
+            if (stringVariable?.is_conditional_container) {
+              // Orange badge for conditional variables
             return (
-              <Badge 
-                key={`${keyPrefix}${depth}-${index}-${variableName}`} 
-                variant="secondary" 
-              className="mx-1 transition-colors cursor-default"
-                title={
-                  stringVariable 
-                    ? `String variable \"${variableName}\" - tied to a string` 
-                    : `Variable \"${variableName}\" not found`
-                }
-              >
-                {part}
-              </Badge>
-            );
-          }
-          return part;
-        });
-      } else {
-      // Show string variables expanded (recursively)
-        const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
-        const result: (string | React.ReactNode)[] = [];
-        parts.forEach((part: string, index: number) => {
-          if (part.match(/{{[^}]+}}/)) {
-            const variableName = part.slice(2, -2); // Remove {{ and }}
-            const stringVariable = project.strings?.find((str: any) => 
-              str.effective_variable_name === variableName || 
-              str.variable_name === variableName || 
-              str.variable_hash === variableName
-            );
-            if (stringVariable) {
-              if (stringVariable.is_conditional_container) {
-                // For conditionals, behavior depends on showVariableBadges toggle
-                if (showVariableBadges) {
-                  // Show as orange badge when toggle is ON
-                result.push(
                   <Badge
                     key={`${keyPrefix}${depth}-${index}-${variableName}`}
                     variant="outline"
@@ -2647,61 +2861,82 @@ export default function ProjectDetailPage() {
                     title={`Click to edit conditional "${variableName}"`}
                   >
                     <Folder className="h-3 w-3" />
-                    {`{{${variableName}}}`}
+                  {part}
                   </Badge>
                 );
-                } else {
-                  // When toggle is OFF, this should have been replaced by processConditionalVariables
-                  // If we still see it here, it means no spawn was found, so show the variable name as plain text
-                  result.push(part);
-                }
               } else {
-                // For regular string variables, check if content is empty
-                if (!stringVariable.content || stringVariable.content.trim() === '') {
-                  // For empty string variables, render as purple badge (like conditionals but purple)
-                  result.push(
+              // Purple badge for string variables
+              return (
                     <Badge
                       key={`${keyPrefix}${depth}-${index}-${variableName}`}
                       variant="outline"
                       className="mx-1 cursor-pointer transition-colors bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 inline-flex items-center gap-1"
                       onClick={(e) => {
                         e.stopPropagation();
+                    if (stringVariable) {
                         openEditInCascadingDrawer(stringVariable);
+                    }
                       }}
-                      title={`Click to edit empty string variable "${variableName}"`}
+                  title={stringVariable ? `Click to edit string variable "${variableName}"` : `Variable "${variableName}" not found`}
                     >
                       <Spool className="h-3 w-3" />
-                      {`{{${variableName}}}`}
-                    </Badge>
-                  );
-                } else {
-                  // For string variables with content, render as clickable underlined content
-                  const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
-                  result.push(
-                    <span
-                      key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                      className="cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 inline-block"
-                      style={{
-                        borderBottom: `2px solid currentColor`,
-                        paddingBottom: `${depth * 2}px`,
-                        marginBottom: `${depth * 2}px`
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditInCascadingDrawer(stringVariable);
-                      }}
-                      title={`Click to edit string variable "${variableName}"`}
-                    >
-                      {nestedParts}
-                    </span>
-                  );
-                }
-              }
+                  {part}
+                </Badge>
+              );
+            }
+          }
+          return part;
+        });
             } else {
+      // Show string variables expanded (recursively)
+        const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
+        const result: (string | React.ReactNode)[] = [];
+        parts.forEach((part: string, index: number) => {
+          if (part.match(/{{[^}]+}}/)) {
+            const variableName = part.slice(2, -2); // Remove {{ and }}
+      const stringVariable = project.strings?.find((str: any) => 
+        str.effective_variable_name === variableName || 
+        str.variable_name === variableName || 
+        str.variable_hash === variableName
+      );
+      if (stringVariable) {
+          if (stringVariable.is_conditional_container) {
+                // Conditionals should have been processed by processConditionalVariables
+                // If we still see it here, it means no spawn was found, so show the variable name as plain text
+                result.push(part);
+          } else {
+                // For regular string variables, expand their content recursively
+            if (!stringVariable.content || stringVariable.content.trim() === '') {
+                  // For empty string variables, show as plain text
+                  result.push(part);
+            } else {
+              // For string variables with content, render as clickable underlined content
+              const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
+                  result.push(
+                <span
+                      key={`${keyPrefix}${depth}-${index}-${variableName}`}
+                  className="cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 inline-block"
+                  style={{
+                    borderBottom: `2px solid currentColor`,
+                    paddingBottom: `${depth * 2}px`,
+                    marginBottom: `${depth * 2}px`
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEditInCascadingDrawer(stringVariable);
+                  }}
+                  title={`Click to edit string variable "${variableName}"`}
+                >
+                  {nestedParts}
+                </span>
+              );
+            }
+          }
+        } else {
               // Variable not found, show as-is
               result.push(part);
             }
-          } else {
+        } else {
             result.push(part);
           }
         });
@@ -3272,19 +3507,6 @@ export default function ProjectDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowStringVariables(!showStringVariables)}
-                className={`flex items-center gap-2 transition-colors ${
-                  showStringVariables 
-                    ? 'bg-green-50 border-green-200 text-green-800 hover:bg-green-100' 
-                    : 'hover:bg-muted'
-                }`}
-              >
-                <Spool className="h-4 w-4" />
-                String Variables
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
                 onClick={() => setIsPlaintextMode(!isPlaintextMode)}
                 className={`flex items-center gap-2 transition-colors ${
                   isPlaintextMode 
@@ -3294,19 +3516,6 @@ export default function ProjectDetailPage() {
               >
                 <Type className="h-4 w-4" />
                 Plaintext
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowDimensions(!showDimensions)}
-                className={`flex items-center gap-2 transition-colors ${
-                  showDimensions 
-                    ? 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100' 
-                    : 'hover:bg-muted'
-                }`}
-              >
-                <Globe className="h-4 w-4" />
-                Dimensions
               </Button>
               <Button
                 variant="outline"

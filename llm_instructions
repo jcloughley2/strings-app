@@ -188,6 +188,33 @@ Nested String 2 (Stacked Drawer)
 
 ---
 
+## Project Duplication
+
+### Overview
+Complete project duplication with "Copy of" naming and full data preservation including all strings, dimensions, dimension values, and relationships.
+
+### Key Features
+- **Identifier Preservation**: Original variable names and hashes are preserved to maintain user familiarity
+- **Complete Relationship Mapping**: All string-dimension-value associations are accurately recreated
+- **Signal Management**: Automatic dimension creation is temporarily disabled during duplication to prevent conflicts
+- **Graceful Conflict Handling**: Falls back to new hash generation only if necessary (rare hash collisions)
+
+### Technical Implementation
+- **Dimension Value Mapping**: Creates precise mappings between old and new dimension value IDs
+- **Signal Disconnection**: Temporarily disconnects post_save signals during duplication process
+- **Error Recovery**: Handles hash conflicts gracefully with fallback to auto-generation
+- **Comprehensive Logging**: Detailed logging for debugging and monitoring duplication process
+
+### Expected Behavior
+- ✅ All strings copied with original identifiers preserved
+- ✅ All dimensions and dimension values recreated exactly
+- ✅ All StringDimensionValue relationships maintained
+- ✅ No extra empty dimensions created
+- ✅ Conditional variables and their spawns properly linked
+- ✅ Users see familiar variable names/hashes in the duplicated project
+
+---
+
 ## Implementation Guidelines
 
 ### String Variables
@@ -319,6 +346,14 @@ const variableNames = matches.map(match => match.slice(2, -2));
 - **✅ Spawn Loading**: Existing conditionals properly load their spawn children when edited
 - **✅ Complete Workflow**: Cascading drawer conversions create dimensions, spawns, and relationships correctly
 - **✅ Project Duplication**: Full project duplication with "Copy of" naming and complete data preservation
+
+### Bug Fixes (December 2024)
+- **✅ Conditional Variable Renaming**: Fixed dimension not updating when conditional variables are renamed
+- **✅ Spawn String Preservation**: Fixed spawn strings detaching when conditional variable is renamed
+- **✅ Unique Constraint Errors**: Fixed duplicate StringDimensionValue creation errors
+- **✅ String Ordering**: Added default ordering (newest first) for consistent string display
+- **✅ Project Duplication Issues**: Fixed dimension values not being copied during project duplication
+- **✅ Identifier Preservation**: Variable names/hashes now preserved during project duplication for user familiarity
 
 ### Benefits
 - **Cleaner Interface**: Reduced sidebar complexity by removing redundant conditional management and traits

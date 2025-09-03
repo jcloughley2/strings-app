@@ -12,6 +12,7 @@ from django.utils.encoding import force_bytes, force_str
 from django.template.loader import render_to_string
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.db import models
+from django.db.models.signals import post_save
 from .models import Project, String, Dimension, DimensionValue, StringDimensionValue
 from .serializers import (
     ProjectSerializer,
@@ -315,6 +316,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
         
         # Dictionary to map old dimension IDs to new dimension IDs
         dimension_mapping = {}
+        # Dictionary to map old dimension value IDs to new dimension value IDs
+        dimension_value_mapping = {}
         
         # Duplicate all dimensions
         dimensions_count = original_project.dimensions.count()
@@ -330,10 +333,11 @@ class ProjectViewSet(viewsets.ModelViewSet):
             # Duplicate all dimension values for this dimension
             dim_values_count = dimension.values.count()
             for dim_value in dimension.values.all():
-                DimensionValue.objects.create(
+                new_dimension_value = DimensionValue.objects.create(
                     dimension=new_dimension,
                     value=dim_value.value
                 )
+                dimension_value_mapping[dim_value.id] = new_dimension_value.id
             logger.info(f"Duplicated dimension '{dimension.name}' with {dim_values_count} values")
         
         # Dictionary to map old string IDs to new string IDs
@@ -343,40 +347,68 @@ class ProjectViewSet(viewsets.ModelViewSet):
         strings_count = original_project.strings.count()
         logger.info(f"Duplicating {strings_count} strings")
         
-        for string in original_project.strings.all():
-            try:
-                # Create new string without variable_hash to let it auto-generate
-                new_string = String.objects.create(
-                    content=string.content,
-                    project=new_project,
-                    variable_name=string.variable_name,
-                    is_conditional=string.is_conditional,
-                    is_conditional_container=string.is_conditional_container
-                )
-                string_mapping[string.id] = new_string.id
-                logger.info(f"Duplicated string {string.id} -> {new_string.id} ('{string.effective_variable_name}')")
-                
-                # Duplicate string dimension values
-                sdv_count = string.dimension_values.count()
-                for sdv in string.dimension_values.all():
+        # Temporarily disconnect post_save signal to prevent automatic dimension creation during duplication
+        from .models import update_dependent_strings_when_string_variable_changes
+        post_save.disconnect(update_dependent_strings_when_string_variable_changes, sender=String)
+        
+        try:
+            for string in original_project.strings.all():
+                try:
+                    # Create new string preserving the original variable_hash to maintain familiar identifiers
                     try:
-                        # Find the corresponding new dimension and dimension value
-                        new_dimension_id = dimension_mapping[sdv.dimension_value.dimension.id]
-                        new_dimension = Dimension.objects.get(id=new_dimension_id)
-                        new_dimension_value = new_dimension.values.get(value=sdv.dimension_value.value)
-                        
-                        StringDimensionValue.objects.create(
-                            string=new_string,
-                            dimension_value=new_dimension_value
+                        new_string = String.objects.create(
+                            content=string.content,
+                            project=new_project,
+                            variable_name=string.variable_name,
+                            variable_hash=string.variable_hash,  # Preserve original hash
+                            is_conditional=string.is_conditional,
+                            is_conditional_container=string.is_conditional_container
                         )
                     except Exception as e:
-                        logger.error(f"Failed to duplicate string dimension value: {e}")
-                        
-                logger.info(f"Duplicated {sdv_count} dimension values for string {new_string.effective_variable_name}")
-                
-            except Exception as e:
-                logger.error(f"Failed to duplicate string {string.id}: {e}")
-                raise
+                        # If there's a hash conflict, let it auto-generate a new one
+                        if "variable_hash" in str(e) or "unique" in str(e).lower():
+                            logger.warning(f"Hash conflict for '{string.variable_hash}', generating new hash")
+                            new_string = String.objects.create(
+                                content=string.content,
+                                project=new_project,
+                                variable_name=string.variable_name,
+                                # Don't set variable_hash, let it auto-generate
+                                is_conditional=string.is_conditional,
+                                is_conditional_container=string.is_conditional_container
+                            )
+                        else:
+                            raise
+                    
+                    string_mapping[string.id] = new_string.id
+                    logger.info(f"Duplicated string {string.id} -> {new_string.id} ('{string.effective_variable_name}')")
+                    
+                    # Duplicate string dimension values
+                    sdv_count = string.dimension_values.count()
+                    for sdv in string.dimension_values.all():
+                        try:
+                            # Find the corresponding new dimension value using the mapping
+                            if sdv.dimension_value.id in dimension_value_mapping:
+                                new_dimension_value_id = dimension_value_mapping[sdv.dimension_value.id]
+                                new_dimension_value = DimensionValue.objects.get(id=new_dimension_value_id)
+                                
+                                # Create the string-dimension value relationship
+                                StringDimensionValue.objects.create(
+                                    string=new_string,
+                                    dimension_value=new_dimension_value
+                                )
+                            else:
+                                logger.warning(f"Could not find mapping for dimension value {sdv.dimension_value.id} ('{sdv.dimension_value.value}') for string {string.id}")
+                        except Exception as e:
+                            logger.error(f"Failed to duplicate string dimension value for string {string.id}, dimension value '{sdv.dimension_value.value}': {e}")
+                            
+                    logger.info(f"Duplicated {sdv_count} dimension values for string {new_string.effective_variable_name}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to duplicate string {string.id}: {e}")
+                    raise
+        finally:
+            # Reconnect the post_save signal
+            post_save.connect(update_dependent_strings_when_string_variable_changes, sender=String)
         
         logger.info(f"Duplication completed. New project {new_project.id} has {new_project.strings.count()} strings")
         

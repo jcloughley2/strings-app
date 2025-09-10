@@ -124,6 +124,7 @@ export default function ProjectDetailPage() {
     tab: string;
     conditionalSpawns: any[];
     isEditingConditional: boolean;
+    includeHiddenOption?: boolean;
   }>>([]);
   
   // Legacy drawer system (keeping for spawn editing)
@@ -673,6 +674,11 @@ export default function ProjectDetailPage() {
 
     }
     
+    // Check if this conditional has a "Hidden" dimension value
+    const conditionalName = str.effective_variable_name || str.variable_hash;
+    const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
+    const hasHiddenOption = dimension?.values?.some((v: any) => v.value === "Hidden") || false;
+    
     const newDrawer = {
       id: `string-${str.id}-${Date.now()}`,
       stringData: str,
@@ -682,7 +688,8 @@ export default function ProjectDetailPage() {
       isConditionalContainer: str.is_conditional_container || false,
       tab: "content",
       conditionalSpawns: spawns,
-      isEditingConditional: str.is_conditional_container || false
+      isEditingConditional: str.is_conditional_container || false,
+      includeHiddenOption: hasHiddenOption
     };
 
         // Check if this should be a conditional container but isn't marked as one
@@ -1199,6 +1206,44 @@ export default function ProjectDetailPage() {
 
         const savedSpawns = await Promise.all(stringPromises);
 
+        // Handle hidden option for cascading drawer conditional
+        try {
+          if (conditionalDimension) {
+            const existingHiddenValue = conditionalDimension.values?.find((v: any) => v.value === "Hidden");
+            
+            if (drawer.includeHiddenOption) {
+              // Create "Hidden" dimension value if checkbox is checked
+              console.log('DEBUG: Creating "Hidden" dimension value for cascading drawer');
+              if (!existingHiddenValue) {
+                await apiFetch('/api/dimension-values/', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    dimension: conditionalDimension.id,
+                    value: "Hidden",
+                  }),
+                });
+                console.log('DEBUG: Successfully created "Hidden" dimension value for cascading drawer');
+              } else {
+                console.log('DEBUG: "Hidden" dimension value already exists for cascading drawer');
+              }
+            } else {
+              // Remove "Hidden" dimension value if checkbox is unchecked
+              console.log('DEBUG: Removing "Hidden" dimension value for cascading drawer');
+              if (existingHiddenValue) {
+                await apiFetch(`/api/dimension-values/${existingHiddenValue.id}/`, {
+                  method: 'DELETE',
+                });
+                console.log('DEBUG: Successfully removed "Hidden" dimension value for cascading drawer');
+              } else {
+                console.log('DEBUG: "Hidden" dimension value does not exist for cascading drawer');
+              }
+            }
+          }
+        } catch (hiddenValueError) {
+          console.error('DEBUG: Failed to handle "Hidden" dimension value for cascading drawer:', hiddenValueError);
+          // Don't fail the whole operation for this
+        }
         
         // Create dimension values for each spawn
         if (conditionalDimension) {
@@ -1314,6 +1359,7 @@ export default function ProjectDetailPage() {
               content: drawer.content,
               variable_name: drawer.variableName?.trim() || null,
               is_conditional: drawer.isConditional,
+              is_conditional_container: drawer.isConditional,
               project: id,
             }),
           });
@@ -1334,6 +1380,7 @@ export default function ProjectDetailPage() {
               content: drawer.content,
               variable_name: drawer.variableName?.trim() || null,
               is_conditional: drawer.isConditional,
+              is_conditional_container: drawer.isConditional,
             }),
           });
 
@@ -4367,14 +4414,15 @@ export default function ProjectDetailPage() {
                       <div className="space-y-2">
                         <Label>Variable Type</Label>
                         <Select 
-                          value={editingString.is_conditional_container ? "conditional" : "string"} 
+                          value={contentSubTab === "conditional" ? "conditional" : "string"} 
                           onValueChange={(value: string) => {
-                            if (value === "conditional" && !editingString.is_conditional_container) {
+                            if (value === "conditional") {
                               // Converting to conditional - initialize conditional mode
                               setContentSubTab("conditional");
                               setEditingConditional(true);
-                              // Initialize with a default spawn if none exist
-                              if (conditionalSpawns.length === 0) {
+                              setStringIsConditional(true);
+                              // Initialize with a default spawn if none exist and we're converting from string
+                              if (conditionalSpawns.length === 0 && !editingString.is_conditional_container) {
                                 const defaultSpawn = {
                                   id: `temp-${Date.now()}`,
                                   content: stringContent || 'Default spawn content',
@@ -4388,10 +4436,11 @@ export default function ProjectDetailPage() {
                                 };
                                 setConditionalSpawns([defaultSpawn]);
                               }
-                            } else if (value === "string" && editingString.is_conditional_container) {
+                            } else if (value === "string") {
                               // Converting back to string
                               setContentSubTab("string");
                               setEditingConditional(false);
+                              setStringIsConditional(false);
                               setConditionalSpawns([]);
                               setIncludeHiddenOption(false); // Reset hidden option when converting to string
                             }
@@ -4407,7 +4456,7 @@ export default function ProjectDetailPage() {
                         </Select>
                       </div>
 
-                      {editingString.is_conditional_container || contentSubTab === "conditional" ? (
+                      {contentSubTab === "conditional" ? (
                         // Split variable editing content
                         <div className="space-y-4">
                           {/* Conditional Header */}
@@ -5094,16 +5143,17 @@ export default function ProjectDetailPage() {
                         <div className="space-y-2">
                           <Label>Variable Type</Label>
                           <Select 
-                            value={(drawer.isConditional || drawer.isConditionalContainer) ? "conditional" : "string"} 
+                            value={drawer.isConditional ? "conditional" : "string"} 
                             onValueChange={(value: string) => {
                             const isConditional = value === "conditional";
                               const updates: any = { 
                                 isConditional,
-                                isEditingConditional: isConditional // Set this flag for save logic
+                                isEditingConditional: isConditional, // Set this flag for save logic
+                                isConditionalContainer: isConditional // Also update the container flag
                               };
                             
                             // When switching TO conditional mode, initialize spawns if empty
-                            if (isConditional && drawer.conditionalSpawns.length === 0) {
+                            if (isConditional && drawer.conditionalSpawns.length === 0 && !drawer.isConditionalContainer) {
                                 console.log('DEBUG: Initializing default spawn for cascading drawer');
                                 const defaultSpawn = {
                                 id: `temp-spawn-${Date.now()}`,
@@ -5117,6 +5167,10 @@ export default function ProjectDetailPage() {
                               };
                                 updates.conditionalSpawns = [defaultSpawn];
                                 console.log('DEBUG: Created default spawn:', defaultSpawn);
+                            } else if (!isConditional) {
+                              // When switching TO string mode, clear conditional-related state
+                              updates.conditionalSpawns = [];
+                              updates.includeHiddenOption = false;
                             }
                               console.log('DEBUG: Updating cascading drawer with:', updates);
                             updateCascadingDrawer(drawer.id, updates);
@@ -5132,7 +5186,7 @@ export default function ProjectDetailPage() {
                           </Select>
                         </div>
                           
-                        {(drawer.isConditional || drawer.isConditionalContainer) ? (
+                        {drawer.isConditional ? (
                           // Conditional mode content
                           <div className="space-y-4">
                             {/* Conditional Header */}
@@ -5166,6 +5220,23 @@ export default function ProjectDetailPage() {
                                 <Plus className="h-4 w-4" />
                                 Add Spawn
                               </Button>
+                            </div>
+
+                            {/* Include Hidden Option Checkbox for Cascading Drawer */}
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                id={`includeHiddenOptionCascading-${drawer.id}`}
+                                checked={drawer.includeHiddenOption || false}
+                                onChange={(e) => updateCascadingDrawer(drawer.id, { includeHiddenOption: e.target.checked })}
+                                className="rounded border-gray-300"
+                              />
+                              <Label htmlFor={`includeHiddenOptionCascading-${drawer.id}`} className="text-sm font-medium">
+                                Include option to hide
+                              </Label>
+                              <p className="text-xs text-muted-foreground ml-2">
+                                Adds a "Hidden" option that makes this conditional invisible when selected
+                              </p>
                             </div>
 
                             {/* Spawn Variables */}

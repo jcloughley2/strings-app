@@ -385,6 +385,26 @@ const variableNames = matches.map(match => match.slice(2, -2));
 
 ---
 
+## Recent Updates (January 2025) ⭐
+
+### "Include Hide as Option" Feature for Conditional Variables
+- **✅ Hide Option Checkbox**: Added "Include hide as option" checkbox to conditional variable editing in both main drawer and cascading drawers
+- **✅ Hidden Dimension Values**: When checked, automatically creates a "Hidden" dimension value for the conditional's paired dimension
+- **✅ Canvas Invisibility**: When users select "Hidden" from dimension filter, conditional variables become completely invisible (replaced with empty string)
+- **✅ Automatic Management**: System automatically creates/removes "Hidden" dimension value based on checkbox state
+- **✅ Cascading Drawer Support**: Feature works identically in both main string drawer and cascading drawers for nested editing
+- **✅ Consistent UX**: Seamless integration with existing dimension-based filtering system
+
+### Conditional to String Conversion Fix
+- **✅ Bidirectional Conversion**: Users can now freely convert conditional variables back to string variables using the Variable Type dropdown
+- **✅ UI State Management**: Fixed dropdown reverting issue - selection now persists and updates interface correctly
+- **✅ Spawn Independence**: When converting conditional → string, all spawn children remain as independent string variables
+- **✅ No Data Loss**: Spawns disconnect from parent but preserve their content, names, and can still be referenced via `{{variableName}}`
+- **✅ Cascading Drawer Support**: Conversion works in both main drawer and cascading drawer contexts
+- **✅ Clean State Management**: Properly clears conditional-related state (spawns, hidden options) when converting to string
+
+---
+
 ## Development Workflow
 
 ### Recent Major Updates (Latest)

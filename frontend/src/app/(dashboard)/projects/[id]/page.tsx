@@ -20,6 +20,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { StringEditDrawer } from "@/components/StringEditDrawer";
+import { useStringEditDrawer } from "@/hooks/useStringEditDrawer";
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
@@ -113,19 +115,33 @@ export default function ProjectDetailPage() {
   const [conditionalSpawns, setConditionalSpawns] = useState<any[]>([]);
   const [includeHiddenOption, setIncludeHiddenOption] = useState(false);
 
-  // Cascading drawer system for infinite nesting
-  const [cascadingDrawers, setCascadingDrawers] = useState<Array<{
+  // UNIFIED DRAWER SYSTEM - Replaces multiple old drawer systems
+  const mainDrawer = useStringEditDrawer({
+    project,
+    selectedDimensionValues,
+    pendingStringVariables,
+    onProjectUpdate: (updatedProject) => {
+      setProject(sortProjectStrings(updatedProject));
+    },
+    onSuccess: () => {
+      console.log('Main drawer saved successfully');
+    },
+    onCancel: () => {
+      console.log('Main drawer cancelled');
+    },
+  });
+  
+  // Cascading drawer stack for nested editing
+  const [cascadingDrawerStack, setCascadingDrawerStack] = useState<Array<{
     id: string;
-    stringData: any;
-    content: string;
-    variableName: string;
-    isConditional: boolean;
-    isConditionalContainer: boolean;
-    tab: string;
-    conditionalSpawns: any[];
-    isEditingConditional: boolean;
-    includeHiddenOption?: boolean;
+    level: number;
+    hook: any; // Will be useStringEditDrawer hook instance
   }>>([]);
+  
+  // OLD: Legacy cascadingDrawers state - keeping stub for compatibility
+  const setCascadingDrawers = (updater: any) => {
+    console.warn('Legacy setCascadingDrawers called - should use setCascadingDrawerStack');
+  };
   
   // Legacy drawer system (keeping for spawn editing)
   const [drawerStack, setDrawerStack] = useState<Array<{
@@ -264,46 +280,7 @@ export default function ProjectDetailPage() {
     });
   }, [stringContent, project?.strings]);
 
-  // Detect new variables in cascading drawer content and add them as pending variables
-  useEffect(() => {
-    cascadingDrawers.forEach(drawer => {
-      if (!drawer.content.trim()) return;
-
-      const variableMatches = drawer.content.match(/{{([^}]+)}}/g) || [];
-      const variableNames = variableMatches.map(match => match.slice(2, -2));
-      const uniqueVariableNames = [...new Set(variableNames)];
-
-      // Find existing string variables
-      const existingStringVariableNames = project.strings?.map((str: any) => 
-        str.effective_variable_name || str.variable_name || str.variable_hash
-      ).filter(Boolean) || [];
-
-      // Find new variables that don't exist yet
-      const newVariableNames = uniqueVariableNames.filter(name => 
-        !existingStringVariableNames.includes(name) && name.trim() !== ''
-      );
-
-      // Update pending variables - add new ones, remove ones no longer referenced
-      if (newVariableNames.length > 0) {
-        setPendingStringVariables(prev => {
-          const newPending = { ...prev };
-          
-          // Add new variables as pending
-          newVariableNames.forEach(variableName => {
-            // Keep existing pending variable data if it exists, otherwise create empty
-            if (!newPending[variableName]) {
-              newPending[variableName] = {
-                content: "",  // Start with empty content
-                is_conditional: false
-              };
-            }
-          });
-          
-          return newPending;
-        });
-      }
-    });
-  }, [cascadingDrawers, project?.strings]);
+  // TODO: Re-implement cascading drawer variable detection with new hook structure
 
   // Helper function to sort strings by creation date (newest first)
   const sortProjectStrings = (projectData: any) => {
@@ -389,68 +366,97 @@ export default function ProjectDetailPage() {
   };
 
   // String dialog handlers
+  // UNIFIED: Replace openCreateString with mainDrawer
   const openCreateString = () => {
-    setStringContent("");
-    setStringVariableName("");
-    setStringIsConditional(false);
     setPendingStringVariables({});
-    setContentSubTab("string");
-    setEditingConditional(false);
-    setConditionalSpawns([]);
-    setIncludeHiddenOption(false); // Reset hidden option checkbox
     setCreateDialog("String");
-    setIsStringDrawerOpen(true);
+    mainDrawer.openCreateDrawer({
+      title: 'Create String Variable',
+      isConditional: false,
+    });
   };
 
+  // UNIFIED: Replace openEditString with mainDrawer
   const openEditString = (str: any) => {
-    const isConditionalContainer = str.is_conditional_container;
-    
-    // Set up basic editing state
-    setStringContent(str.content);
-    setEditingString(str);
-    setStringVariableName(str.effective_variable_name || str.variable_hash || str.variable_name || "");
-    setStringIsConditional(str.is_conditional || false);
     setPendingStringVariables({});
-    setIsStringDrawerOpen(true);
+    mainDrawer.openEditDrawer(str, {
+      title: 'Edit Variable',
+    });
+  };
+
+  // UNIFIED: Cascading drawer functions
+  const openCascadingDrawer = (stringData: any, level: number = 1) => {
+    const newDrawer = {
+      id: `cascade-${stringData.id}-${Date.now()}`,
+      level,
+      hook: useStringEditDrawer({
+        project,
+        selectedDimensionValues,
+        pendingStringVariables,
+        onProjectUpdate: (updatedProject) => {
+          setProject(sortProjectStrings(updatedProject));
+        },
+        onSuccess: () => {
+          // Remove this drawer from stack on success
+          setCascadingDrawerStack(prev => prev.filter(d => d.id !== newDrawer.id));
+        },
+        onCancel: () => {
+          // Remove this drawer from stack on cancel
+          setCascadingDrawerStack(prev => prev.filter(d => d.id !== newDrawer.id));
+        },
+      }),
+    };
     
-    // Set the content sub-tab based on whether it's a conditional
-    if (isConditionalContainer) {
-              setContentSubTab("conditional");
-            // Load all its spawns for conditional editing using dimension relationships
-      const conditionalName = str.effective_variable_name || str.variable_hash;
-      const spawns = findSpawnsForConditional(conditionalName);
-      
-      // Check if this conditional has a "Hidden" dimension value
-      const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
-      const hasHiddenOption = dimension?.values?.some((v: any) => v.value === "Hidden") || false;
-      setIncludeHiddenOption(hasHiddenOption);
-      
-      setConditionalSpawns(spawns);
-      
-      setEditingConditional(true);
+    // Open the drawer and add to stack
+    newDrawer.hook.openEditDrawer(stringData, {
+      title: `Edit Variable (Level ${level + 1})`,
+      level,
+      showBackButton: true,
+    });
+    
+    setCascadingDrawerStack(prev => [...prev, newDrawer]);
+  };
+  
+  const handleEditVariable = (variableName: string) => {
+    // Find the variable and open in cascading drawer
+    const stringVar = project?.strings?.find((str: any) => {
+      const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
+      return effectiveName === variableName;
+    });
+    
+    if (stringVar) {
+      openCascadingDrawer(stringVar, cascadingDrawerStack.length + 1);
     } else {
-      setContentSubTab("string");
-      setEditingConditional(false);
-      setConditionalSpawns([]);
-      setIncludeHiddenOption(false); // Reset checkbox for non-conditional strings
+      // Handle new variable creation
+      const pendingVar = pendingStringVariables[variableName];
+      if (pendingVar) {
+        // Create temporary string data for editing
+        const tempStringData = {
+          id: `temp-${Date.now()}`,
+          content: pendingVar.content || '',
+          variable_name: null,
+          variable_hash: variableName,
+          effective_variable_name: variableName,
+          is_conditional: pendingVar.is_conditional,
+          is_conditional_container: false,
+          _isTemporary: true,
+        };
+        
+        openCascadingDrawer(tempStringData, cascadingDrawerStack.length + 1);
+      }
     }
-    
-    // Populate dimension values - now supporting multiple values per dimension
-    const dimensionValues: {[dimensionId: number]: string[]} = {};
-    if (str.dimension_values) {
-      str.dimension_values.forEach((dv: any) => {
-        // Safety check for dimension_value structure
-        if (!dv.dimension_value || !dv.dimension_value.dimension) {
-          return;
-        }
-        const dimensionId = dv.dimension_value.dimension;
-        if (!dimensionValues[dimensionId]) {
-          dimensionValues[dimensionId] = [];
-        }
-        dimensionValues[dimensionId].push(dv.dimension_value.value);
-      });
-    }
-    setStringDimensionValues(dimensionValues);
+  };
+  
+  const handleEditSpawn = (spawn: any) => {
+    openCascadingDrawer(spawn, cascadingDrawerStack.length + 1);
+  };
+  
+  const handleBackButton = (drawerId: string) => {
+    // Remove this drawer and all subsequent ones
+    setCascadingDrawerStack(prev => {
+      const index = prev.findIndex(d => d.id === drawerId);
+      return index >= 0 ? prev.slice(0, index) : prev;
+    });
   };
 
   const closeStringDialog = async () => {
@@ -734,8 +740,10 @@ export default function ProjectDetailPage() {
     setCascadingDrawers(prev => [...prev, newDrawer]);
   };
 
+  // OLD: Legacy closeCascadingDrawer function - replaced by unified system
   const closeCascadingDrawer = async (drawerId: string, skipAutoSave = false) => {
-    const drawer = cascadingDrawers.find(d => d.id === drawerId);
+    // This function is no longer used with the unified drawer system
+    console.warn('Legacy closeCascadingDrawer called - should use unified system');
     
     // If this is a temporary string being cancelled, save it to database first
     // But only if we're not being called from saveCascadingDrawer (skipAutoSave = true)
@@ -782,15 +790,20 @@ export default function ProjectDetailPage() {
     });
   };
 
-  const updateCascadingDrawer = (drawerId: string, updates: Partial<typeof cascadingDrawers[0]>) => {
+  // OLD: Legacy updateCascadingDrawer function - replaced by unified system  
+  const updateCascadingDrawer = (drawerId: string, updates: any) => {
+    // This function is no longer used with the unified drawer system
+    console.warn('Legacy updateCascadingDrawer called - should use unified system');
     setCascadingDrawers(prev => prev.map(drawer => 
       drawer.id === drawerId ? { ...drawer, ...updates } : drawer
     ));
   };
 
+  // OLD: Legacy saveCascadingDrawer function - replaced by unified system
   const saveCascadingDrawer = async (drawerId: string) => {
-    const drawer = cascadingDrawers.find(d => d.id === drawerId);
-    if (!drawer) return;
+    // This function is no longer used with the unified drawer system
+    console.warn('Legacy saveCascadingDrawer called - should use unified system');
+    return;
 
     try {
       if (drawer.isEditingConditional) {
@@ -4076,8 +4089,41 @@ export default function ProjectDetailPage() {
         </div>
       </main>
 
-      {/* String Edit Sheets - Right-hand Drawers */}
-      <Sheet open={isStringDrawerOpen} onOpenChange={v => !v && closeStringDialog()}>
+      {/* UNIFIED DRAWER SYSTEM */}
+      
+      {/* Main String Edit Drawer */}
+      <StringEditDrawer
+        isOpen={mainDrawer.isOpen}
+        onClose={mainDrawer.closeDrawer}
+        stringData={mainDrawer.stringData}
+        content={mainDrawer.content}
+        onContentChange={mainDrawer.updateContent}
+        variableName={mainDrawer.variableName}
+        onVariableNameChange={mainDrawer.updateVariableName}
+        isConditional={mainDrawer.isConditional}
+        onTypeChange={mainDrawer.updateType}
+        conditionalSpawns={mainDrawer.conditionalSpawns}
+        onConditionalSpawnsChange={mainDrawer.updateConditionalSpawns}
+        includeHiddenOption={mainDrawer.includeHiddenOption}
+        onHiddenOptionChange={mainDrawer.updateHiddenOption}
+        activeTab={mainDrawer.activeTab}
+        onTabChange={mainDrawer.updateTab}
+        project={project}
+        selectedDimensionValues={selectedDimensionValues}
+        pendingStringVariables={pendingStringVariables}
+        onSave={mainDrawer.save}
+        onCancel={mainDrawer.closeDrawer}
+        onAddSpawn={mainDrawer.addSpawn}
+        onEditSpawn={handleEditSpawn}
+        onEditVariable={handleEditVariable}
+        title={mainDrawer.title}
+        level={mainDrawer.level}
+        showBackButton={mainDrawer.showBackButton}
+        isSaving={mainDrawer.isSaving}
+      />
+      
+      {/* OLD SYSTEM TO BE REMOVED - keeping placeholder for now */}
+      <Sheet open={false} onOpenChange={() => {}}>
         <SheetContent side="right" className="w-[800px] max-w-[90vw] flex flex-col p-0 max-h-screen overflow-hidden">
           <SheetHeader className="px-6 py-4 border-b bg-background">
             <div className="flex items-center justify-between w-full">
@@ -5078,8 +5124,43 @@ export default function ProjectDetailPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Cascading Drawer Sheets - Infinite Nesting Support */}
-      {cascadingDrawers.map((drawer, index) => (
+      {/* Cascading Drawers - Unified System */}
+      {cascadingDrawerStack.map((drawer) => (
+        <StringEditDrawer
+          key={drawer.id}
+          isOpen={drawer.hook.isOpen}
+          onClose={drawer.hook.closeDrawer}
+          stringData={drawer.hook.stringData}
+          content={drawer.hook.content}
+          onContentChange={drawer.hook.updateContent}
+          variableName={drawer.hook.variableName}
+          onVariableNameChange={drawer.hook.updateVariableName}
+          isConditional={drawer.hook.isConditional}
+          onTypeChange={drawer.hook.updateType}
+          conditionalSpawns={drawer.hook.conditionalSpawns}
+          onConditionalSpawnsChange={drawer.hook.updateConditionalSpawns}
+          includeHiddenOption={drawer.hook.includeHiddenOption}
+          onHiddenOptionChange={drawer.hook.updateHiddenOption}
+          activeTab={drawer.hook.activeTab}
+          onTabChange={drawer.hook.updateTab}
+          project={project}
+          selectedDimensionValues={selectedDimensionValues}
+          pendingStringVariables={pendingStringVariables}
+          onSave={drawer.hook.save}
+          onCancel={drawer.hook.closeDrawer}
+          onAddSpawn={drawer.hook.addSpawn}
+          onEditSpawn={handleEditSpawn}
+          onEditVariable={handleEditVariable}
+          title={drawer.hook.title}
+          level={drawer.hook.level}
+          showBackButton={drawer.hook.showBackButton}
+          onBack={() => handleBackButton(drawer.id)}
+          isSaving={drawer.hook.isSaving}
+        />
+      ))}
+      
+      {/* OLD CASCADING SYSTEM TO BE REMOVED - keeping placeholder */}
+      {[].map((drawer, index) => (
         <Sheet key={drawer.id} open={true} onOpenChange={v => !v && closeCascadingDrawer(drawer.id)}>
           <SheetContent 
             side="right" 

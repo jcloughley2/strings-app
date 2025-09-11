@@ -219,6 +219,39 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     }));
   }, []);
 
+  // Add existing variable as spawn to conditional
+  const addExistingVariableAsSpawn = useCallback((variableId: string) => {
+    if (!project?.strings) return;
+    
+    // Find the existing variable
+    const existingVariable = project.strings.find((str: any) => str.id === variableId);
+    if (!existingVariable) {
+      console.error('Variable not found:', variableId);
+      return;
+    }
+    
+    // Check if it's already in the spawns list
+    const alreadyExists = state.conditionalSpawns.some(spawn => spawn.id === variableId);
+    if (alreadyExists) {
+      console.warn('Variable already exists in spawns:', existingVariable.effective_variable_name);
+      return;
+    }
+    
+    // Add the existing variable to spawns (mark it as existing, not temporary)
+    const existingSpawn = {
+      ...existingVariable,
+      _isExisting: true, // Flag to indicate this is an existing variable
+      _isTemporary: false
+    };
+    
+    setState(prev => ({
+      ...prev,
+      conditionalSpawns: [...prev.conditionalSpawns, existingSpawn]
+    }));
+    
+    console.log('Added existing variable as spawn:', existingVariable.effective_variable_name || existingVariable.variable_hash);
+  }, [project, state.conditionalSpawns]);
+
   // Helper function to create new variables found in content
   const createNewVariablesFromContent = useCallback(async (content: string) => {
     if (!project?.id) return;
@@ -329,6 +362,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     updateHiddenOption,
     updateTab,
     addSpawn,
+    addExistingVariableAsSpawn,
     save,
   };
 }

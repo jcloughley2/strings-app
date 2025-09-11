@@ -173,10 +173,16 @@ Nested String 2 (Same Component, Stacked)
 - **Unified Save Logic**: Single save function handles all creation, updating, and conversion scenarios
 
 #### Conditional Mode Features
-- **Spawn Variables**: Yellow boxes (new/temporary), purple boxes (existing)
-- **Add Spawn Button**: Creates new spawn with random hash naming
+- **Spawn Variables**: Yellow boxes (new/temporary), purple boxes (existing string variables), orange boxes (existing conditional variables)
+- **Add New Spawn Button**: Creates new spawn with random hash naming
+- **Add Existing Variable as Spawn**: Autocomplete search to reuse existing variables as spawns
+  - Real-time filtering by variable name
+  - Visual indicators for variable types (string/conditional)
+  - Content preview in dropdown results
+  - Smart exclusion of current string and already-selected spawns
 - **Include Hide Option**: Checkbox to add "Hidden" dimension value for conditional invisibility
 - **Auto-Container Detection**: Repairs `is_conditional_container` flag automatically
+- **Mixed Spawn Management**: Supports combinations of new spawns and existing variables
 - **Consistent Interactions**: All spawns clickable to open stacked unified drawers
 - **Bidirectional Conversion**: Can convert between String ↔ Conditional in any context
 
@@ -350,6 +356,50 @@ const nestedDrawer = useStringEditDrawer({
 });
 ```
 
+### Add Existing Variable as Spawn Pattern
+```javascript
+// In StringEditDrawer component - filter available variables
+const availableVariablesForSpawn = project?.strings?.filter((str: any) => {
+  const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
+  return effectiveName && 
+         str.id !== stringData?.id && // Exclude current string being edited
+         !currentSpawnNames.includes(effectiveName) && // Exclude already selected spawns
+         effectiveName.toLowerCase().includes(searchQuery.toLowerCase()); // Filter by search
+}).map((str: any) => ({
+  id: str.id,
+  name: str.effective_variable_name || str.variable_name || str.variable_hash,
+  content: str.content || "",
+  type: str.is_conditional_container ? 'conditional' : 'string',
+  isConditional: str.is_conditional_container || false
+})) || [];
+
+// In useStringEditDrawer hook - add existing variable as spawn
+const addExistingVariableAsSpawn = useCallback((variableId: string) => {
+  const existingVariable = project.strings.find((str: any) => str.id === variableId);
+  if (!existingVariable) return;
+  
+  const existingSpawn = {
+    ...existingVariable,
+    _isExisting: true, // Flag to indicate this is an existing variable
+    _isTemporary: false
+  };
+  
+  setState(prev => ({
+    ...prev,
+    conditionalSpawns: [...prev.conditionalSpawns, existingSpawn]
+  }));
+}, [project, state.conditionalSpawns]);
+
+// In stringOperations.ts - handle existing variables in save logic
+const spawnPromises = conditionalSpawns.map(async (spawn) => {
+  if (spawn._isExisting) {
+    // Don't modify existing variables, just return them for dimension value creation
+    return spawn;
+  }
+  // ... handle new spawns with POST/PATCH as usual
+});
+```
+
 ### Conditional Variable Resolution
 Conditional variables in plaintext mode require special handling for nested/embedded strings:
 
@@ -510,14 +560,14 @@ const handleDeleteString = async () => {
 ```
 frontend/src/
 ├── components/
-│   ├── StringEditDrawer.tsx          # ✅ Single reusable drawer component
+│   ├── StringEditDrawer.tsx          # ✅ Single reusable drawer component (enhanced with existing variable search)
 │   └── UnifiedDrawerExample.tsx      # ✅ Integration example
 ├── hooks/
-│   └── useStringEditDrawer.ts        # ✅ Unified state management hook
+│   └── useStringEditDrawer.ts        # ✅ Unified state management hook (includes addExistingVariableAsSpawn)
 ├── lib/
-│   └── stringOperations.ts           # ✅ Consolidated save logic
+│   └── stringOperations.ts           # ✅ Consolidated save logic (handles _isExisting flag)
 └── app/(dashboard)/projects/[id]/
-    └── page.tsx                      # ✅ Updated to use unified system
+    └── page.tsx                      # ✅ Updated to use unified system (connected new feature)
 ```
 
 ### Key Benefits
@@ -575,6 +625,21 @@ return <StringEditDrawer {...drawer} />;
 - **✅ Backend Dimension Management**: Enhanced signal handlers for automatic dimension cleanup on conditional deletion/conversion
 - **✅ Spawn Variable Renaming**: Fixed dimension value sync when spawn variables are renamed
 - **✅ Instant UI Updates**: Implemented immediate project data refresh after conditional deletions for instant dimension cleanup visibility
+
+### "Add Existing Variable as Spawn" Feature (January 2025) ⭐
+- **✅ Content Reuse**: Users can now add existing variables (both string and conditional) as spawn variables instead of recreating content
+- **✅ Autocomplete Search**: Type-to-search interface with real-time filtering of available variables in the project
+- **✅ Smart Filtering**: Automatically excludes current string being edited and already-selected spawns to prevent conflicts
+- **✅ Visual Distinction**: Enhanced spawn list with clear indicators for different spawn types:
+  - 🟡 **Yellow badges** = New spawn variables being created
+  - 🟣 **Purple badges** = Existing string variables added as spawns
+  - 🟠 **Orange badges** = Existing conditional variables added as spawns
+  - 🔵 **Blue "Existing variable" tag** = Clear indication of reused variables
+- **✅ Mixed Spawn Management**: Seamlessly supports combinations of new spawns and existing variables in the same conditional
+- **✅ Backend Integration**: Enhanced `stringOperations.ts` with `_isExisting` flag handling to prevent modification of original variables
+- **✅ Dimension Value Creation**: Automatically creates dimension values for existing variables just like new spawns
+- **✅ Both Workflows**: Available for both creating new conditional variables and editing existing ones
+- **✅ Unified Architecture**: Integrated into the single `StringEditDrawer` component without creating duplicates
 
 ---
 
@@ -651,6 +716,9 @@ return <StringEditDrawer {...drawer} />;
 - ✅ **Badge Styling**: Orange badges for conditional variables, purple badges for string variables
 - ✅ **Show Variables Toggle**: Proper toggle between badge view and resolved content view
 - ✅ **Dimension Cleanup**: Automatic dimension/dimension value deletion when conditionals are deleted or converted
+- ✅ **Add Existing Variable as Spawn**: Autocomplete search to reuse existing variables as spawns in conditional variables
+- ✅ **Mixed Spawn Types**: Support for combinations of new spawns and existing variables in same conditional
+- ✅ **Smart Variable Filtering**: Excludes current string and already-selected spawns from search results
 
 ### Missing/Limited Functionality
 - ⚠️ **Cascading/Nested Drawers**: Currently only single drawer level supported
@@ -711,8 +779,10 @@ The Strings App has successfully completed a comprehensive architecture consolid
 ### Current Status
 - **Primary Functionality**: ✅ Fully operational (create, edit, delete strings/conditionals)
 - **Unified Architecture**: ✅ Single drawer component handles all editing scenarios  
+- **Advanced Features**: ✅ Variable reuse, mixed spawn types, autocomplete search
 - **Error Handling**: ✅ Robust API conflict resolution and graceful degradation
 - **User Experience**: ✅ Consistent, intuitive interface across all operations
+- **Content Management**: ✅ Efficient workflows for both new creation and content reuse
 - **Legacy Code**: ⚠️ Safely contained in commented blocks, gradually restored as needed
 
 ### Next Phase Opportunities
@@ -720,5 +790,6 @@ The Strings App has successfully completed a comprehensive architecture consolid
 - **Legacy Feature Integration**: Restore remaining bulk operations and import/export  
 - **Performance Optimization**: Consider code splitting for large component files
 - **Component Architecture**: Evaluate further modularization opportunities
+- **Advanced Search**: Extend variable search to include content-based filtering
 
-**Result**: A more maintainable, consistent, and user-friendly application with significantly reduced code complexity and improved reliability.
+**Result**: A more maintainable, consistent, and user-friendly application with significantly reduced code complexity, improved reliability, and enhanced content reuse capabilities.

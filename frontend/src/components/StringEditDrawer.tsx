@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Spool, Folder, ArrowLeft } from "lucide-react";
+import { Plus, Spool, Folder, ArrowLeft, Search } from "lucide-react";
 import { toast } from "sonner";
 
 export interface StringEditDrawerProps {
@@ -54,6 +54,7 @@ export interface StringEditDrawerProps {
   onAddSpawn?: () => void;
   onEditSpawn?: (spawn: any) => void;
   onEditVariable?: (variableName: string) => void;
+  onAddExistingVariableAsSpawn?: (variableId: string) => void;
   
   // Display options
   title?: string;
@@ -89,12 +90,17 @@ export function StringEditDrawer({
   onAddSpawn,
   onEditSpawn,
   onEditVariable,
+  onAddExistingVariableAsSpawn,
   title,
   level = 0,
   showBackButton = false,
   onBack,
   isSaving = false,
 }: StringEditDrawerProps) {
+  
+  // State for adding existing variables as spawns
+  const [existingVariableSearch, setExistingVariableSearch] = useState("");
+  const [showExistingVariableResults, setShowExistingVariableResults] = useState(false);
   
   // Detect variables in content for display
   const detectVariables = (content: string) => {
@@ -141,11 +147,38 @@ export function StringEditDrawer({
   // Get new variables that don't exist yet
   const pendingVariablesInContent = newVariables;
 
+  // Filter available variables for spawn selection (exclude current string and already selected spawns)
+  const currentSpawnNames = conditionalSpawns.map(spawn => {
+    return spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash;
+  });
+  
+  const availableVariablesForSpawn = project?.strings?.filter((str: any) => {
+    const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
+    return effectiveName && 
+           str.id !== stringData?.id && // Exclude current string being edited
+           !currentSpawnNames.includes(effectiveName) && // Exclude already selected spawns
+           effectiveName.toLowerCase().includes(existingVariableSearch.toLowerCase()); // Filter by search
+  }).map((str: any) => ({
+    id: str.id,
+    name: str.effective_variable_name || str.variable_name || str.variable_hash,
+    content: str.content || "",
+    type: str.is_conditional_container ? 'conditional' : 'string',
+    isConditional: str.is_conditional_container || false
+  })) || [];
+
   const handleSave = async () => {
     try {
       await onSave();
     } catch (error: any) {
       toast.error(error.message || 'Failed to save');
+    }
+  };
+
+  const handleAddExistingVariable = (variableId: string) => {
+    if (onAddExistingVariableAsSpawn) {
+      onAddExistingVariableAsSpawn(variableId);
+      setExistingVariableSearch("");
+      setShowExistingVariableResults(false);
     }
   };
 
@@ -255,9 +288,94 @@ export function StringEditDrawer({
                         className="flex items-center gap-2"
                       >
                         <Plus className="h-4 w-4" />
-                        Add Spawn
+                        Add New Spawn
                       </Button>
                     )}
+                  </div>
+
+                  {/* Add Existing Variable as Spawn */}
+                  <div className="space-y-3 border-t pt-4">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <Search className="h-4 w-4" />
+                      Add Existing Variable as Spawn
+                    </Label>
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Input
+                          value={existingVariableSearch}
+                          onChange={(e) => {
+                            setExistingVariableSearch(e.target.value);
+                            setShowExistingVariableResults(e.target.value.length > 0);
+                          }}
+                          placeholder="Type to search for existing variables..."
+                          className="w-full"
+                          onFocus={() => setShowExistingVariableResults(existingVariableSearch.length > 0)}
+                          onBlur={() => {
+                            // Delay hiding to allow clicks on results
+                            setTimeout(() => setShowExistingVariableResults(false), 200);
+                          }}
+                        />
+                        
+                        {/* Search Results Dropdown */}
+                        {showExistingVariableResults && availableVariablesForSpawn.length > 0 && (
+                          <div className="absolute top-full left-0 w-full mt-1 bg-background border rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
+                            {availableVariablesForSpawn.slice(0, 8).map((variable) => (
+                              <div
+                                key={variable.id}
+                                className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"
+                                onClick={() => handleAddExistingVariable(variable.id)}
+                              >
+                                <div className="flex items-center gap-2 mb-1">
+                                  {variable.isConditional ? (
+                                    <div className="flex items-center gap-1 text-orange-600 bg-orange-50 p-1 rounded border border-orange-200">
+                                      <Folder className="h-3 w-3" />
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
+                                      <Spool className="h-3 w-3" />
+                                    </div>
+                                  )}
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-xs font-mono ${
+                                      variable.isConditional 
+                                        ? 'bg-orange-50 text-orange-700 border-orange-200'
+                                        : 'bg-purple-50 text-purple-700 border-purple-200'
+                                    }`}
+                                  >
+                                    {`{{${variable.name}}}`}
+                                  </Badge>
+                                  <Badge variant="secondary" className="text-xs">
+                                    {variable.type}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground line-clamp-1">
+                                  {variable.content || "No content"}
+                                </p>
+                              </div>
+                            ))}
+                            {availableVariablesForSpawn.length > 8 && (
+                              <div className="p-2 text-xs text-muted-foreground text-center border-t">
+                                Showing first 8 results. Type more to filter further.
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* No Results Message */}
+                        {showExistingVariableResults && existingVariableSearch.length > 0 && availableVariablesForSpawn.length === 0 && (
+                          <div className="absolute top-full left-0 w-full mt-1 bg-background border rounded-md shadow-lg z-50 p-3">
+                            <p className="text-sm text-muted-foreground text-center">
+                              No variables found matching "{existingVariableSearch}"
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <p className="text-xs text-muted-foreground">
+                        Search and select an existing variable to add it as a spawn for this conditional
+                      </p>
+                    </div>
                   </div>
 
                   {/* Include Hidden Option Checkbox */}
@@ -287,42 +405,55 @@ export function StringEditDrawer({
                     </div>
                     
                     <div className="grid gap-3">
-                      {conditionalSpawns.map((spawn: any) => {
+                      {conditionalSpawns.map((spawn: any, index: number) => {
                         const isTemporary = spawn._isTemporary || 
                                            spawn.id.toString().startsWith('temp-') || 
                                            (typeof spawn.id === 'number' && spawn.id > 1000000000000);
+                        const isExisting = spawn._isExisting;
+                        const isConditionalSpawn = spawn.is_conditional_container;
                         const spawnVariableName = spawn.effective_variable_name || spawn.variable_hash || (isTemporary ? 'new_variable' : 'unknown');
+                        
+                        // Determine styling based on spawn type
+                        let bgClass, borderClass, iconBgClass, badgeClass, IconComponent;
+                        
+                        if (isTemporary) {
+                          bgClass = 'bg-yellow-50/50 border-yellow-200';
+                          iconBgClass = 'text-yellow-600 bg-yellow-50 border border-yellow-200';
+                          badgeClass = 'bg-yellow-50 text-yellow-700 border-yellow-200';
+                          IconComponent = Plus;
+                        } else if (isExisting && isConditionalSpawn) {
+                          bgClass = 'bg-orange-50/50 border-orange-200';
+                          iconBgClass = 'text-orange-600 bg-orange-50 border border-orange-200';
+                          badgeClass = 'bg-orange-50 text-orange-700 border-orange-200';
+                          IconComponent = Folder;
+                        } else {
+                          bgClass = 'bg-purple-50/50 border-purple-200';
+                          iconBgClass = 'text-purple-600 bg-purple-50 border border-purple-200';
+                          badgeClass = 'bg-purple-50 text-purple-700 border-purple-200';
+                          IconComponent = Spool;
+                        }
                         
                         return (
                           <div 
-                            key={spawn.id} 
-                            className={`border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer ${
-                              isTemporary 
-                                ? 'bg-yellow-50/50 border-yellow-200' 
-                                : 'bg-purple-50/50 border-purple-200'
-                            }`}
+                            key={spawn.id || `spawn-${index}`} 
+                            className={`border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer ${bgClass}`}
                             onClick={() => onEditSpawn?.(spawn)}
                           >
                             <div className="flex items-center gap-2 mb-2">
-                              {isTemporary ? (
-                                <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 p-1 rounded border border-yellow-200">
-                                  <Plus className="h-3 w-3" />
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
-                                  <Spool className="h-3 w-3" />
-                                </div>
-                              )}
-                              <Badge variant="outline" className={`text-xs font-mono ${
-                                isTemporary 
-                                  ? 'bg-yellow-50 text-yellow-700 border-yellow-200' 
-                                  : 'bg-purple-50 text-purple-700 border-purple-200'
-                              }`}>
+                              <div className={`flex items-center gap-1 p-1 rounded ${iconBgClass}`}>
+                                <IconComponent className="h-3 w-3" />
+                              </div>
+                              <Badge variant="outline" className={`text-xs font-mono ${badgeClass}`}>
                                 {`{{${spawnVariableName}}}`}
                               </Badge>
                               {isTemporary && (
                                 <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
                                   New variable!
+                                </Badge>
+                              )}
+                              {isExisting && (
+                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
+                                  Existing variable
                                 </Badge>
                               )}
                             </div>

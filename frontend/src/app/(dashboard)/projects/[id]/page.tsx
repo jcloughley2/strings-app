@@ -4698,6 +4698,7 @@ export default function ProjectDetailPage() {
         onSave={mainDrawer.save}
         onCancel={mainDrawer.closeDrawer}
         onAddSpawn={mainDrawer.addSpawn}
+        onAddExistingVariableAsSpawn={mainDrawer.addExistingVariableAsSpawn}
         onEditSpawn={handleEditSpawn}
         onEditVariable={handleEditVariable}
         title={mainDrawer.title}

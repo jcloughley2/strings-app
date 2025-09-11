@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { saveString, SaveStringOptions, detectCircularReferences } from '@/lib/stringOperations';
+import { apiFetch } from '@/lib/api';
 
 export interface DrawerState {
   // Core drawer state
@@ -28,6 +29,7 @@ export interface UseStringEditDrawerOptions {
   onProjectUpdate?: (project: any) => void;
   onSuccess?: () => void;
   onCancel?: () => void;
+  findSpawnsForConditional?: (conditionalName: string) => any[];
 }
 
 export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
@@ -38,6 +40,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     onProjectUpdate,
     onSuccess,
     onCancel,
+    findSpawnsForConditional,
   } = options;
 
   const [state, setState] = useState<DrawerState>({
@@ -97,13 +100,29 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     if (stringData.is_conditional_container) {
       const conditionalName = stringData.effective_variable_name || stringData.variable_hash;
       
-      // Find spawns for this conditional
-      spawns = project?.strings?.filter((str: any) => {
-        return str.dimension_values?.some((sdv: any) => {
-          const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
-          return dimension && sdv.dimension_value?.dimension?.id === dimension.id;
-        });
-      }) || [];
+      // Find spawns for this conditional using the provided function
+      if (findSpawnsForConditional) {
+        spawns = findSpawnsForConditional(conditionalName);
+      } else {
+        // Fallback to the old approach if function not provided
+        spawns = project?.strings?.filter((str: any) => {
+          return str.dimension_values?.some((sdv: any) => {
+            const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
+            return dimension && sdv.dimension_value?.dimension?.id === dimension.id;
+          });
+        }) || [];
+      }
+      
+      // Sort spawns by spawn number
+      spawns.sort((a: any, b: any) => {
+        const aName = a.effective_variable_name || a.variable_hash;
+        const bName = b.effective_variable_name || b.variable_hash;
+        const aMatch = aName.match(/_(\d+)$/);
+        const bMatch = bName.match(/_(\d+)$/);
+        const aNum = aMatch ? parseInt(aMatch[1]) : 0;
+        const bNum = bMatch ? parseInt(bMatch[1]) : 0;
+        return aNum - bNum;
+      });
       
       // Check if this conditional has a "Hidden" dimension value
       const dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
@@ -223,8 +242,13 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
       
       // Refresh project data
       if (onProjectUpdate && project?.id) {
-        const updatedProject = await fetch(`/api/projects/${project.id}/`).then(r => r.json());
-        onProjectUpdate(updatedProject);
+        try {
+          const updatedProject = await apiFetch(`/api/projects/${project.id}/`);
+          onProjectUpdate(updatedProject);
+        } catch (refreshError) {
+          console.error('Failed to refresh project data after save:', refreshError);
+          // Don't throw here - the save was successful, just the refresh failed
+        }
       }
       
       setState(prev => ({ ...prev, isOpen: false, isSaving: false }));

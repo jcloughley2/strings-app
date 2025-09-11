@@ -48,6 +48,9 @@ export interface StringEditDrawerProps {
   // Actions
   onSave: () => Promise<void>;
   onCancel?: () => void;
+  
+  // Variable detection (optional - for nested editing)
+  onVariableClick?: (variableName: string, isExisting: boolean) => void;
   onAddSpawn?: () => void;
   onEditSpawn?: (spawn: any) => void;
   onEditVariable?: (variableName: string) => void;
@@ -99,19 +102,44 @@ export function StringEditDrawer({
     const variableNames = variableMatches.map(match => match.slice(2, -2));
     return [...new Set(variableNames)];
   };
-
-  const usedVariableNames = detectVariables(content);
   
+  // Categorize detected variables as new or existing
+  const categorizeVariables = (detectedVariables: string[]) => {
+    const existingVariables: string[] = [];
+    const newVariables: string[] = [];
+    
+    detectedVariables.forEach(varName => {
+      // Check if variable exists in project strings
+      const existsInProject = project?.strings?.some((str: any) => {
+        const effectiveName = str.effective_variable_name || str.variable_hash;
+        return effectiveName === varName;
+      });
+      
+      // Check if variable is in pending variables
+      const existsInPending = pendingStringVariables[varName];
+      
+      if (existsInProject || existsInPending) {
+        existingVariables.push(varName);
+      } else {
+        newVariables.push(varName);
+      }
+    });
+    
+    return { existingVariables, newVariables };
+  };
+  
+  // Get current detected variables
+  const detectedVars = detectVariables(content);
+  const { existingVariables, newVariables } = categorizeVariables(detectedVars);
+
   // Find existing string variables
   const usedStringVariables = project?.strings?.filter((str: any) => {
     const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
-    return effectiveName && usedVariableNames.includes(effectiveName);
+    return effectiveName && existingVariables.includes(effectiveName);
   }) || [];
 
-  // Get pending variables referenced in content
-  const pendingVariablesInContent = Object.keys(pendingStringVariables).filter(name => 
-    usedVariableNames.includes(name)
-  );
+  // Get new variables that don't exist yet
+  const pendingVariablesInContent = newVariables;
 
   const handleSave = async () => {
     try {
@@ -360,14 +388,16 @@ export function StringEditDrawer({
                                     <Spool className="h-3 w-3" />
                                   </div>
                                 )}
-                                <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs font-mono ${
+                                    stringVar.is_conditional_container 
+                                      ? 'bg-orange-50 text-orange-700 border-orange-200'
+                                      : 'bg-purple-50 text-purple-700 border-purple-200'
+                                  }`}
+                                >
                                   {`{{${variableName}}}`}
                                 </Badge>
-                                {stringVar.is_conditional_container && (
-                                  <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
-                                    Conditional
-                                  </Badge>
-                                )}
                               </div>
                               <p className="text-sm text-muted-foreground line-clamp-2">
                                 {stringVar.content || "Empty content"}

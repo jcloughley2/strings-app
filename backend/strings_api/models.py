@@ -141,16 +141,19 @@ class StringDimensionValue(models.Model):
 @receiver(pre_save, sender=String)
 def track_old_variable_name(sender, instance, **kwargs):
     """
-    Track the old variable name before save to handle variable renaming.
+    Track the old variable name and conditional state before save to handle changes.
     """
     if instance.pk:  # Only for existing instances (updates)
         try:
             old_instance = String.objects.get(pk=instance.pk)
             instance._old_effective_variable_name = old_instance.effective_variable_name
+            instance._old_is_conditional_container = old_instance.is_conditional_container
         except String.DoesNotExist:
             instance._old_effective_variable_name = None
+            instance._old_is_conditional_container = None
     else:
         instance._old_effective_variable_name = None
+        instance._old_is_conditional_container = None
 
 @receiver(post_save, sender=String)
 def update_dependent_strings_when_string_variable_changes(sender, instance, **kwargs):
@@ -161,6 +164,12 @@ def update_dependent_strings_when_string_variable_changes(sender, instance, **kw
     # Handle automatic dimension creation/update for conditional containers
     if instance.is_conditional_container:
         sync_conditional_dimension(instance)
+    
+    # Handle conditional-to-string conversion - cleanup dimension when conditional becomes string
+    old_is_conditional = getattr(instance, '_old_is_conditional_container', None)
+    if old_is_conditional is True and instance.is_conditional_container is False:
+        # Conditional variable was converted to string variable - delete its dimension
+        cleanup_conditional_dimension(instance)
     
     # Handle spawn variable creation/update - sync parent conditional dimension
     string_name = instance.effective_variable_name
@@ -212,6 +221,31 @@ def update_dependent_strings_when_string_variable_changes(sender, instance, **kw
                 print(f"Updated variable reference in string {string.id}: {old_name} -> {new_name}")
                 # Refresh the instance to reflect the change
                 string.content = new_content
+        
+        # Check if this renamed variable is a spawn variable (has dimension values)
+        # If so, update the corresponding dimension value to match the new name
+        from .models import DimensionValue
+        for sdv in instance.dimension_values.all():
+            dimension_value = sdv.dimension_value
+            if dimension_value.value == old_name:
+                # Update the dimension value to match the new variable name
+                dimension_value.value = new_name
+                dimension_value.save()
+                print(f"Updated dimension value from '{old_name}' to '{new_name}' in dimension '{dimension_value.dimension.name}'")
+                
+                # Find and resync the parent conditional variable for this dimension
+                # Look for conditional variable whose effective_variable_name matches the dimension name
+                parent_conditional = None
+                for string in instance.project.strings.filter(is_conditional_container=True):
+                    if string.effective_variable_name == dimension_value.dimension.name:
+                        parent_conditional = string
+                        break
+                
+                if parent_conditional:
+                    sync_conditional_dimension(parent_conditional)
+                    print(f"Resynced conditional dimension for '{parent_conditional.effective_variable_name}'")
+                else:
+                    print(f"Could not find parent conditional for dimension '{dimension_value.dimension.name}'")
     
     # All strings are now variables, so check if any string references this one
     variable_pattern = re.compile(r'{{([^}]+)}}')
@@ -301,38 +335,55 @@ def sync_conditional_dimension(conditional_string):
     
     return dimension
 
+def cleanup_conditional_dimension(conditional_string):
+    """
+    Clean up the dimension and all its dimension values when a conditional variable 
+    is deleted or converted to a string variable.
+    """
+    from .models import Dimension
+    
+    conditional_name = conditional_string.effective_variable_name
+    project = conditional_string.project
+    
+    try:
+        # Find the dimension associated with this conditional variable
+        dimension = Dimension.objects.get(name=conditional_name, project=project)
+        
+        # Delete the dimension (this will cascade delete all dimension values and string-dimension-value relationships)
+        dimension_name = dimension.name
+        dimension.delete()
+        print(f"Deleted dimension '{dimension_name}' and all its associated dimension values")
+        
+    except Dimension.DoesNotExist:
+        # No dimension found - this is fine, maybe it was already cleaned up
+        print(f"No dimension found for conditional '{conditional_name}' - skipping cleanup")
+
 @receiver(post_delete, sender=String)
 def handle_string_deletion(sender, instance, **kwargs):
     """
-    When a spawn variable is deleted, update the parent conditional's dimension.
+    When a string variable is deleted, handle cleanup based on its type.
     """
-    # Check if this was a spawn variable (pattern: parent_N)
-    string_name = instance.effective_variable_name
-    spawn_pattern = re.compile(r'^(.+)_\d+$')
-    match = spawn_pattern.match(string_name)
+    # Check if this was a conditional variable - if so, clean up its dimension
+    if instance.is_conditional_container:
+        cleanup_conditional_dimension(instance)
+        return
     
-    if match:
-        parent_name = match.group(1)
-        # Find the parent conditional variable
-        try:
-            parent_conditional = String.objects.get(
-                project=instance.project,
-                variable_name=parent_name,
-                is_conditional_container=True
-            )
-            # Resync the dimension
-            sync_conditional_dimension(parent_conditional)
-        except String.DoesNotExist:
-            # Try with variable_hash if variable_name lookup fails
-            try:
-                parent_conditional = String.objects.get(
-                    project=instance.project,
-                    variable_hash=parent_name,
-                    is_conditional_container=True
-                )
+    # Check if this was a spawn variable - if so, update parent conditional dimensions
+    # A spawn variable is identified by having dimension values that link it to conditional dimensions
+    if hasattr(instance, 'dimension_values'):
+        for sdv in instance.dimension_values.all():
+            dimension = sdv.dimension_value.dimension
+            # Find the conditional variable that owns this dimension
+            parent_conditional = None
+            for string in instance.project.strings.filter(is_conditional_container=True):
+                if string.effective_variable_name == dimension.name:
+                    parent_conditional = string
+                    break
+            
+            if parent_conditional:
+                # Resync the parent conditional's dimension
                 sync_conditional_dimension(parent_conditional)
-            except String.DoesNotExist:
-                pass  # Parent not found, might have been deleted
+                print(f"Resynced conditional dimension for '{parent_conditional.effective_variable_name}' after spawn deletion")
 
 @receiver([post_save, post_delete], sender=StringDimensionValue)
 def update_strings_when_string_dimension_value_changes(sender, instance, **kwargs):

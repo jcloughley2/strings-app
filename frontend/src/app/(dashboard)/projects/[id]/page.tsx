@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
@@ -340,6 +340,11 @@ export default function ProjectDetailPage() {
 
     // Function to process conditional variables - behavior depends on showVariableBadges toggle
   const processConditionalVariables = (content: string) => {
+    // If showVariableBadges is true, don't process conditionals - leave them as {{variableName}} for badge rendering
+    if (showVariableBadges) {
+      return content;
+    }
+    
     // Find all variables in content
     const variableMatches = content.match(/{{([^}]+)}}/g) || [];
     let processedContent = content;
@@ -357,21 +362,13 @@ export default function ProjectDetailPage() {
       );
       
       if (conditionalVariable) {
-        if (showVariableBadges && !isPlaintextMode) {
-          // Keep as {{variable_name}} - will show as orange badge
-          // No replacement needed, keep original match
-        } else {
-          // Replace with the content of the selected spawn string
-          // Find dimension by the conditional variable's effective name
           const conditionalName = conditionalVariable.effective_variable_name || conditionalVariable.variable_hash;
           const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
           
           if (dimension) {
-            // Get the selected dimension value for this dimension (e.g., "option-1")
             const selectedValue = selectedDimensionValues[dimension.id];
             
             if (selectedValue) {
-              // Check if "Hidden" is selected - treat as empty content
               if (selectedValue === "Hidden") {
                 // Replace with empty string to make the conditional invisible
                 processedContent = processedContent.replace(match, "");
@@ -383,7 +380,7 @@ export default function ProjectDetailPage() {
                 });
                 
                 if (spawnString && spawnString.content) {
-                  // Use the spawn string's content (e.g., "blue") and recursively process it
+                // Use the spawn string's content and recursively process it
                   const resolvedContent = processConditionalVariables(spawnString.content);
                   processedContent = processedContent.replace(match, resolvedContent);
                 } else {
@@ -394,7 +391,6 @@ export default function ProjectDetailPage() {
             } else {
               // No dimension value selected, keep the conditional variable as-is
               // This will show as {{variableName}}
-            }
           }
         }
       }
@@ -685,7 +681,7 @@ export default function ProjectDetailPage() {
 
   // Cascading drawer functions
   const openEditInCascadingDrawer = (str: any) => {
-    // Check if this should be a conditional container but isn't marked as one
+        // Check if this should be a conditional container but isn't marked as one
     if (!str.is_conditional_container && str.is_conditional) {
       const conditionalName = str.effective_variable_name || str.variable_hash;
       const potentialSpawns = findSpawnsForConditional(conditionalName);
@@ -704,7 +700,7 @@ export default function ProjectDetailPage() {
         }).catch(err => {});
       }
     }
-
+    
     // Open the unified drawer for editing
     mainDrawer.openEditDrawer(str);
   };
@@ -793,82 +789,96 @@ export default function ProjectDetailPage() {
       return [content];
     }
     
-    // First process conditionals
-    const conditionalPattern = /\{\{([^}]+)\}\}/g;
-    const parts: (string | React.ReactNode)[] = [];
-    let lastIndex = 0;
-    let match;
+    // First process conditionals using the unified function
+    const processedContent = processConditionalVariables(content);
+    
+    if (showVariableBadges) {
+      // Show Variables Mode: Display all variables as badges
+      const conditionalPattern = /\{\{([^}]+)\}\}/g;
+      const parts: (string | React.ReactNode)[] = [];
+      let lastIndex = 0;
+      let match;
 
-    while ((match = conditionalPattern.exec(content)) !== null) {
-      // Add text before the match
-      if (match.index > lastIndex) {
-        parts.push(content.slice(lastIndex, match.index));
-      }
+      while ((match = conditionalPattern.exec(processedContent)) !== null) {
+        // Add text before the match
+        if (match.index > lastIndex) {
+          parts.push(processedContent.slice(lastIndex, match.index));
+        }
 
-      const variableName = match[1];
-      
-      // Find the corresponding string variable
-      const stringVariable = project?.strings?.find((str: any) => 
-        str.variable_name === variableName || str.variable_hash === variableName
-      );
+        const variableName = match[1];
+        
+        // Find the corresponding string variable for badge styling
+        const stringVariable = project?.strings?.find((str: any) => 
+          str.variable_name === variableName || str.variable_hash === variableName || 
+          str.effective_variable_name === variableName
+        );
 
-      if (stringVariable) {
-        if (stringVariable.is_conditional_container) {
-          // For conditional variables, show the selected dimension value's content
-          const dimensionId = stringVariable.dimension_id;
-          const selectedValue = selectedDimensionValues[dimensionId];
-          
-          if (selectedValue && selectedValue !== "Hidden") {
-            // Find the spawn string for this dimension value
-            const spawnString = project?.strings?.find((str: any) => 
-              str.parent_conditional_id === stringVariable.id && 
-              str.dimension_value === selectedValue
-            );
+        if (stringVariable) {
+          // Create a styled badge for this variable
+          const badgeColor = stringVariable.is_conditional_container 
+            ? 'bg-orange-100 text-orange-800' 
+            : 'bg-purple-100 text-purple-800';
             
-            if (spawnString) {
-              const nestedParts = renderContentRecursively(spawnString.content, depth + 1, `${keyPrefix}${variableName}-`);
-              parts.push(
-                <span key={`${keyPrefix}${variableName}-${match.index}`} className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 px-2 py-1 rounded text-sm font-medium">
-                  {nestedParts}
-                </span>
-              );
-            } else {
-              // Show variable name if no spawn found
-              parts.push(
-                <span key={`${keyPrefix}${variableName}-${match.index}`} className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 px-2 py-1 rounded text-sm font-medium">
-                  {variableName}
-                </span>
-              );
-            }
-          }
-          // If selectedValue is "Hidden" or null, don't render anything (the conditional is hidden)
-        } else {
-          // For regular string variables, recursively process their content
-          const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
           parts.push(
-            <span key={`${keyPrefix}${variableName}-${match.index}`} className="inline-flex items-center gap-1 bg-purple-100 text-purple-800 px-2 py-1 rounded text-sm font-medium">
-              {nestedParts}
+            <span 
+              key={`${keyPrefix}${variableName}-${match.index}`} 
+              className={`inline-flex items-center gap-1 ${badgeColor} px-2 py-1 rounded text-sm font-medium`}
+            >
+              {`{{${variableName}}}`}
+            </span>
+          );
+        } else {
+          // Variable not found, show as plain text badge
+          parts.push(
+            <span 
+              key={`${keyPrefix}${variableName}-${match.index}`} 
+              className="inline-flex items-center gap-1 bg-gray-100 text-gray-800 px-2 py-1 rounded text-sm"
+            >
+              {`{{${variableName}}}`}
             </span>
           );
         }
-      } else {
-        // Variable not found, show as plain text
-        parts.push(
-          <span key={`${keyPrefix}${variableName}-${match.index}`} className="inline-flex items-center gap-1 bg-gray-100 text-gray-800 px-2 py-1 rounded text-sm">
-            {variableName}
-          </span>
-        );
+
+        lastIndex = conditionalPattern.lastIndex;
       }
 
-      lastIndex = conditionalPattern.lastIndex;
-    }
+      // Add remaining text
+      if (lastIndex < processedContent.length) {
+        parts.push(processedContent.slice(lastIndex));
+      }
 
-    // Add remaining text
-    if (lastIndex < content.length) {
-      parts.push(content.slice(lastIndex));
+      return parts;
+    } else {
+      // Content Mode: Expand string variables to their content, conditionals already processed
+      const variablePattern = /\{\{([^}]+)\}\}/g;
+      let finalContent = processedContent;
+      
+      // Process remaining string variables (conditionals were already handled by processConditionalVariables)
+      const variableMatches = finalContent.match(variablePattern) || [];
+      
+      variableMatches.forEach((match) => {
+        const variableName = match.slice(2, -2);
+        
+        // Find string variable (not conditional - those were already processed)
+        const stringVariable = project?.strings?.find((str: any) => 
+          !str.is_conditional_container && (
+            str.variable_name === variableName || 
+            str.variable_hash === variableName || 
+            str.effective_variable_name === variableName
+          )
+        );
+        
+        if (stringVariable && stringVariable.content) {
+          // Recursively process the string variable's content
+          const expandedContent = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
+          // Convert React nodes back to string for text replacement
+          const contentString = expandedContent.map(part => typeof part === 'string' ? part : `{{${variableName}}}`).join('');
+          finalContent = finalContent.replace(match, contentString);
+        }
+      });
+      
+      return [finalContent];
     }
-
-    return parts;
   };
 
   // Function to render content with badge styling for variables
@@ -897,39 +907,6 @@ export default function ProjectDetailPage() {
     // This stub prevents runtime errors for any remaining legacy UI elements
   };
 
-  // Close delete string dialog
-  const closeDeleteStringDialog = () => {
-    setDeleteStringDialog(null);
-  };
-
-  // Handle string deletion
-  const handleDeleteString = async () => {
-    if (!deleteStringDialog) return;
-
-    try {
-      await apiFetch(`/api/strings/${deleteStringDialog.id}/`, {
-        method: 'DELETE',
-      });
-      
-      toast.success(`String deleted successfully!`);
-      
-      // Refresh project data to reflect the deletion
-        const updatedProject = await apiFetch(`/api/projects/${id}/`);
-      setProject(sortProjectStrings(updatedProject));
-      
-      // Remove deleted string from selection if it was selected
-      setSelectedStringIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(deleteStringDialog.id);
-        return newSet;
-      });
-      
-      closeDeleteStringDialog();
-      } catch (err) {
-      console.error('Failed to delete string:', err);
-      toast.error('Failed to delete string. Please try again.');
-    }
-  };
 
   // Close bulk delete dialog
   const closeBulkDeleteDialog = () => {
@@ -1360,6 +1337,49 @@ export default function ProjectDetailPage() {
 
   // Checkbox state helpers
   const isIndeterminate = selectedStringIds.size > 0 && !isAllSelected;
+
+  // String deletion handlers
+  const openDeleteStringDialog = (str: any) => {
+    setDeleteStringDialog(str);
+  };
+
+  const closeDeleteStringDialog = () => {
+    setDeleteStringDialog(null);
+  };
+
+  const handleDeleteString = async () => {
+    if (!deleteStringDialog || !deleteStringDialog.id) return;
+
+    // Prevent multiple deletion attempts by capturing the data and closing dialog immediately
+    const stringToDelete = deleteStringDialog;
+    setDeleteStringDialog(null);
+
+    try {
+      await apiFetch(`/api/strings/${stringToDelete.id}/`, {
+        method: 'DELETE',
+      });
+
+      // Refresh project data from API to get the latest state including dimension cleanup
+      if (project?.id) {
+        try {
+          const updatedProject = await apiFetch(`/api/projects/${project.id}/`);
+          setProject(updatedProject);
+        } catch (refreshError) {
+          console.error('Failed to refresh project data after deletion:', refreshError);
+          // Fallback to local state update if refresh fails
+          setProject(prev => ({
+            ...prev,
+            strings: prev.strings?.filter((s: any) => s.id !== stringToDelete.id) || []
+          }));
+        }
+      }
+
+      toast.success('String deleted successfully');
+    } catch (error) {
+      console.error('Failed to delete string:', error);
+      toast.error('Failed to delete string');
+    }
+  };
 
   /* LEGACY BLOCK START - TEMPORARILY COMMENTED OUT DUE TO SYNTAX ERRORS
   
@@ -2807,13 +2827,13 @@ export default function ProjectDetailPage() {
           console.log('Creating new dimension:', conditionalName);
           try {
             newDimension = await apiFetch('/api/dimensions/', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                name: conditionalName,
-                project: parseInt(id as string),
-              }),
-            });
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: conditionalName,
+              project: parseInt(id as string),
+            }),
+          });
           } catch (dimensionError: any) {
             const errorStr = dimensionError.message || JSON.stringify(dimensionError) || String(dimensionError);
             if (errorStr.includes('unique set') || errorStr.includes('must make a unique set')) {
@@ -6185,50 +6205,6 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* Delete String Confirmation Dialog */}
-      <Dialog open={!!deleteStringDialog} onOpenChange={v => !v && closeDeleteStringDialog()}>
-        <DialogContent className="max-w-md">
-          <DialogTitle>Delete String</DialogTitle>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Are you sure you want to delete this string?
-            </p>
-            {deleteStringDialog && (
-              <div className="p-3 bg-muted rounded-md">
-                <p className="text-sm font-medium">String to delete:</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {deleteStringDialog.content.length > 100 
-                    ? `${deleteStringDialog.content.substring(0, 100)}...` 
-                    : deleteStringDialog.content
-                  }
-                </p>
-              </div>
-            )}
-            
-            {deleteStringDialog && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                    <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> This string will be permanently deleted. 
-                  Any references to this string in other content will need to be updated manually.
-                    </p>
-                  </div>
-            )}
-            <div className="flex justify-end gap-2 mt-6">
-              <Button type="button" variant="secondary" onClick={closeDeleteStringDialog}>
-                Cancel
-              </Button>
-              <Button 
-                type="button" 
-                variant="destructive" 
-                onClick={handleDeleteString}
-
-              >
-                Delete String
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
 
 
@@ -7233,6 +7209,45 @@ export default function ProjectDetailPage() {
         </SheetContent>
       </Sheet>
 
+      {/* Delete String Confirmation Dialog */}
+      <Dialog 
+        key="delete-string-dialog" 
+        open={!!deleteStringDialog && deleteStringDialog.id} 
+        onOpenChange={(open) => {
+          if (!open) setDeleteStringDialog(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete String</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the string "{deleteStringDialog?.effective_variable_name || deleteStringDialog?.variable_hash}"?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-sm font-medium text-red-800">
+                ⚠️ Warning: This action cannot be undone
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setDeleteStringDialog(null)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteString}
+            >
+              Delete String
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Conversion Confirmation Dialog */}
       <Dialog open={conversionConfirmDialog} onOpenChange={v => !v && setConversionConfirmDialog(false)}>
         <DialogContent className="max-w-md">
@@ -7240,14 +7255,14 @@ export default function ProjectDetailPage() {
             <DialogTitle>
               {pendingConversionType === 'string' ? 'Convert to Normal String' : 'Convert to Conditional'}
             </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
+            <DialogDescription>
               {pendingConversionType === 'string' 
                 ? 'This will convert your conditional back to a normal string. All spawn strings will be deleted and only the content from the first spawn will be preserved.'
                 : 'This will convert your normal string into a conditional. The current content will become the first spawn, and you can add more spawns later.'
               }
-            </p>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
             <div className="p-3 bg-orange-50 border border-orange-200 rounded-md">
               <p className="text-sm font-medium text-orange-800">
                 ⚠️ Warning: This action cannot be undone

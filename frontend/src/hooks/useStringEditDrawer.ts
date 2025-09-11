@@ -219,6 +219,51 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     }));
   }, []);
 
+  // Helper function to create new variables found in content
+  const createNewVariablesFromContent = useCallback(async (content: string) => {
+    if (!project?.id) return;
+    
+    // Extract variables from content
+    const variableMatches = content.match(/{{([^}]+)}}/g) || [];
+    const variableNames = variableMatches.map(match => match.slice(2, -2));
+    const uniqueVariableNames = [...new Set(variableNames)];
+    
+    // Find which variables don't exist yet
+    const newVariables = uniqueVariableNames.filter(varName => {
+      // Check if variable exists in project strings
+      const existsInProject = project.strings?.some((str: any) => {
+        const effectiveName = str.effective_variable_name || str.variable_hash;
+        return effectiveName === varName;
+      });
+      
+      // Check if variable is in pending variables
+      const existsInPending = pendingStringVariables && pendingStringVariables[varName];
+      
+      return !existsInProject && !existsInPending;
+    });
+    
+    // Create new variables
+    for (const varName of newVariables) {
+      try {
+        console.log(`Creating new variable: ${varName}`);
+        await apiFetch('/api/strings/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: `Content for ${varName}`, // Default content
+            variable_name: varName,
+            is_conditional: false,
+            is_conditional_container: false,
+            project: project.id,
+          }),
+        });
+      } catch (error) {
+        console.error(`Failed to create variable ${varName}:`, error);
+        // Continue creating other variables even if one fails
+      }
+    }
+  }, [project, pendingStringVariables]);
+
   // Save function
   const save = useCallback(async () => {
     setState(prev => ({ ...prev, isSaving: true }));
@@ -238,9 +283,13 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
           detectCircularReferences(content, stringId, project?.strings),
       };
       
+      // 1. First, create any new variables found in the content
+      await createNewVariablesFromContent(state.content);
+      
+      // 2. Then save the main string
       await saveString(saveOptions);
       
-      // Refresh project data
+      // 3. Refresh project data
       if (onProjectUpdate && project?.id) {
         try {
           const updatedProject = await apiFetch(`/api/projects/${project.id}/`);

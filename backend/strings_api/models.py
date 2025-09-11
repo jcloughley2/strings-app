@@ -98,6 +98,19 @@ class String(models.Model):
                 string=self,
                 dimension_value=dimension_value
             )
+    
+    def cleanup_as_spawn_variable(self):
+        """
+        Clean up dimension values when this string variable is being deleted.
+        This method can be called explicitly before deletion if needed.
+        
+        Returns:
+            dict: Summary of cleanup actions taken
+        """
+        return cleanup_dimension_values_for_deleted_variable(
+            self.effective_variable_name, 
+            self.project
+        )
 
 
 
@@ -358,32 +371,97 @@ def cleanup_conditional_dimension(conditional_string):
         # No dimension found - this is fine, maybe it was already cleaned up
         print(f"No dimension found for conditional '{conditional_name}' - skipping cleanup")
 
+def cleanup_dimension_values_for_deleted_variable(variable_name, project):
+    """
+    Clean up all dimension values that reference a deleted variable.
+    This handles cases where a single variable serves as spawn for multiple conditional variables.
+    
+    Args:
+        variable_name (str): The effective variable name of the deleted variable
+        project (Project): The project instance
+    
+    Returns:
+        dict: Summary of cleanup actions taken
+    """
+    from .models import DimensionValue
+    
+    # Find all dimension values that reference this deleted variable by name
+    dimension_values_to_delete = DimensionValue.objects.filter(
+        dimension__project=project,
+        value=variable_name
+    )
+    
+    cleanup_summary = {
+        'deleted_dimension_values': [],
+        'affected_conditionals': [],
+        'total_deleted': 0
+    }
+    
+    # Keep track of parent conditionals that need dimension resyncing
+    parent_conditionals_to_resync = set()
+    
+    for dim_value in dimension_values_to_delete:
+        dimension = dim_value.dimension
+        cleanup_summary['deleted_dimension_values'].append({
+            'dimension_name': dimension.name,
+            'value': dim_value.value
+        })
+        
+        # Find the conditional variable that owns this dimension
+        parent_conditional = None
+        for string in project.strings.filter(is_conditional_container=True):
+            if string.effective_variable_name == dimension.name:
+                parent_conditional = string
+                break
+        
+        if parent_conditional:
+            parent_conditionals_to_resync.add(parent_conditional.id)
+            if parent_conditional.effective_variable_name not in cleanup_summary['affected_conditionals']:
+                cleanup_summary['affected_conditionals'].append(parent_conditional.effective_variable_name)
+    
+    # Delete all dimension values that reference the deleted variable
+    deleted_count = dimension_values_to_delete.count()
+    if deleted_count > 0:
+        dimension_values_to_delete.delete()
+        cleanup_summary['total_deleted'] = deleted_count
+        print(f"Deleted {deleted_count} dimension values referencing deleted variable '{variable_name}'")
+    
+    # Resync all affected parent conditional dimensions
+    for parent_id in parent_conditionals_to_resync:
+        try:
+            parent_conditional = String.objects.get(id=parent_id, is_conditional_container=True)
+            sync_conditional_dimension(parent_conditional)
+            print(f"Resynced conditional dimension for '{parent_conditional.effective_variable_name}' after variable deletion")
+        except String.DoesNotExist:
+            print(f"Parent conditional with ID {parent_id} no longer exists - skipping resync")
+    
+    return cleanup_summary
+
 @receiver(post_delete, sender=String)
 def handle_string_deletion(sender, instance, **kwargs):
     """
     When a string variable is deleted, handle cleanup based on its type.
     """
+    deleted_variable_name = instance.effective_variable_name
+    project = instance.project
+    
     # Check if this was a conditional variable - if so, clean up its dimension
     if instance.is_conditional_container:
         cleanup_conditional_dimension(instance)
         return
     
-    # Check if this was a spawn variable - if so, update parent conditional dimensions
-    # A spawn variable is identified by having dimension values that link it to conditional dimensions
-    if hasattr(instance, 'dimension_values'):
-        for sdv in instance.dimension_values.all():
-            dimension = sdv.dimension_value.dimension
-            # Find the conditional variable that owns this dimension
-            parent_conditional = None
-            for string in instance.project.strings.filter(is_conditional_container=True):
-                if string.effective_variable_name == dimension.name:
-                    parent_conditional = string
-                    break
-            
-            if parent_conditional:
-                # Resync the parent conditional's dimension
-                sync_conditional_dimension(parent_conditional)
-                print(f"Resynced conditional dimension for '{parent_conditional.effective_variable_name}' after spawn deletion")
+    # For any deleted variable (spawn or regular), clean up ALL dimension values that reference it
+    # This handles cases where a single variable serves as spawn for multiple conditional variables
+    cleanup_summary = cleanup_dimension_values_for_deleted_variable(deleted_variable_name, project)
+    
+    if cleanup_summary['total_deleted'] > 0:
+        print(f"Variable deletion cleanup summary for '{deleted_variable_name}':")
+        print(f"  - Deleted {cleanup_summary['total_deleted']} dimension values")
+        print(f"  - Affected conditionals: {', '.join(cleanup_summary['affected_conditionals'])}")
+        for dv in cleanup_summary['deleted_dimension_values']:
+            print(f"  - Removed '{dv['value']}' from dimension '{dv['dimension_name']}'")
+    else:
+        print(f"No dimension values found for deleted variable '{deleted_variable_name}' - no cleanup needed")
 
 @receiver([post_save, post_delete], sender=StringDimensionValue)
 def update_strings_when_string_dimension_value_changes(sender, instance, **kwargs):

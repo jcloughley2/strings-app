@@ -89,6 +89,15 @@ export default function ProjectDetailPage() {
   const [selectedStringIds, setSelectedStringIds] = useState<Set<number>>(new Set());
   const [bulkDeleteDialog, setBulkDeleteDialog] = useState(false);
 
+  // Bulk selection functions
+  const openBulkDeleteDialog = () => {
+    setBulkDeleteDialog(true);
+  };
+
+  const closeBulkDeleteDialog = () => {
+    setBulkDeleteDialog(false);
+  };
+
   // Import strings state
   const [importDialog, setImportDialog] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -177,6 +186,60 @@ export default function ProjectDetailPage() {
   const setStringVariableName = (val: string) => console.warn('Legacy setStringVariableName called');
   const setEditingString = (val: any) => console.warn('Legacy setEditingString called');
   // Note: setPendingStringVariables and setProject are real functions, not stubbed
+
+  // Function to process conditional variables based on selected dimension values
+  const processConditionalVariables = (content: string): string => {
+    if (!content || showVariableBadges) {
+      return content;
+    }
+
+    let processedContent = content;
+    const variableMatches = content.match(/{{([^}]+)}}/g) || [];
+
+    for (const match of variableMatches) {
+      const variableName = match.slice(2, -2);
+      
+      // Find the conditional variable
+      const conditionalVariable = project?.strings?.find((str: any) => 
+        str.is_conditional_container && 
+        (str.effective_variable_name === variableName || 
+         str.variable_name === variableName || 
+         str.variable_hash === variableName)
+      );
+
+      if (conditionalVariable) {
+        // Find the dimension for this conditional
+        const dimension = project?.dimensions?.find((d: any) => d.name === variableName);
+        
+        if (dimension) {
+          const selectedValue = selectedDimensionValues[dimension.id];
+          
+          if (selectedValue === "Hidden") {
+            // Replace with empty string if "Hidden" is selected
+            const regex = new RegExp(`{{${variableName}}}`, 'g');
+            processedContent = processedContent.replace(regex, '');
+          } else if (selectedValue) {
+            // Find the spawn variable for this selected value
+            const spawnVariable = project?.strings?.find((str: any) =>
+              str.effective_variable_name === selectedValue ||
+              str.variable_name === selectedValue ||
+              str.variable_hash === selectedValue
+            );
+            
+            if (spawnVariable) {
+              const regex = new RegExp(`{{${variableName}}}`, 'g');
+              // Recursively process the spawn content in case it contains other conditionals
+              const spawnContent = processConditionalVariables(spawnVariable.content || '');
+              processedContent = processedContent.replace(regex, spawnContent);
+            }
+          }
+        }
+      }
+    }
+
+    return processedContent;
+  };
+
   
   // Legacy functions - stubbed (removed duplicates that are now active)
   const setIncludeHiddenOption = (val: boolean) => console.warn('Legacy setIncludeHiddenOption called');
@@ -338,66 +401,6 @@ export default function ProjectDetailPage() {
   if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
   if (!project) return <div className="p-8 text-center">Project not found.</div>;
 
-    // Function to process conditional variables - behavior depends on showVariableBadges toggle
-  const processConditionalVariables = (content: string) => {
-    // If showVariableBadges is true, don't process conditionals - leave them as {{variableName}} for badge rendering
-    if (showVariableBadges) {
-      return content;
-    }
-    
-    // Find all variables in content
-    const variableMatches = content.match(/{{([^}]+)}}/g) || [];
-    let processedContent = content;
-    
-    variableMatches.forEach((match) => {
-      const variableName = match.slice(2, -2);
-      
-      // Check if this is a conditional variable
-      const conditionalVariable = project.strings?.find((str: any) => 
-        str.is_conditional_container && (
-        str.effective_variable_name === variableName || 
-        str.variable_name === variableName || 
-        str.variable_hash === variableName
-        )
-      );
-      
-      if (conditionalVariable) {
-          const conditionalName = conditionalVariable.effective_variable_name || conditionalVariable.variable_hash;
-          const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
-          
-          if (dimension) {
-            const selectedValue = selectedDimensionValues[dimension.id];
-            
-            if (selectedValue) {
-              if (selectedValue === "Hidden") {
-                // Replace with empty string to make the conditional invisible
-                processedContent = processedContent.replace(match, "");
-              } else {
-                // Find spawn by matching variable name/hash to dimension value
-                const spawnString = project.strings?.find((str: any) => {
-                  const spawnVariableName = str.effective_variable_name || str.variable_hash;
-                  return spawnVariableName === selectedValue;
-                });
-                
-                if (spawnString && spawnString.content) {
-                // Use the spawn string's content and recursively process it
-                  const resolvedContent = processConditionalVariables(spawnString.content);
-                  processedContent = processedContent.replace(match, resolvedContent);
-                } else {
-                  // Fallback to dimension value if no spawn content found
-                  processedContent = processedContent.replace(match, selectedValue);
-                }
-              }
-            } else {
-              // No dimension value selected, keep the conditional variable as-is
-              // This will show as {{variableName}}
-          }
-        }
-      }
-    });
-    
-    return processedContent;
-  };
 
   // String dialog handlers
   // UNIFIED: Replace openCreateString with mainDrawer
@@ -771,9 +774,13 @@ export default function ProjectDetailPage() {
     });
   };
 
-  const handleSelectAll = () => {
-    const allFilteredIds = new Set<number>(filteredStrings.map((str: any) => str.id));
-    setSelectedStringIds(allFilteredIds);
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const allFilteredIds = new Set<number>(filteredStrings.map((str: any) => str.id));
+      setSelectedStringIds(allFilteredIds);
+    } else {
+      setSelectedStringIds(new Set());
+    }
   };
 
   const handleDeselectAll = () => {
@@ -781,6 +788,7 @@ export default function ProjectDetailPage() {
   };
 
   const isAllSelected = filteredStrings.length > 0 && filteredStrings.every((str: any) => selectedStringIds.has(str.id));
+  const isIndeterminate = selectedStringIds.size > 0 && !isAllSelected;
 
   // Recursive function to render content with proper variable substitution and styling
   const renderContentRecursively = (content: string, depth: number = 0, keyPrefix: string = ""): (string | React.ReactNode)[] => {
@@ -792,64 +800,8 @@ export default function ProjectDetailPage() {
     // First process conditionals using the unified function
     const processedContent = processConditionalVariables(content);
     
-    if (showVariableBadges) {
-      // Show Variables Mode: Display all variables as badges
-      const conditionalPattern = /\{\{([^}]+)\}\}/g;
-      const parts: (string | React.ReactNode)[] = [];
-      let lastIndex = 0;
-      let match;
-
-      while ((match = conditionalPattern.exec(processedContent)) !== null) {
-        // Add text before the match
-        if (match.index > lastIndex) {
-          parts.push(processedContent.slice(lastIndex, match.index));
-        }
-
-        const variableName = match[1];
-        
-        // Find the corresponding string variable for badge styling
-        const stringVariable = project?.strings?.find((str: any) => 
-          str.variable_name === variableName || str.variable_hash === variableName || 
-          str.effective_variable_name === variableName
-        );
-
-        if (stringVariable) {
-          // Create a styled badge for this variable
-          const badgeColor = stringVariable.is_conditional_container 
-            ? 'bg-orange-100 text-orange-800' 
-            : 'bg-purple-100 text-purple-800';
-            
-          parts.push(
-            <span 
-              key={`${keyPrefix}${variableName}-${match.index}`} 
-              className={`inline-flex items-center gap-1 ${badgeColor} px-2 py-1 rounded text-sm font-medium`}
-            >
-              {`{{${variableName}}}`}
-            </span>
-          );
-        } else {
-          // Variable not found, show as plain text badge
-          parts.push(
-            <span 
-              key={`${keyPrefix}${variableName}-${match.index}`} 
-              className="inline-flex items-center gap-1 bg-gray-100 text-gray-800 px-2 py-1 rounded text-sm"
-            >
-              {`{{${variableName}}}`}
-            </span>
-          );
-        }
-
-        lastIndex = conditionalPattern.lastIndex;
-      }
-
-      // Add remaining text
-      if (lastIndex < processedContent.length) {
-        parts.push(processedContent.slice(lastIndex));
-      }
-
-      return parts;
-    } else {
-      // Content Mode: Expand string variables to their content, conditionals already processed
+    if (isPlaintextMode) {
+      // Plaintext Mode: Show variable content without any styling
       const variablePattern = /\{\{([^}]+)\}\}/g;
       let finalContent = processedContent;
       
@@ -869,7 +821,7 @@ export default function ProjectDetailPage() {
         );
         
         if (stringVariable && stringVariable.content) {
-          // Recursively process the string variable's content
+          // Recursively process the string variable's content (plaintext)
           const expandedContent = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
           // Convert React nodes back to string for text replacement
           const contentString = expandedContent.map(part => typeof part === 'string' ? part : `{{${variableName}}}`).join('');
@@ -878,6 +830,120 @@ export default function ProjectDetailPage() {
       });
       
       return [finalContent];
+    } else if (showVariableBadges) {
+      // Show Variables Mode: Display all variables as styled badges with identifiers
+      const parts = content.split(/({{[^}]+}})/);
+      return parts.map((part: string, index: number) => {
+        if (part.match(/{{[^}]+}}/)) {
+          const variableName = part.slice(2, -2); // Remove {{ and }}
+          const stringVariable = project?.strings?.find((str: any) => 
+            str.effective_variable_name === variableName || 
+            str.variable_name === variableName || 
+            str.variable_hash === variableName
+          );
+          
+          if (stringVariable?.is_conditional_container) {
+            // Orange badge for conditional variables
+            return (
+              <Badge
+                key={`${keyPrefix}${depth}-${index}-${variableName}`}
+                variant="outline"
+                className="mx-1 cursor-pointer transition-colors bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 inline-flex items-center gap-1"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openEditInCascadingDrawer(stringVariable);
+                }}
+                title={`Click to edit conditional "${variableName}"`}
+              >
+                <Folder className="h-3 w-3" />
+                {part}
+              </Badge>
+            );
+          } else if (stringVariable) {
+            // Purple badge for string variables
+            return (
+              <Badge
+                key={`${keyPrefix}${depth}-${index}-${variableName}`}
+                variant="outline"
+                className="mx-1 cursor-pointer transition-colors bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 inline-flex items-center gap-1"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openEditInCascadingDrawer(stringVariable);
+                }}
+                title={`Click to edit string variable "${variableName}"`}
+              >
+                <Spool className="h-3 w-3" />
+                {part}
+              </Badge>
+            );
+          } else {
+            // Variable not found, show as gray badge
+            return (
+              <Badge
+                key={`${keyPrefix}${depth}-${index}-${variableName}`}
+                variant="outline"
+                className="mx-1 bg-gray-50 text-gray-700 border-gray-200"
+                title={`Variable "${variableName}" not found`}
+              >
+                {part}
+              </Badge>
+            );
+          }
+        }
+        return part;
+      });
+    } else {
+      // Normal Mode: Show variable content with styled backgrounds
+      const parts = processedContent.split(/({{[^}]+}})/);
+      const result: (string | React.ReactNode)[] = [];
+      
+      parts.forEach((part: string, index: number) => {
+        if (part.match(/{{[^}]+}}/)) {
+          const variableName = part.slice(2, -2); // Remove {{ and }}
+          const stringVariable = project?.strings?.find((str: any) => 
+            str.effective_variable_name === variableName || 
+            str.variable_name === variableName || 
+            str.variable_hash === variableName
+          );
+          
+          if (stringVariable) {
+            if (stringVariable.is_conditional_container) {
+              // Conditionals should have been processed by processConditionalVariables
+              // If we still see it here, it means no spawn was found, show the variable name as plain text
+              result.push(part);
+            } else {
+              // For regular string variables, show their content with purple background styling
+              if (!stringVariable.content || stringVariable.content.trim() === '') {
+                // For empty string variables, show as plain text
+                result.push(part);
+              } else {
+                // For string variables with content, render with purple background
+                const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
+                result.push(
+                  <span
+                    key={`${keyPrefix}${depth}-${index}-${variableName}`}
+                    className="cursor-pointer transition-colors bg-purple-50 text-purple-800 px-1 py-0.5 rounded inline-block hover:bg-purple-100"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditInCascadingDrawer(stringVariable);
+                    }}
+                    title={`Click to edit string variable "${variableName}"`}
+                  >
+                    {nestedParts}
+                  </span>
+                );
+              }
+            }
+          } else {
+            // Variable not found, show as-is
+            result.push(part);
+          }
+        } else {
+          result.push(part);
+        }
+      });
+      
+      return result;
     }
   };
 
@@ -908,10 +974,6 @@ export default function ProjectDetailPage() {
   };
 
 
-  // Close bulk delete dialog
-  const closeBulkDeleteDialog = () => {
-    setBulkDeleteDialog(false);
-  };
 
   // Clear selection
   const clearSelection = () => {
@@ -1336,7 +1398,6 @@ export default function ProjectDetailPage() {
   };
 
   // Checkbox state helpers
-  const isIndeterminate = selectedStringIds.size > 0 && !isAllSelected;
 
   // String deletion handlers
   const openDeleteStringDialog = (str: any) => {
@@ -3778,158 +3839,8 @@ export default function ProjectDetailPage() {
     return false;
   };
 
-  // Function to process string content in plaintext mode
-  const processStringContent = (content: string, stringVariables: any[]) => {
-    // First process conditionals
-    let processedContent = processConditionalVariables(content);
-    
-    if (isPlaintextMode) {
-      // In plaintext mode, expand string variables but leave dimension variables as {{variable}}
-        const variableMatches = processedContent.match(/{{([^}]+)}}/g) || [];
-        let result = processedContent;
-        
-        variableMatches.forEach((match) => {
-          const variableName = match.slice(2, -2);
-          const stringVariable = project.strings?.find((str: any) => 
-            str.effective_variable_name === variableName || 
-            str.variable_name === variableName || 
-            str.variable_hash === variableName
-          );
-          
-          if (stringVariable) {
-            const regex = new RegExp(`{{${variableName}}}`, 'g');
-            // Process conditional variables in the embedded string content too
-            const processedEmbeddedContent = processConditionalVariables(stringVariable.content);
-            result = result.replace(regex, processedEmbeddedContent);
-          }
-        });
-        
-        return result;
-    }
-    
-    // In highlighter mode, return JSX with badges
-    return null; // We'll handle this in the JSX
-  };
 
   // Recursive function to render content with proper variable substitution and styling
-  const renderContentRecursively = (content: string, depth: number = 0, keyPrefix: string = ""): (string | React.ReactNode)[] => {
-    // Prevent infinite recursion
-    if (depth > 10) {
-      return [content];
-    }
-    
-    // First process conditionals
-    const conditionalProcessedContent = processConditionalVariables(content);
-    
-      // Behavior depends on showVariableBadges toggle (unified for all variable types)
-      if (showVariableBadges) {
-        // Show all variables as colored badges in {{variable}} format
-        const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
-        return parts.map((part: string, index: number) => {
-          if (part.match(/{{[^}]+}}/)) {
-            const variableName = part.slice(2, -2); // Remove {{ and }}
-            const stringVariable = project.strings?.find((str: any) => 
-              str.effective_variable_name === variableName || 
-              str.variable_name === variableName || 
-              str.variable_hash === variableName
-            );
-            
-            if (stringVariable?.is_conditional_container) {
-              // Orange badge for conditional variables
-            return (
-                  <Badge
-                    key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                    variant="outline"
-                    className="mx-1 cursor-pointer transition-colors bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 inline-flex items-center gap-1"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openEditInCascadingDrawer(stringVariable);
-                    }}
-                    title={`Click to edit conditional "${variableName}"`}
-                  >
-                    <Folder className="h-3 w-3" />
-                  {part}
-                  </Badge>
-                );
-              } else {
-              // Purple badge for string variables
-              return (
-                    <Badge
-                      key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                      variant="outline"
-                      className="mx-1 cursor-pointer transition-colors bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 inline-flex items-center gap-1"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                    if (stringVariable) {
-                        openEditInCascadingDrawer(stringVariable);
-                    }
-                      }}
-                  title={stringVariable ? `Click to edit string variable "${variableName}"` : `Variable "${variableName}" not found`}
-                    >
-                      <Spool className="h-3 w-3" />
-                  {part}
-                </Badge>
-              );
-            }
-          }
-          return part;
-        });
-            } else {
-      // Show string variables expanded (recursively)
-        const parts = conditionalProcessedContent.split(/({{[^}]+}})/);
-        const result: (string | React.ReactNode)[] = [];
-        parts.forEach((part: string, index: number) => {
-          if (part.match(/{{[^}]+}}/)) {
-            const variableName = part.slice(2, -2); // Remove {{ and }}
-      const stringVariable = project.strings?.find((str: any) => 
-        str.effective_variable_name === variableName || 
-        str.variable_name === variableName || 
-        str.variable_hash === variableName
-      );
-      if (stringVariable) {
-          if (stringVariable.is_conditional_container) {
-                // Conditionals should have been processed by processConditionalVariables
-                // If we still see it here, it means no spawn was found, so show the variable name as plain text
-                result.push(part);
-          } else {
-                // For regular string variables, expand their content recursively
-            if (!stringVariable.content || stringVariable.content.trim() === '') {
-                  // For empty string variables, show as plain text
-                  result.push(part);
-            } else {
-              // For string variables with content, render as clickable underlined content
-              const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
-                  result.push(
-                <span
-                      key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                  className="cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 inline-block"
-                  style={{
-                    borderBottom: `2px solid currentColor`,
-                    paddingBottom: `${depth * 2}px`,
-                    marginBottom: `${depth * 2}px`
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openEditInCascadingDrawer(stringVariable);
-                  }}
-                  title={`Click to edit string variable "${variableName}"`}
-                >
-                  {nestedParts}
-                </span>
-              );
-            }
-          }
-        } else {
-              // Variable not found, show as-is
-              result.push(part);
-            }
-        } else {
-            result.push(part);
-          }
-        });
-        return result;
-      }
-  };
 
   // Function to render content with badge styling for variables
   const renderStyledContent = (content: string, stringVariables: any[], stringId?: string) => {
@@ -4096,30 +4007,8 @@ export default function ProjectDetailPage() {
     });
   };
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      const allFilteredIds = new Set<number>(filteredStrings.map((str: any) => str.id));
-      setSelectedStringIds(allFilteredIds);
-    } else {
-      setSelectedStringIds(new Set());
-    }
-  };
-
   const clearSelection = () => {
     setSelectedStringIds(new Set());
-  };
-
-
-
-  const isAllSelected = filteredStrings.length > 0 && filteredStrings.every((str: any) => selectedStringIds.has(str.id));
-  const isIndeterminate = selectedStringIds.size > 0 && !isAllSelected;
-
-  const openBulkDeleteDialog = () => {
-    setBulkDeleteDialog(true);
-  };
-
-  const closeBulkDeleteDialog = () => {
-    setBulkDeleteDialog(false);
   };
 
   const handleBulkDelete = async () => {
@@ -4610,9 +4499,7 @@ export default function ProjectDetailPage() {
                             <Folder className="h-4 w-4" />
                             <span>Split variable - click split to add more spawns</span>
                           </div>
-                        ) : isPlaintextMode 
-                          ? processStringContent(str.content, str.variables || [])
-                          : renderStyledContent(str.content, str.variables || [], str.id)
+                        ) : renderStyledContent(str.content, str.variables || [], str.id)
                         }
                         </div>
                         {/* Variable hash/name display */}

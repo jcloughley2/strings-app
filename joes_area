@@ -1,0 +1,17 @@
+Lets go ahead and update the llm instructions with important added functionality, behaviors and examples. 
+
+
+Lets go ahead and do a git commit and push to my github. 
+
+There is still an issue with bulk select. When i click the checkbox to select all strings in the canvas, i get this error: 
+
+ReferenceError: openBulkDeleteDialog is not defined
+    at ProjectDetailPage (http://localhost:3000/_next/static/chunks/src_193a7555._.js:10790:46)
+    at ClientPageRoot (http://localhost:3000/_next/static/chunks/node_modules_next_dist_1a6ee436._.js:2061:50)
+
+
+    --
+
+    When we delete a variable, we need to make sure to delete any dimension values associated with it. A variable may serve as a spawn variable to multiple conditional variables and so multiple dimension values may need ot be deleted. 
+
+    We used to have a restriction that a conditional varaible must have at least one spawn variable. We should move away from that restriction. A conditional variable can have zero or more spawn variables. 

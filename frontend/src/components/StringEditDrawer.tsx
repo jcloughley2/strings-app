@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Spool, Folder, ArrowLeft, Search } from "lucide-react";
+import { Plus, Spool, Folder, ArrowLeft, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 export interface StringEditDrawerProps {
@@ -53,6 +53,7 @@ export interface StringEditDrawerProps {
   onVariableClick?: (variableName: string, isExisting: boolean) => void;
   onAddSpawn?: () => void;
   onEditSpawn?: (spawn: any) => void;
+  onRemoveSpawn?: (spawn: any, index: number) => void;
   onEditVariable?: (variableName: string) => void;
   onAddExistingVariableAsSpawn?: (variableId: string) => void;
   
@@ -89,6 +90,7 @@ export function StringEditDrawer({
   onCancel,
   onAddSpawn,
   onEditSpawn,
+  onRemoveSpawn,
   onEditVariable,
   onAddExistingVariableAsSpawn,
   title,
@@ -436,31 +438,52 @@ export function StringEditDrawer({
                         return (
                           <div 
                             key={spawn.id || `spawn-${index}`} 
-                            className={`border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer ${bgClass}`}
-                            onClick={() => onEditSpawn?.(spawn)}
+                            className={`border rounded-lg p-4 hover:bg-muted/30 transition-colors group relative ${bgClass}`}
                           >
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className={`flex items-center gap-1 p-1 rounded ${iconBgClass}`}>
-                                <IconComponent className="h-3 w-3" />
+                            {/* Main content area - clickable for editing */}
+                            <div 
+                              className="cursor-pointer"
+                              onClick={() => onEditSpawn?.(spawn)}
+                            >
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className={`flex items-center gap-1 p-1 rounded ${iconBgClass}`}>
+                                  <IconComponent className="h-3 w-3" />
+                                </div>
+                                <Badge variant="outline" className={`text-xs font-mono ${badgeClass}`}>
+                                  {`{{${spawnVariableName}}}`}
+                                </Badge>
+                                {isTemporary && (
+                                  <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
+                                    New variable!
+                                  </Badge>
+                                )}
+                                {isExisting && (
+                                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
+                                    Existing variable
+                                  </Badge>
+                                )}
                               </div>
-                              <Badge variant="outline" className={`text-xs font-mono ${badgeClass}`}>
-                                {`{{${spawnVariableName}}}`}
-                              </Badge>
-                              {isTemporary && (
-                                <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
-                                  New variable!
-                                </Badge>
-                              )}
-                              {isExisting && (
-                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
-                                  Existing variable
-                                </Badge>
+                              {!isTemporary && (
+                                <p className="text-sm text-muted-foreground line-clamp-2">
+                                  {spawn.content || "Empty content"}
+                                </p>
                               )}
                             </div>
-                            {!isTemporary && (
-                              <p className="text-sm text-muted-foreground line-clamp-2">
-                                {spawn.content || "Empty content"}
-                              </p>
+                            
+                            {/* Remove button - visible on hover */}
+                            {onRemoveSpawn && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="absolute top-2 right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onRemoveSpawn(spawn, index);
+                                }}
+                                title={`Remove spawn variable ${spawnVariableName}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
                             )}
                           </div>
                         );

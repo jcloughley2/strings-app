@@ -790,6 +790,43 @@ export default function ProjectDetailPage() {
   const isAllSelected = filteredStrings.length > 0 && filteredStrings.every((str: any) => selectedStringIds.has(str.id));
   const isIndeterminate = selectedStringIds.size > 0 && !isAllSelected;
 
+  // Helper function to get alternating purple shades based on nesting depth
+  const getPurpleShadeForDepth = (depth: number) => {
+    // Use modulo to cycle through 3 distinct purple shades for better visual distinction
+    const shadeIndex = depth % 3;
+    
+    switch (shadeIndex) {
+      case 0:
+        return {
+          background: 'bg-purple-50',
+          text: 'text-purple-800',
+          hover: 'hover:bg-purple-100',
+          border: 'border-purple-200'
+        };
+      case 1:
+        return {
+          background: 'bg-purple-100', 
+          text: 'text-purple-900',
+          hover: 'hover:bg-purple-200',
+          border: 'border-purple-300'
+        };
+      case 2:
+        return {
+          background: 'bg-purple-200',
+          text: 'text-purple-950',
+          hover: 'hover:bg-purple-300', 
+          border: 'border-purple-400'
+        };
+      default:
+        return {
+          background: 'bg-purple-50',
+          text: 'text-purple-800', 
+          hover: 'hover:bg-purple-100',
+          border: 'border-purple-200'
+        };
+    }
+  };
+
   // Recursive function to render content with proper variable substitution and styling
   const renderContentRecursively = (content: string, depth: number = 0, keyPrefix: string = ""): (string | React.ReactNode)[] => {
     // Prevent infinite recursion
@@ -860,17 +897,18 @@ export default function ProjectDetailPage() {
               </Badge>
             );
           } else if (stringVariable) {
-            // Purple badge for string variables
+            // Purple badge for string variables with alternating shades
+            const purpleShade = getPurpleShadeForDepth(depth);
             return (
               <Badge
                 key={`${keyPrefix}${depth}-${index}-${variableName}`}
                 variant="outline"
-                className="mx-1 cursor-pointer transition-colors bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 inline-flex items-center gap-1"
+                className={`mx-1 cursor-pointer transition-colors ${purpleShade.background} ${purpleShade.text} ${purpleShade.border} ${purpleShade.hover} inline-flex items-center gap-1`}
                 onClick={(e) => {
                   e.stopPropagation();
                   openEditInCascadingDrawer(stringVariable);
                 }}
-                title={`Click to edit string variable "${variableName}"`}
+                title={`Click to edit string variable "${variableName}" (nesting level ${depth})`}
               >
                 <Spool className="h-3 w-3" />
                 {part}
@@ -917,17 +955,18 @@ export default function ProjectDetailPage() {
                 // For empty string variables, show as plain text
                 result.push(part);
               } else {
-                // For string variables with content, render with purple background
+                // For string variables with content, render with alternating purple background based on depth
                 const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
+                const purpleShade = getPurpleShadeForDepth(depth);
                 result.push(
                   <span
                     key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                    className="cursor-pointer transition-colors bg-purple-50 text-purple-800 px-1 py-0.5 rounded inline-block hover:bg-purple-100"
+                    className={`cursor-pointer transition-colors ${purpleShade.background} ${purpleShade.text} px-1 py-0.5 rounded inline-block ${purpleShade.hover} border ${purpleShade.border}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       openEditInCascadingDrawer(stringVariable);
                     }}
-                    title={`Click to edit string variable "${variableName}"`}
+                    title={`Click to edit string variable "${variableName}" (nesting level ${depth})`}
                   >
                     {nestedParts}
                   </span>
@@ -4585,6 +4624,7 @@ export default function ProjectDetailPage() {
         onSave={mainDrawer.save}
         onCancel={mainDrawer.closeDrawer}
         onAddSpawn={mainDrawer.addSpawn}
+        onRemoveSpawn={mainDrawer.removeSpawn}
         onAddExistingVariableAsSpawn={mainDrawer.addExistingVariableAsSpawn}
         onEditSpawn={handleEditSpawn}
         onEditVariable={handleEditVariable}

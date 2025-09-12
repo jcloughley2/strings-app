@@ -219,6 +219,14 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     }));
   }, []);
 
+  // Remove spawn from conditional
+  const removeSpawn = useCallback((spawn: any, index: number) => {
+    setState(prev => ({
+      ...prev,
+      conditionalSpawns: prev.conditionalSpawns.filter((_, i) => i !== index)
+    }));
+  }, []);
+
   // Add existing variable as spawn to conditional
   const addExistingVariableAsSpawn = useCallback((variableId: string) => {
     if (!project?.strings) return;
@@ -362,6 +370,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     updateHiddenOption,
     updateTab,
     addSpawn,
+    removeSpawn,
     addExistingVariableAsSpawn,
     save,
   };

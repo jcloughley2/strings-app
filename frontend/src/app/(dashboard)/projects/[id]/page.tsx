@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 
 
-import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Globe } from "lucide-react";
+import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Globe, Settings, EyeOff, FileText, Filter } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,7 +32,10 @@ export default function ProjectDetailPage() {
 
   const [isPlaintextMode, setIsPlaintextMode] = useState(false);
   const [showVariableBadges, setShowVariableBadges] = useState(false);
+  const [hideEmbeddedStrings, setHideEmbeddedStrings] = useState(false);
+  const [stringTypeFilter, setStringTypeFilter] = useState<'all' | 'strings' | 'conditionals'>('all');
   const [isStringDrawerOpen, setIsStringDrawerOpen] = useState(false);
+  const [isCanvasSettingsOpen, setIsCanvasSettingsOpen] = useState(false);
   
   // Filter sidebar state - migrated from dimensions to direct conditional variable selection
   const [selectedConditionalSpawns, setSelectedConditionalSpawns] = useState<{[conditionalVariableName: string]: string | null}>({});
@@ -296,23 +299,23 @@ export default function ProjectDetailPage() {
         } else {
           // FALLBACK: Use old dimension-based logic for backward compatibility
           const dimension = project?.dimensions?.find((d: any) => d.name === variableName);
-          if (dimension) {
-            const selectedValue = selectedDimensionValues[dimension.id];
+        if (dimension) {
+          const selectedValue = selectedDimensionValues[dimension.id];
+          
+          if (selectedValue === "Hidden") {
+            const regex = new RegExp(`{{${variableName}}}`, 'g');
+            processedContent = processedContent.replace(regex, '');
+          } else if (selectedValue) {
+            const spawnVariable = project?.strings?.find((str: any) =>
+              str.effective_variable_name === selectedValue ||
+              str.variable_name === selectedValue ||
+              str.variable_hash === selectedValue
+            );
             
-            if (selectedValue === "Hidden") {
+            if (spawnVariable) {
               const regex = new RegExp(`{{${variableName}}}`, 'g');
-              processedContent = processedContent.replace(regex, '');
-            } else if (selectedValue) {
-              const spawnVariable = project?.strings?.find((str: any) =>
-                str.effective_variable_name === selectedValue ||
-                str.variable_name === selectedValue ||
-                str.variable_hash === selectedValue
-              );
-              
-              if (spawnVariable) {
-                const regex = new RegExp(`{{${variableName}}}`, 'g');
-                const spawnContent = processConditionalVariables(spawnVariable.content || '');
-                processedContent = processedContent.replace(regex, spawnContent);
+              const spawnContent = processConditionalVariables(spawnVariable.content || '');
+              processedContent = processedContent.replace(regex, spawnContent);
               }
             }
           }
@@ -841,8 +844,76 @@ export default function ProjectDetailPage() {
   if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
   if (!project) return <div className="p-8 text-center">Project not found.</div>;
 
-  // Show all strings (no dimension filtering - dimensions now control spawn selection instead)
-  const filteredStrings = project?.strings || [];
+  // Helper function to detect which strings are embedded in other strings
+  const getEmbeddedStringIds = () => {
+    if (!project?.strings) return new Set<number>();
+    
+    const embeddedIds = new Set<number>();
+    
+    // Method 1: Check each string's content for variable references {{variableName}}
+    project.strings.forEach((str: any) => {
+      if (str.content) {
+        // Find all variable references in the format {{variableName}}
+        const variableMatches = str.content.match(/{{([^}]+)}}/g) || [];
+        
+        variableMatches.forEach((match: string) => {
+          const variableName = match.slice(2, -2); // Remove {{ and }}
+          
+          // Find the string that matches this variable name
+          const referencedString = project.strings.find((s: any) => 
+            s.effective_variable_name === variableName ||
+            s.variable_name === variableName ||
+            s.variable_hash === variableName
+          );
+          
+          if (referencedString) {
+            embeddedIds.add(referencedString.id);
+          }
+        });
+      }
+    });
+    
+    // Method 2: Check for spawn variables (strings used as spawns for conditional variables)
+    if (project?.dimensions) {
+      project.dimensions.forEach((dimension: any) => {
+        if (dimension.values) {
+          dimension.values.forEach((dimensionValue: any) => {
+            // Find strings that match this dimension value (spawn variables)
+            const spawnString = project.strings.find((s: any) => 
+              s.effective_variable_name === dimensionValue.value ||
+              s.variable_name === dimensionValue.value ||
+              s.variable_hash === dimensionValue.value
+            );
+            
+            if (spawnString && !spawnString.is_conditional_container) {
+              embeddedIds.add(spawnString.id);
+            }
+          });
+        }
+      });
+    }
+    
+    return embeddedIds;
+  };
+
+  // Show all strings with optional filtering for embedded strings and string type
+  const allStrings = project?.strings || [];
+  const embeddedStringIds = hideEmbeddedStrings ? getEmbeddedStringIds() : new Set<number>();
+  
+  let filteredStrings = allStrings;
+  
+  // Apply embedded strings filter
+  if (hideEmbeddedStrings) {
+    filteredStrings = filteredStrings.filter((str: any) => !embeddedStringIds.has(str.id));
+  }
+  
+  // Apply string type filter
+  if (stringTypeFilter === 'strings') {
+    filteredStrings = filteredStrings.filter((str: any) => !str.is_conditional_container);
+  } else if (stringTypeFilter === 'conditionals') {
+    filteredStrings = filteredStrings.filter((str: any) => str.is_conditional_container);
+  }
+  // 'all' shows both types, so no additional filtering needed
 
   // Bulk selection helper functions
   const handleSelectString = (stringId: number, checked: boolean) => {
@@ -3481,7 +3552,7 @@ export default function ProjectDetailPage() {
 
    // Legacy dimension dialog handlers - REMOVED (no longer needed)
 
-  const openEditDimension = (dimension: any) => {
+   const openEditDimension = (dimension: any) => {
     // Find the conditional variable that corresponds to this dimension
     const conditionalVariable = project?.strings?.find((str: any) => 
       str.is_conditional_container && 
@@ -3496,7 +3567,7 @@ export default function ProjectDetailPage() {
     } else {
       console.warn(`No conditional variable found for dimension: ${dimension.name}`);
     }
-  };
+   };
 
    const closeDimensionDialog = () => {
      setCreateDialog(null);
@@ -4645,7 +4716,7 @@ export default function ProjectDetailPage() {
               const conditionalVariables = project?.strings?.filter((str: any) => str.is_conditional_container) || [];
               
               return conditionalVariables.length > 0 ? (
-                <div className="space-y-4 ml-6">
+              <div className="space-y-4 ml-6">
                   {conditionalVariables.map((conditionalVar: any) => {
                     const conditionalName = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
                     
@@ -4699,67 +4770,67 @@ export default function ProjectDetailPage() {
                     return (
                       <div key={conditionalVar.id} className="space-y-3">
                         {/* Conditional Variable Header */}
-                        <div className="flex items-center justify-between group">
-                          <div 
-                            className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1 cursor-pointer"
+              <div className="flex items-center justify-between group">
+                <div 
+                  className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1 cursor-pointer"
                             onClick={() => mainDrawer.openDrawer(conditionalVar)}
-                          >
+                >
                             <h3 className="font-medium text-sm">{conditionalName}</h3>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
-                                onClick={(e) => {
-                                  e.stopPropagation();
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
                                   mainDrawer.openDrawer(conditionalVar);
-                                }}
-                              >
-                                <Edit2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
+                      }}
+                    >
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
                         
                         {/* Spawn Variables (Children) */}
-                        <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2">
                           {spawnOptions.map((spawn: any) => {
                             const spawnName = spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash;
                             const isSelected = selectedConditionalSpawns[conditionalName] === spawnName;
-                            
-                            if (isSelected) {
+                  
+                  if (isSelected) {
                               // Selected spawn badge (no close button - always one selected)
-                              return (
-                                <div
+                    return (
+                      <div
                                   key={spawn.id}
-                                  className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors bg-blue-100 border-blue-300 text-blue-800"
-                                >
+                        className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors bg-blue-100 border-blue-300 text-blue-800"
+                      >
                                   <span>{spawnName}</span>
-                                </div>
-                              );
-                            } else {
-                              // Unselected spawn badge - clicking switches selection
-                              return (
-                                <Badge
-                                  key={spawn.id}
-                                  variant="outline"
-                                  className="text-xs transition-colors hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 active:bg-blue-100 cursor-pointer"
-                                  onClick={() => setSelectedConditionalSpawns(prev => ({
-                                    ...prev,
-                                    [conditionalName]: spawnName
-                                  }))}
-                                >
-                                  {spawnName}
-                                </Badge>
-                              );
-                            }
-                          })}
-                        </div>
                       </div>
                     );
+                  } else {
+                              // Unselected spawn badge - clicking switches selection
+                    return (
+                      <Badge
+                                  key={spawn.id}
+                        variant="outline"
+                        className="text-xs transition-colors hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 active:bg-blue-100 cursor-pointer"
+                                  onClick={() => setSelectedConditionalSpawns(prev => ({
+                          ...prev,
+                                    [conditionalName]: spawnName
+                        }))}
+                      >
+                                  {spawnName}
+                      </Badge>
+                    );
+                  }
+                })}
+              </div>
+            </div>
+                    );
                   })}
-                </div>
-              ) : (
+              </div>
+                          ) : (
                 <div className="text-muted-foreground text-center text-sm ml-6">
                   No conditional variables found in this project.
                 </div>
@@ -4777,32 +4848,15 @@ export default function ProjectDetailPage() {
           <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background sticky top-0 z-10">
             <h2 className="text-lg font-semibold">Project Strings</h2>
             <div className="flex items-center gap-2">
-              {/* Display Mode Controls */}
+              {/* Canvas Settings Button */}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setIsPlaintextMode(!isPlaintextMode)}
-                className={`flex items-center gap-2 transition-colors ${
-                  isPlaintextMode 
-                    ? 'bg-yellow-50 border-yellow-200 text-yellow-800 hover:bg-yellow-100' 
-                    : 'hover:bg-muted'
-                }`}
+                onClick={() => setIsCanvasSettingsOpen(true)}
+                className="flex items-center gap-2 hover:bg-muted"
               >
-                <Type className="h-4 w-4" />
-                Plaintext
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowVariableBadges(!showVariableBadges)}
-                className={`flex items-center gap-2 transition-colors ${
-                  showVariableBadges 
-                    ? 'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100' 
-                    : 'hover:bg-muted'
-                }`}
-              >
-                <Folder className="h-4 w-4" />
-                Show variables
+                <Settings className="h-4 w-4" />
+                Canvas settings
               </Button>
               <Button onClick={openCreateString} size="sm">
                 + New String
@@ -7183,6 +7237,168 @@ export default function ProjectDetailPage() {
               {editingDimension ? "Update" : "Create"} Dimension
             </Button>
           </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Canvas Settings Drawer */}
+      <Sheet open={isCanvasSettingsOpen} onOpenChange={setIsCanvasSettingsOpen}>
+        <SheetContent side="right" className="w-[400px] max-w-[90vw] flex flex-col p-0">
+          {/* Fixed Header */}
+          <SheetHeader className="px-6 py-4 border-b bg-background">
+            <SheetTitle>Canvas Settings</SheetTitle>
+          </SheetHeader>
+          
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="space-y-6">
+              {/* Display Mode Section */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Display Mode</h3>
+                
+                {/* Plaintext Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Type className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Plaintext Mode</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Show resolved content without styling or conditional variables
+                    </p>
+                  </div>
+                  <Button
+                    variant={isPlaintextMode ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setIsPlaintextMode(!isPlaintextMode)}
+                    className={`ml-4 ${
+                      isPlaintextMode 
+                        ? 'bg-yellow-500 hover:bg-yellow-600 text-white' 
+                        : 'hover:bg-muted'
+                    }`}
+                  >
+                    {isPlaintextMode ? 'On' : 'Off'}
+                  </Button>
+                </div>
+
+                {/* Show Variables Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Folder className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Show Variables</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Display variable names as badges instead of resolved content
+                    </p>
+                  </div>
+                  <Button
+                    variant={showVariableBadges ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowVariableBadges(!showVariableBadges)}
+                    className={`ml-4 ${
+                      showVariableBadges 
+                        ? 'bg-orange-500 hover:bg-orange-600 text-white' 
+                        : 'hover:bg-muted'
+                    }`}
+                  >
+                    {showVariableBadges ? 'On' : 'Off'}
+                  </Button>
+                </div>
+
+                {/* Hide Embedded Strings Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Hide Embedded Strings</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Hide strings that are used as variables or spawn variables in other strings
+                    </p>
+                  </div>
+                  <Button
+                    variant={hideEmbeddedStrings ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setHideEmbeddedStrings(!hideEmbeddedStrings)}
+                    className={`ml-4 ${
+                      hideEmbeddedStrings 
+                        ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                        : 'hover:bg-muted'
+                    }`}
+                  >
+                    {hideEmbeddedStrings ? 'On' : 'Off'}
+                  </Button>
+                </div>
+              </div>
+
+              {/* String Type Filter Section */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">String Type Filter</h3>
+                
+                <div className="space-y-3">
+                  {/* All Types Option */}
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      id="filter-all"
+                      name="stringTypeFilter"
+                      checked={stringTypeFilter === 'all'}
+                      onChange={() => setStringTypeFilter('all')}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <label htmlFor="filter-all" className="flex items-center gap-2 cursor-pointer">
+                      <Filter className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Show All</span>
+                    </label>
+                  </div>
+                  
+                  {/* Strings Only Option */}
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      id="filter-strings"
+                      name="stringTypeFilter"
+                      checked={stringTypeFilter === 'strings'}
+                      onChange={() => setStringTypeFilter('strings')}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <label htmlFor="filter-strings" className="flex items-center gap-2 cursor-pointer">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">String Variables Only</span>
+                    </label>
+                  </div>
+                  
+                  {/* Conditionals Only Option */}
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      id="filter-conditionals"
+                      name="stringTypeFilter"
+                      checked={stringTypeFilter === 'conditionals'}
+                      onChange={() => setStringTypeFilter('conditionals')}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <label htmlFor="filter-conditionals" className="flex items-center gap-2 cursor-pointer">
+                      <Folder className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Conditional Variables Only</span>
+                    </label>
+                  </div>
+                </div>
+                
+                <p className="text-xs text-muted-foreground">
+                  Filter which types of strings are displayed in the canvas
+                </p>
+              </div>
+
+              {/* Future Settings Placeholder */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">More Settings</h3>
+                <div className="text-sm text-muted-foreground italic">
+                  Additional canvas settings will be added here in future updates.
+                </div>
+              </div>
+            </div>
+          </div>
         </SheetContent>
       </Sheet>
 

@@ -108,8 +108,28 @@ Let's say I have the sentence "My favorite color is `{{color-option}}`". If opti
 ### Layout (Three Panels)
 - **Left**: Filter Sidebar (360px) - conditional variables and spawn selection
 - **Center**: Main Canvas - all strings including conditionals and embedded strings, orange/purple badges
-  - **"Show variables" toggle**: Controls whether conditional variables show as badges or resolved content
+  - **Canvas Settings Button**: Opens right-hand drawer with display and filtering options
+  - **New String Button**: Creates new strings or conditional variables
 - **Right**: Variables Sidebar (collapsible) - variable management
+
+### Canvas Settings Drawer ⭐ **NEW**
+**Right-hand drawer** with comprehensive canvas display and filtering controls:
+
+#### Display Mode Section
+- **Plaintext Mode**: Show resolved content without styling or conditional variables
+- **Show Variables**: Display variable names as badges instead of resolved content  
+- **Hide Embedded Strings**: Hide strings that are used as variables or spawn variables in other strings
+
+#### String Type Filter Section
+- **Show All** (default): Display both string variables and conditional variables
+- **String Variables Only**: Show only regular string variables (not conditional containers)
+- **Conditional Variables Only**: Show only conditional variables (the "folder" containers)
+
+#### Key Features
+- **Layered Filtering**: All filters work together (embedded strings + string type + display modes)
+- **Real-time Updates**: Canvas updates instantly when settings change
+- **Persistent Settings**: Settings maintained during session
+- **Smart Detection**: Automatically identifies embedded strings via variable references and spawn relationships
 
 ### Unified Drawer System ⭐
 **MAJOR ARCHITECTURE**: Single, consolidated drawer component replaces all previous drawer systems
@@ -851,8 +871,24 @@ return <StringEditDrawer {...drawer} />;
 
 ### Recent Major Updates (Latest)
 
+#### Canvas Settings Drawer Implementation (January 2025) ⭐ **NEWEST**
+- **Consolidated Display Controls**: Moved "Plaintext" and "Show variables" toggles from canvas header to dedicated right-hand drawer
+- **Canvas Settings Button**: Added "Canvas settings" button with Settings icon to canvas header (left of "New String")
+- **Three Display Modes**: 
+  - **Plaintext Mode**: Show resolved content without styling or conditional variables
+  - **Show Variables**: Display variable names as badges instead of resolved content
+  - **Hide Embedded Strings**: Hide strings used as variables or spawn variables in other strings
+- **String Type Filtering**: Radio button options to show All/String Variables Only/Conditional Variables Only
+- **Smart Embedded Detection**: Automatically identifies embedded strings via:
+  - Direct variable references (`{{variableName}}` patterns)
+  - Spawn variable relationships (strings used as spawns for conditional variables)
+- **Layered Filtering**: All filters work together seamlessly (embedded + type + display modes)
+- **Cleaner Header**: Reduced canvas header clutter by moving settings to dedicated drawer
+- **Future-Ready Architecture**: Structured for easy addition of more canvas display options
+- **Code Cleanup**: Eliminated duplicate dimension functions and resolved build errors during architectural migration
+
 #### "Show Variables" Toggle & Spawn-Based Content Selection
-- **"Show variables" toggle button** in canvas header (inactive by default, orange styling when active)
+- **"Show variables" toggle** now in Canvas Settings drawer (inactive by default, orange styling when active)
 - **Dynamic conditional resolution**: When toggle is OFF, shows actual spawn content instead of variable badges
 - **Real-time spawn control**: Selecting different spawn variables changes displayed content instantly
 - **Two display modes**:
@@ -1179,6 +1215,7 @@ The Strings App has successfully completed a comprehensive architecture consolid
 - **Primary Functionality**: ✅ Fully operational (create, edit, delete strings/conditionals)
 - **Unified Architecture**: ✅ Single drawer component handles all editing scenarios  
 - **Advanced Features**: ✅ Variable reuse, mixed spawn types, autocomplete search, bulk operations
+- **Canvas Display Control**: ✅ Comprehensive Canvas Settings drawer with display modes and filtering
 - **Error Handling**: ✅ Robust API conflict resolution and graceful degradation
 - **User Experience**: ✅ Consistent, intuitive interface across all operations with multiple display modes
 - **Content Management**: ✅ Efficient workflows for both new creation and content reuse
@@ -1186,6 +1223,7 @@ The Strings App has successfully completed a comprehensive architecture consolid
 - **Development Workflows**: ✅ Flexible conditional creation and spawn management
 - **Visual Hierarchy**: ✅ Clear nested variable visualization with alternating depth indicators
 - **Spawn Operations**: ✅ Direct spawn removal with persistent synchronization and no orphaned data
+- **Smart Filtering**: ✅ Embedded string detection and string type filtering for focused canvas views
 - **Nested Conditionals**: ✅ Perfect styling for embedded conditionals with orange containers and purple spawn content
 - **Legacy Code**: ⚠️ Safely contained in commented blocks, most critical features restored
 

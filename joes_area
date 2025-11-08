@@ -15,3 +15,11 @@ ReferenceError: openBulkDeleteDialog is not defined
     When we delete a variable, we need to make sure to delete any dimension values associated with it. A variable may serve as a spawn variable to multiple conditional variables and so multiple dimension values may need ot be deleted. 
 
     We used to have a restriction that a conditional varaible must have at least one spawn variable. We should move away from that restriction. A conditional variable can have zero or more spawn variables. 
+
+    Can you make it so that when I create or edit a conditional variable, I am able to remove any spawn variables that are listed, right from their listing in the drawer? If the spawn variable is an existing variable, it wont be deleted, just removed as a spawn variable. Remember, upon the conditional variable being saved, the dimension also needs to be updated with the correct dimension values matching the spawn variables the conditional was saved with. 
+
+    String variables that are embedded look great with their clickable purple backgrounds. But it seems embedded string variables are not getting this treatment if they are coming through as spawn strings. What i would like is for a conditional variable to be represented with an orange background. And then assuming the conditional variable is not empty of spawn children, likely immedietly nesteded within the orange conditional variable will be the active spawn, with its varaible treatment. 
+    
+    By the way, if the conditional has the 'hidden' dimesnion value selected, lets still represent the conditional variable in orange, but include text that simply says 'hidden'. If the user activates plaintext mode, the conditional variable will truly be hidden. 
+    
+    Similarly, if the conditional variable has no spawn children, and does not have the hidden option, lets still represent the conditional variable in orange, but include text that simply says 'emoty'. If the user activates plaintext mode, the conditional variable will be hidden. 

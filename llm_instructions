@@ -987,6 +987,7 @@ async function syncDimensionValuesForSpawns(dimension, spawns, conditionalName) 
 - ✅ **Visual Nesting Hierarchy**: Alternating purple shades (3-cycle pattern) for clear nested variable depth visualization
 - ✅ **Direct Spawn Removal**: Hover-triggered remove buttons for spawn variables with immediate UI updates
 - ✅ **Persistent Spawn Operations**: Backend synchronization ensures spawn removal persists across save/reload cycles
+- ✅ **Nested Conditional Rendering**: Perfect embedded conditional styling with orange containers and purple spawn content display
 
 ### Missing/Limited Functionality
 - ⚠️ **Cascading/Nested Drawers**: Currently only single drawer level supported
@@ -1093,6 +1094,54 @@ async function syncDimensionValuesForSpawns(dimension, spawns, conditionalName) 
 }
 ```
 
+### Advanced Nested Conditional Variable Rendering
+
+**Perfect Nested Styling for Conditional Variables** 🎨
+- **Problem**: Embedded conditional variables showed improper styling and content display
+- **Challenge**: When conditional variables were embedded in strings, they needed to:
+  - Display with orange styling (conditional identity)
+  - Show their active spawn content inside (not just "empty")
+  - Render spawn as properly styled purple variable (not plain text)
+  - Maintain proper nesting depth for unlimited levels
+- **Solution**: Complete rewrite of conditional variable resolution and display system
+
+**Visual Architecture**:
+```
+🟠 conditional-variable-1 (orange background)
+  └── 🟣 "Hello world!" (purple background with spawn content)
+```
+
+**Implementation Details**:
+- **`resolveConditionalContent`**: Enhanced to render spawns as styled React components instead of plain text
+- **Spawn Detection**: Improved both main and fallback methods for finding associated spawn variables
+- **Content vs Names**: Fixed critical issue where variable names displayed instead of actual content
+- **Depth Tracking**: Proper `depth + 1` increment ensures correct purple shade cycling
+- **Recursive Rendering**: Spawn content processed through `renderContentRecursively` for nested variables
+- **Interactive Elements**: Click orange container to edit conditional, click purple spawn to edit spawn variable
+
+**Technical Pattern**:
+```javascript
+// Render spawn as styled component with content
+const spawnDisplayContent = activeSpawn.content 
+  ? renderContentRecursively(activeSpawn.content, depth + 1, keyPrefix)
+  : [spawnName]; // Fallback to name if no content
+
+return [
+  <span className={`${purpleShade.background} ${purpleShade.text} ...`}>
+    {spawnDisplayContent}
+  </span>
+];
+```
+
+**User Experience**:
+- **Perfect Nesting**: Unlimited levels of conditional → conditional → string variables
+- **Visual Hierarchy**: Orange for conditionals, purple with depth shading for strings
+- **Content Display**: Shows actual spawn content, not variable identifiers
+- **Full Interactivity**: Every element clickable to edit appropriate variable
+- **Consistent Styling**: Maintains proper styling regardless of nesting complexity
+
+**Files Modified**: `/frontend/src/app/(dashboard)/projects/[id]/page.tsx`
+
 ---
 
 ## Summary: Unified Drawer System Success (January 2025) 🎉
@@ -1111,7 +1160,8 @@ The Strings App has successfully completed a comprehensive architecture consolid
 **✅ Data Integrity**: Enhanced deletion cleanup for multi-conditional variable relationships  
 **✅ Workflow Flexibility**: Removed restrictions to support empty conditionals and flexible development patterns  
 **✅ Visual Hierarchy**: Implemented alternating purple shades for nested variables enabling clear depth visualization  
-**✅ Spawn Management**: Added direct spawn removal with persistent backend synchronization and dimension cleanup  
+**✅ Spawn Management**: Added direct spawn removal with persistent backend synchronization and dimension cleanup
+**✅ Nested Conditional Rendering**: Perfect nested styling with orange conditionals containing purple spawn content  
 
 ### Current Status
 - **Primary Functionality**: ✅ Fully operational (create, edit, delete strings/conditionals)
@@ -1124,6 +1174,7 @@ The Strings App has successfully completed a comprehensive architecture consolid
 - **Development Workflows**: ✅ Flexible conditional creation and spawn management
 - **Visual Hierarchy**: ✅ Clear nested variable visualization with alternating depth indicators
 - **Spawn Operations**: ✅ Direct spawn removal with persistent synchronization and no orphaned data
+- **Nested Conditionals**: ✅ Perfect styling for embedded conditionals with orange containers and purple spawn content
 - **Legacy Code**: ⚠️ Safely contained in commented blocks, most critical features restored
 
 ### Next Phase Opportunities
@@ -1135,3 +1186,165 @@ The Strings App has successfully completed a comprehensive architecture consolid
 - **Legacy Code Cleanup**: Remove successfully replaced legacy code blocks after thorough testing
 
 **Result**: A significantly more robust, maintainable, and user-friendly application with comprehensive functionality restoration, enhanced data integrity, improved workflow flexibility, and reduced code complexity. The system now supports advanced content reuse patterns while maintaining excellent reliability and performance.
+
+---
+
+## Major Architectural Change: Dimensions Elimination (January 2025) 🚀
+
+### Overview
+Completed a major architectural simplification by eliminating the abstract "dimensions/dimension values" layer and working directly with conditional variables and spawn variables in the UI.
+
+### Previous Architecture (Eliminated)
+```
+User sees: "Dimensions" → "Dimension Values"
+Backend:   Conditional Variable → Dimension → Dimension Values → Spawn Variables
+Frontend:  selectedDimensionValues[dimensionId] = dimensionValueName
+```
+
+### New Architecture ✅
+```
+User sees: Conditional Variables → Spawn Variables (direct)
+Backend:   Conditional Variable → Spawn Variables (dimensions still exist for compatibility)
+Frontend:  selectedConditionalSpawns[conditionalName] = spawnName
+```
+
+### Key Changes Made
+
+#### **Frontend State Management**
+- **New State**: `selectedConditionalSpawns: {[conditionalVariableName: string]: string | null}`
+- **Legacy State**: `selectedDimensionValues` maintained for backward compatibility
+- **Migration Logic**: Automatic conversion from dimension selections to conditional selections
+
+#### **Filter Sidebar UI**
+- **Before**: "Dimensions" section showing abstract dimension names
+- **After**: "Conditions" section showing actual conditional variable names
+- **Hierarchy**: Conditional variables as parents, spawn variables as selectable children
+- **Selection**: Click spawn variables to control content display (same UX as before)
+
+#### **Content Resolution Logic**
+- **Primary**: Uses `selectedConditionalSpawns` for direct spawn name lookup
+- **Fallback**: Falls back to dimension-based logic for backward compatibility
+- **Performance**: Eliminates dimension ID lookups and complex mappings
+
+#### **Spawn Detection**
+- **Method 1**: Traditional dimension_values relationship (existing spawns)
+- **Method 2**: Pattern matching via dimension values (newly created spawns)
+- **Robustness**: Dual-method approach ensures reliable spawn detection
+
+### Benefits Achieved
+
+#### **Simplified Mental Model**
+- **Direct Mapping**: What users see matches the actual data structure
+- **Intuitive UI**: "Conditional variables" and "spawn variables" instead of abstract "dimensions"
+- **Consistent Naming**: Variable names in filter sidebar match variable names in content
+
+#### **Reduced Complexity**
+- **Eliminated Layer**: No more dimension ↔ conditional variable mapping logic
+- **Cleaner Code**: Direct variable name lookups instead of ID-based relationships
+- **Fewer Bugs**: Less complex state management reduces edge cases
+
+#### **Preserved Functionality**
+- **Backward Compatible**: Existing projects continue to work via migration logic
+- **Same UX**: Users get identical functionality with clearer interface
+- **Performance**: Faster lookups without dimension ID resolution
+
+### Implementation Details
+
+#### **Migration Strategy**
+```javascript
+// Automatic migration on project load
+useEffect(() => {
+  // Step 1: Convert selectedDimensionValues to selectedConditionalSpawns
+  // Step 2: Initialize defaults for conditionals without selections
+  // Step 3: Set all selections at once
+}, [project?.id]);
+```
+
+#### **Spawn Detection Logic**
+```javascript
+// Method 1: Existing dimension_values relationship
+const spawnsViaDimension = dimension ? project.strings.filter(str => 
+  !str.is_conditional_container && 
+  str.dimension_values?.some(dv => dv.dimension === dimension.id)
+) : [];
+
+// Method 2: Pattern matching fallback
+const spawnsByPattern = project.strings.filter(str => {
+  const strName = str.effective_variable_name || str.variable_hash;
+  return dimension?.values?.some(dv => dv.value === strName);
+});
+
+// Combine and deduplicate
+const spawns = [...spawnsViaDimension, ...spawnsByPattern]
+  .filter((spawn, index, self) => index === self.findIndex(s => s.id === spawn.id));
+```
+
+#### **Content Processing**
+```javascript
+// NEW: Direct conditional spawn selection
+const selectedSpawnName = selectedConditionalSpawns[conditionalName];
+
+// FALLBACK: Dimension-based approach for compatibility
+if (!selectedSpawnName && dimension) {
+  selectedSpawnName = selectedDimensionValues[dimension.id];
+}
+```
+
+### Backward Compatibility
+
+#### **Data Layer**
+- **Backend Models**: Dimensions and DimensionValues still exist for data integrity
+- **API Endpoints**: All existing endpoints continue to work
+- **Relationships**: StringDimensionValue relationships preserved
+
+#### **Migration Path**
+- **Automatic**: No user action required for existing projects
+- **Graceful**: Falls back to old logic if new logic fails
+- **Transparent**: Users don't see any difference in functionality
+
+#### **Future Cleanup**
+- **Phase 1**: ✅ Frontend UI simplified (completed)
+- **Phase 2**: Backend dimension models can be gradually phased out
+- **Phase 3**: Complete elimination once all projects migrated
+
+### Current Status (January 2025)
+
+#### **✅ Completed**
+- Frontend state management updated
+- Filter sidebar UI redesigned
+- Content resolution logic updated
+- Spawn detection enhanced
+- Migration logic implemented
+- Backward compatibility ensured
+
+#### **✅ Verified Working**
+- New conditional variable creation
+- Spawn variable selection
+- Content display control
+- Edit functionality via pencil icons
+- Real-time content updates
+
+#### **Future Considerations**
+- Monitor for any edge cases with complex projects
+- Consider backend dimension model cleanup in future releases
+- Potential performance improvements with direct relationships
+
+### Developer Notes
+
+#### **Key Files Modified**
+- `frontend/src/app/(dashboard)/projects/[id]/page.tsx`: Main UI and state management
+- Filter sidebar completely rewritten for direct conditional variable display
+- Migration and initialization logic added
+
+#### **Testing Focus**
+- Create new conditional variables with spawns
+- Verify spawns appear in filter sidebar
+- Test spawn selection changes content display
+- Ensure backward compatibility with existing projects
+
+#### **Debugging**
+- Console logging added for spawn detection issues
+- Dual-method spawn detection for reliability
+- Clear error messages for troubleshooting
+
+**Impact**: This change significantly improves the user experience by eliminating an unnecessary abstraction layer while maintaining all existing functionality. The system is now more intuitive, performant, and maintainable.

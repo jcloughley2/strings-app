@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -34,7 +34,10 @@ export default function ProjectDetailPage() {
   const [showVariableBadges, setShowVariableBadges] = useState(false);
   const [isStringDrawerOpen, setIsStringDrawerOpen] = useState(false);
   
-  // Filter sidebar state
+  // Filter sidebar state - migrated from dimensions to direct conditional variable selection
+  const [selectedConditionalSpawns, setSelectedConditionalSpawns] = useState<{[conditionalVariableName: string]: string | null}>({});
+  
+  // Legacy dimension state for backward compatibility during migration
   const [selectedDimensionValues, setSelectedDimensionValues] = useState<{[dimensionId: number]: string | null}>({});
   
   // Project edit/delete state
@@ -187,7 +190,66 @@ export default function ProjectDetailPage() {
   const setEditingString = (val: any) => console.warn('Legacy setEditingString called');
   // Note: setPendingStringVariables and setProject are real functions, not stubbed
 
-  // Function to process conditional variables based on selected dimension values
+  // Migration and initialization - run once when project loads
+  useEffect(() => {
+    if (!project?.dimensions || !project?.strings) return;
+    
+    // Step 1: Migrate dimension selections to conditional spawn selections
+    const migratedSelections: {[conditionalVariableName: string]: string | null} = {};
+    
+    Object.entries(selectedDimensionValues).forEach(([dimensionId, selectedValue]) => {
+      if (!selectedValue) return;
+      
+      const dimension = project.dimensions.find((d: any) => d.id === parseInt(dimensionId));
+      if (!dimension) return;
+      
+      // Find the conditional variable that corresponds to this dimension
+      const conditionalVariable = project.strings.find((str: any) => 
+        str.is_conditional_container && 
+        (str.effective_variable_name === dimension.name || 
+         str.variable_name === dimension.name || 
+         str.variable_hash === dimension.name)
+      );
+      
+      if (conditionalVariable) {
+        const conditionalName = conditionalVariable.effective_variable_name || conditionalVariable.variable_hash;
+        migratedSelections[conditionalName] = selectedValue;
+      }
+    });
+    
+    // Step 2: Initialize default selections for conditionals without selections
+    const conditionalVariables = project.strings.filter((str: any) => str.is_conditional_container);
+    
+    conditionalVariables.forEach((conditionalVar: any) => {
+      const conditionalName = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
+      
+      // Skip if already has a migrated selection
+      if (migratedSelections[conditionalName]) return;
+      
+      // Find spawns for this conditional
+      const spawns = project.strings.filter((str: any) => 
+        !str.is_conditional_container && 
+        str.dimension_values?.some((dv: any) => {
+          const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
+          return dimension && dv.dimension === dimension.id;
+        })
+      );
+      
+      // Select the first spawn as default
+      if (spawns.length > 0) {
+        const firstSpawn = spawns[0];
+        const spawnName = firstSpawn.effective_variable_name || firstSpawn.variable_hash;
+        migratedSelections[conditionalName] = spawnName;
+      }
+    });
+    
+    // Step 3: Set all selections at once (only if we have selections to set)
+    if (Object.keys(migratedSelections).length > 0) {
+      setSelectedConditionalSpawns(migratedSelections);
+    }
+  }, [project?.id]); // Only depend on project ID to run once per project load
+
+  // Function to process conditional variables based on selected conditional spawns
   const processConditionalVariables = (content: string): string => {
     if (!content || showVariableBadges) {
       return content;
@@ -208,29 +270,50 @@ export default function ProjectDetailPage() {
       );
 
       if (conditionalVariable) {
-        // Find the dimension for this conditional
-        const dimension = project?.dimensions?.find((d: any) => d.name === variableName);
+        const conditionalName = conditionalVariable.effective_variable_name || conditionalVariable.variable_hash;
         
-        if (dimension) {
-          const selectedValue = selectedDimensionValues[dimension.id];
+        // NEW: Use direct conditional spawn selection instead of dimension lookup
+        const selectedSpawnName = selectedConditionalSpawns[conditionalName];
+        
+        if (selectedSpawnName === "Hidden") {
+          // Replace with empty string if "Hidden" is selected
+          const regex = new RegExp(`{{${variableName}}}`, 'g');
+          processedContent = processedContent.replace(regex, '');
+        } else if (selectedSpawnName) {
+          // Find the spawn variable by name directly
+          const spawnVariable = project?.strings?.find((str: any) =>
+            str.effective_variable_name === selectedSpawnName ||
+            str.variable_name === selectedSpawnName ||
+            str.variable_hash === selectedSpawnName
+          );
           
-          if (selectedValue === "Hidden") {
-            // Replace with empty string if "Hidden" is selected
+          if (spawnVariable) {
             const regex = new RegExp(`{{${variableName}}}`, 'g');
-            processedContent = processedContent.replace(regex, '');
-          } else if (selectedValue) {
-            // Find the spawn variable for this selected value
-            const spawnVariable = project?.strings?.find((str: any) =>
-              str.effective_variable_name === selectedValue ||
-              str.variable_name === selectedValue ||
-              str.variable_hash === selectedValue
-            );
+            // Recursively process the spawn content in case it contains other conditionals
+            const spawnContent = processConditionalVariables(spawnVariable.content || '');
+            processedContent = processedContent.replace(regex, spawnContent);
+          }
+        } else {
+          // FALLBACK: Use old dimension-based logic for backward compatibility
+          const dimension = project?.dimensions?.find((d: any) => d.name === variableName);
+          if (dimension) {
+            const selectedValue = selectedDimensionValues[dimension.id];
             
-            if (spawnVariable) {
+            if (selectedValue === "Hidden") {
               const regex = new RegExp(`{{${variableName}}}`, 'g');
-              // Recursively process the spawn content in case it contains other conditionals
-              const spawnContent = processConditionalVariables(spawnVariable.content || '');
-              processedContent = processedContent.replace(regex, spawnContent);
+              processedContent = processedContent.replace(regex, '');
+            } else if (selectedValue) {
+              const spawnVariable = project?.strings?.find((str: any) =>
+                str.effective_variable_name === selectedValue ||
+                str.variable_name === selectedValue ||
+                str.variable_hash === selectedValue
+              );
+              
+              if (spawnVariable) {
+                const regex = new RegExp(`{{${variableName}}}`, 'g');
+                const spawnContent = processConditionalVariables(spawnVariable.content || '');
+                processedContent = processedContent.replace(regex, spawnContent);
+              }
             }
           }
         }
@@ -827,6 +910,219 @@ export default function ProjectDetailPage() {
     }
   };
 
+  // Function to resolve conditional content based on conditional spawn selection
+  const resolveConditionalContent = (conditionalVariable: any, variableName: string, depth: number = 0): (string | React.ReactNode)[] => {
+    const conditionalName = conditionalVariable.effective_variable_name || conditionalVariable.variable_hash;
+    
+    // Simple throttling to prevent excessive logging
+    const now = Date.now();
+    const lastLogKey = `resolve-${conditionalName}`;
+    if (!window.lastResolveLog) window.lastResolveLog = {};
+    const shouldLog = !window.lastResolveLog[lastLogKey] || (now - window.lastResolveLog[lastLogKey]) > 1000;
+    if (shouldLog) window.lastResolveLog[lastLogKey] = now;
+    
+    // NEW: Get selected spawn directly from conditional spawn selection
+    let selectedValue = selectedConditionalSpawns[conditionalName];
+    
+    // Find the dimension for this conditional (needed for spawn lookup)
+    const dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
+    
+    // FALLBACK: If no direct selection, try dimension-based approach for backward compatibility
+    if (!selectedValue && dimension) {
+      selectedValue = selectedDimensionValues[dimension.id];
+    }
+    
+    if (!selectedValue) {
+      return ["empty"];
+    }
+    
+    // Check for "Hidden" option
+    if (selectedValue === "Hidden") {
+      return ["hidden"];
+    }
+    
+    // Find available spawns for this conditional using dimension_values relationship
+    const spawns = dimension ? project?.strings?.filter((str: any) => 
+      !str.is_conditional_container && 
+      str.dimension_values?.some((dv: any) => dv.dimension === dimension.id)
+    ) || [] : [];
+    
+    if (shouldLog) {
+      console.log(`🔍 Spawn detection for ${conditionalName}:`);
+      console.log('  - Dimension ID:', dimension?.id);
+      console.log('  - Spawns found via dimension_values:', spawns.length);
+      console.log('  - All project strings:', project?.strings?.length);
+      console.log('  - Non-conditional strings:', project?.strings?.filter((s: any) => !s.is_conditional_container).length);
+    }
+    
+    if (spawns.length > 0) {
+      if (shouldLog) {
+        console.log('  - Found spawns:', spawns.map(s => ({
+          name: s.effective_variable_name || s.variable_hash,
+          id: s.id,
+          hasDimensionValues: !!s.dimension_values,
+          dimensionValuesCount: s.dimension_values?.length || 0
+        })));
+      }
+    } else {
+      // If no spawns found via dimension_values, try fallback method for debugging
+      const dimensionValueNames = dimension.values?.map((dv: any) => dv.value) || [];
+      const fallbackSpawns = project?.strings?.filter((str: any) => 
+        !str.is_conditional_container && 
+        dimensionValueNames.includes(str.effective_variable_name || str.variable_hash)
+      ) || [];
+      
+      if (shouldLog) {
+        console.log('  - Dimension value names:', dimensionValueNames);
+        console.log('  - Fallback spawns found:', fallbackSpawns.length);
+        if (fallbackSpawns.length > 0) {
+          console.log('  - Fallback spawn names:', fallbackSpawns.map(s => s.effective_variable_name || s.variable_hash));
+          console.log('  - Sample fallback spawn dimension_values:', fallbackSpawns[0]?.dimension_values);
+        }
+      }
+      
+      // For now, use the fallback method if it finds spawns
+      if (fallbackSpawns.length > 0) {
+        if (shouldLog) console.log('  - Using fallback spawns since main method found none');
+        
+        // Temporarily use fallback spawns with the same logic as the main path
+        let activeSpawn = null;
+        if (selectedValue) {
+          activeSpawn = fallbackSpawns.find((spawn: any) => {
+            const spawnName = spawn.effective_variable_name || spawn.variable_hash;
+            return spawnName === selectedValue;
+          });
+        }
+        
+        if (!activeSpawn && fallbackSpawns.length > 0) {
+          activeSpawn = fallbackSpawns[0];
+        }
+        
+        if (activeSpawn) {
+          // Render the active spawn as a styled variable (same logic as main path)
+          const spawnName = activeSpawn.effective_variable_name || activeSpawn.variable_hash;
+          
+          if (activeSpawn.is_conditional_container) {
+            // If spawn is also a conditional, render it as orange nested conditional
+            const nestedSpawnContent = resolveConditionalContent(activeSpawn, spawnName, depth + 1);
+            return [
+              <span
+                key={`fallback-spawn-${conditionalName}-${spawnName}`}
+                className="cursor-pointer transition-colors bg-orange-50 text-orange-800 px-1 py-0.5 rounded inline-block hover:bg-orange-100 border border-orange-200 ml-1"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openEditInCascadingDrawer(activeSpawn);
+                }}
+                title={`Click to edit nested conditional "${spawnName}"`}
+              >
+                {nestedSpawnContent}
+              </span>
+            ];
+          } else {
+            // For string variable spawns, render as purple styled variable with its content
+            const purpleShade = getPurpleShadeForDepth(depth + 1);
+            
+            // If the spawn has content, render it recursively; otherwise show the variable name
+            let spawnDisplayContent;
+            if (activeSpawn.content && activeSpawn.content.trim() !== '') {
+              // Recursively render the spawn's content to handle any nested variables
+              const renderedContent = renderContentRecursively(activeSpawn.content, depth + 1, `fallback-spawn-${conditionalName}-`);
+              spawnDisplayContent = renderedContent;
+            } else {
+              // If no content, show the variable name as fallback
+              spawnDisplayContent = [spawnName];
+            }
+            
+            return [
+              <span
+                key={`fallback-spawn-${conditionalName}-${spawnName}`}
+                className={`cursor-pointer transition-colors ${purpleShade.background} ${purpleShade.text} px-1 py-0.5 rounded inline-block ${purpleShade.hover} ${purpleShade.border} border ml-1`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openEditInCascadingDrawer(activeSpawn);
+                }}
+                title={`Click to edit string variable "${spawnName}" (spawn of ${conditionalName})`}
+              >
+                {spawnDisplayContent}
+              </span>
+            ];
+          }
+        }
+      }
+      
+      return ["empty"];
+    }
+    
+    // Find the active spawn based on selected dimension value
+    let activeSpawn = null;
+    if (selectedValue) {
+      activeSpawn = spawns.find((spawn: any) => {
+        const spawnName = spawn.effective_variable_name || spawn.variable_hash;
+        return spawnName === selectedValue;
+      });
+    }
+    
+    // If no specific selection, use the first spawn as default
+    if (!activeSpawn && spawns.length > 0) {
+      activeSpawn = spawns[0];
+    }
+    
+    if (!activeSpawn) {
+      return ["empty"];
+    }
+
+    // Render the active spawn as a styled variable (not its content)
+    const spawnName = activeSpawn.effective_variable_name || activeSpawn.variable_hash;
+    
+    if (activeSpawn.is_conditional_container) {
+      // If spawn is also a conditional, render it as orange nested conditional
+      const nestedSpawnContent = resolveConditionalContent(activeSpawn, spawnName, depth + 1);
+      return [
+        <span
+          key={`spawn-${conditionalName}-${spawnName}`}
+          className="cursor-pointer transition-colors bg-orange-50 text-orange-800 px-1 py-0.5 rounded inline-block hover:bg-orange-100 border border-orange-200 ml-1"
+          onClick={(e) => {
+            e.stopPropagation();
+            // Find the openEditInCascadingDrawer function from the parent scope
+            const openEdit = (window as any).openEditInCascadingDrawer;
+            if (openEdit) openEdit(activeSpawn);
+          }}
+          title={`Click to edit nested conditional "${spawnName}"`}
+        >
+          {nestedSpawnContent}
+        </span>
+      ];
+    } else {
+      // For string variable spawns, render as purple styled variable with its content
+      const purpleShade = getPurpleShadeForDepth(depth + 1);
+      
+      // If the spawn has content, render it recursively; otherwise show the variable name
+      let spawnDisplayContent;
+      if (activeSpawn.content && activeSpawn.content.trim() !== '') {
+        // Recursively render the spawn's content to handle any nested variables
+        const renderedContent = renderContentRecursively(activeSpawn.content, depth + 1, `spawn-${conditionalName}-`);
+        spawnDisplayContent = renderedContent;
+      } else {
+        // If no content, show the variable name as fallback
+        spawnDisplayContent = [spawnName];
+      }
+      
+      return [
+        <span
+          key={`spawn-${conditionalName}-${spawnName}`}
+          className={`cursor-pointer transition-colors ${purpleShade.background} ${purpleShade.text} px-1 py-0.5 rounded inline-block ${purpleShade.hover} ${purpleShade.border} border ml-1`}
+          onClick={(e) => {
+            e.stopPropagation();
+            openEditInCascadingDrawer(activeSpawn);
+          }}
+          title={`Click to edit string variable "${spawnName}" (spawn of ${conditionalName})`}
+        >
+          {spawnDisplayContent}
+        </span>
+      ];
+    }
+  };
+
   // Recursive function to render content with proper variable substitution and styling
   const renderContentRecursively = (content: string, depth: number = 0, keyPrefix: string = ""): (string | React.ReactNode)[] => {
     // Prevent infinite recursion
@@ -834,35 +1130,87 @@ export default function ProjectDetailPage() {
       return [content];
     }
     
-    // First process conditionals using the unified function
-    const processedContent = processConditionalVariables(content);
-    
     if (isPlaintextMode) {
-      // Plaintext Mode: Show variable content without any styling
+      // Plaintext Mode: Show variable content without any styling, hide conditionals with "hidden" or no spawns
       const variablePattern = /\{\{([^}]+)\}\}/g;
-      let finalContent = processedContent;
+      let finalContent = content;
       
-      // Process remaining string variables (conditionals were already handled by processConditionalVariables)
+      // Process all variables (both string and conditional)
       const variableMatches = finalContent.match(variablePattern) || [];
       
       variableMatches.forEach((match) => {
         const variableName = match.slice(2, -2);
         
-        // Find string variable (not conditional - those were already processed)
         const stringVariable = project?.strings?.find((str: any) => 
-          !str.is_conditional_container && (
-            str.variable_name === variableName || 
-            str.variable_hash === variableName || 
-            str.effective_variable_name === variableName
-          )
+          str.variable_name === variableName || 
+          str.variable_hash === variableName || 
+          str.effective_variable_name === variableName
         );
         
-        if (stringVariable && stringVariable.content) {
-          // Recursively process the string variable's content (plaintext)
-          const expandedContent = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
-          // Convert React nodes back to string for text replacement
-          const contentString = expandedContent.map(part => typeof part === 'string' ? part : `{{${variableName}}}`).join('');
-          finalContent = finalContent.replace(match, contentString);
+        if (stringVariable) {
+          if (stringVariable.is_conditional_container) {
+            // Handle conditional variables in plaintext mode
+            const conditionalName = stringVariable.effective_variable_name || stringVariable.variable_hash;
+            const dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
+            
+            if (!dimension) {
+              // No dimension, remove the variable completely
+              finalContent = finalContent.replace(match, '');
+              return;
+            }
+            
+            const selectedValue = selectedDimensionValues[dimension.id];
+            
+            // If "Hidden" is selected or no spawns exist, remove completely in plaintext mode
+            if (selectedValue === "Hidden") {
+              finalContent = finalContent.replace(match, '');
+              return;
+            }
+            
+            // Find spawns for this conditional
+            const spawns = project?.strings?.filter((str: any) => 
+              !str.is_conditional_container && 
+              str.dimension_values?.some((dv: any) => dv.dimension === dimension.id)
+            ) || [];
+            
+            if (spawns.length === 0) {
+              // No spawns, remove completely
+              finalContent = finalContent.replace(match, '');
+              return;
+            }
+            
+            // Find active spawn
+            let activeSpawn = null;
+            if (selectedValue) {
+              activeSpawn = spawns.find((spawn: any) => {
+                const spawnName = spawn.effective_variable_name || spawn.variable_hash;
+                return spawnName === selectedValue;
+              });
+            }
+            
+            if (!activeSpawn && spawns.length > 0) {
+              activeSpawn = spawns[0];
+            }
+            
+            if (activeSpawn && activeSpawn.content) {
+              // Replace with spawn content (recursively processed)
+              const spawnContent = renderContentRecursively(activeSpawn.content, depth + 1, `${keyPrefix}${variableName}-`);
+              const contentString = spawnContent.map(part => typeof part === 'string' ? part : '').join('');
+              finalContent = finalContent.replace(match, contentString);
+            } else {
+              // Empty spawn content, remove completely
+              finalContent = finalContent.replace(match, '');
+            }
+          } else {
+            // Handle string variables
+            if (stringVariable.content && stringVariable.content.trim() !== '') {
+              // Recursively process the string variable's content (plaintext)
+              const expandedContent = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
+              // Convert React nodes back to string for text replacement
+              const contentString = expandedContent.map(part => typeof part === 'string' ? part : `{{${variableName}}}`).join('');
+              finalContent = finalContent.replace(match, contentString);
+            }
+          }
         }
       });
       
@@ -932,7 +1280,7 @@ export default function ProjectDetailPage() {
       });
     } else {
       // Normal Mode: Show variable content with styled backgrounds
-      const parts = processedContent.split(/({{[^}]+}})/);
+      const parts = content.split(/({{[^}]+}})/);
       const result: (string | React.ReactNode)[] = [];
       
       parts.forEach((part: string, index: number) => {
@@ -946,9 +1294,22 @@ export default function ProjectDetailPage() {
           
           if (stringVariable) {
             if (stringVariable.is_conditional_container) {
-              // Conditionals should have been processed by processConditionalVariables
-              // If we still see it here, it means no spawn was found, show the variable name as plain text
-              result.push(part);
+              // Conditional variables: Show with orange background containing spawn content
+              const spawnContent = resolveConditionalContent(stringVariable, variableName, depth);
+              
+              result.push(
+                <span
+                  key={`${keyPrefix}${depth}-${index}-${variableName}`}
+                  className="cursor-pointer transition-colors bg-orange-50 text-orange-800 px-1 py-0.5 rounded inline-block hover:bg-orange-100 border border-orange-200"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEditInCascadingDrawer(stringVariable);
+                  }}
+                  title={`Click to edit conditional variable "${variableName}"`}
+                >
+                  {spawnContent}
+                </span>
+              );
             } else {
               // For regular string variables, show their content with purple background styling
               if (!stringVariable.content || stringVariable.content.trim() === '') {
@@ -3258,13 +3619,22 @@ export default function ProjectDetailPage() {
      setCreateDialog("Dimension");
    };
 
-   const openEditDimension = (dimension: any) => {
-     setDimensionName(dimension.name);
-     setDimensionValues(dimension.values ? dimension.values.map((dv: any) => dv.value) : []);
-     setNewDimensionValue("");
-     setEditingDimension(dimension);
-     setCreateDialog("Dimension");
-   };
+  const openEditDimension = (dimension: any) => {
+    // Find the conditional variable that corresponds to this dimension
+    const conditionalVariable = project?.strings?.find((str: any) => 
+      str.is_conditional_container && 
+      (str.effective_variable_name === dimension.name || 
+       str.variable_name === dimension.name || 
+       str.variable_hash === dimension.name)
+    );
+
+    if (conditionalVariable) {
+      // Open the unified drawer to edit the conditional variable
+      mainDrawer.openDrawer(conditionalVariable);
+    } else {
+      console.warn(`No conditional variable found for dimension: ${dimension.name}`);
+    }
+  };
 
    const closeDimensionDialog = () => {
      setCreateDialog(null);
@@ -4347,13 +4717,13 @@ export default function ProjectDetailPage() {
           </div>
           {/* Filter Content - Scrollable */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Dimensions Section */}
+          {/* Conditions Section */}
           <div className="space-y-3">
             <div className="group">
               <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
                 <div className="flex items-center gap-2">
                   <Globe className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="font-medium text-sm">Dimensions</h3>
+                  <h3 className="font-medium text-sm">Conditions</h3>
                 </div>
                 <Button
                   variant="ghost"
@@ -4365,72 +4735,132 @@ export default function ProjectDetailPage() {
                 </Button>
               </div>
             </div>
-            {/* Dimension Filters */}
-            {project.dimensions && project.dimensions.length > 0 ? (
-              <div className="space-y-4 ml-6">
-                {(project.dimensions || []).map((dimension: any) => (
-            <div key={dimension.id} className="space-y-3">
-              <div className="flex items-center justify-between group">
-                <div 
-                  className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1 cursor-pointer"
-                  onClick={() => openEditDimension(dimension)}
-                >
-                  <h3 className="font-medium text-sm">{dimension.name}</h3>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditDimension(dimension);
-                      }}
-                    >
-                      <Edit2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {dimension.values && dimension.values.map((dimensionValue: any) => {
-                  const isSelected = selectedDimensionValues[dimension.id] === dimensionValue.value;
-                  
-                  if (isSelected) {
-                    // Selected badge (no close button - always one selected)
+            {/* Conditional Variable Filters - NEW: Direct conditional variable display */}
+            {(() => {
+              // Get all conditional variables from the project
+              const conditionalVariables = project?.strings?.filter((str: any) => str.is_conditional_container) || [];
+              
+              return conditionalVariables.length > 0 ? (
+                <div className="space-y-4 ml-6">
+                  {conditionalVariables.map((conditionalVar: any) => {
+                    const conditionalName = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
+                    
+                    // Find spawns for this conditional variable using multiple methods
+                    const dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
+                    
+                    // Method 1: Use dimension_values relationship (existing spawns)
+                    const spawnsViaDimension = dimension ? project?.strings?.filter((str: any) => 
+                      !str.is_conditional_container && 
+                      str.dimension_values?.some((dv: any) => dv.dimension === dimension.id)
+                    ) || [] : [];
+                    
+                    // Method 2: Find spawns by naming pattern (fallback for newly created spawns)
+                    const spawnsByPattern = project?.strings?.filter((str: any) => {
+                      if (str.is_conditional_container) return false;
+                      const strName = str.effective_variable_name || str.variable_hash;
+                      // Check if this string name appears as a dimension value for this conditional
+                      return dimension?.values?.some((dv: any) => dv.value === strName);
+                    }) || [];
+                    
+                    // Combine both methods and remove duplicates
+                    const allSpawns = [...spawnsViaDimension, ...spawnsByPattern];
+                    const spawns = allSpawns.filter((spawn, index, self) => 
+                      index === self.findIndex(s => s.id === spawn.id)
+                    );
+                    
+                    // Debug logging for spawn detection
+                    console.log(`🔍 Spawn detection for "${conditionalName}":`, {
+                      dimension: dimension,
+                      dimensionValues: dimension?.values,
+                      spawnsViaDimension: spawnsViaDimension.length,
+                      spawnsByPattern: spawnsByPattern.length,
+                      totalSpawns: spawns.length,
+                      allNonConditionalStrings: project?.strings?.filter(s => !s.is_conditional_container)?.length
+                    });
+                    
+                    // Check if this conditional has a "Hidden" option
+                    const hasHiddenOption = dimension?.values?.some((v: any) => v.value === "Hidden") || false;
+                    
+                    // Get all available spawn options (including Hidden if it exists)
+                    const spawnOptions = [...spawns];
+                    if (hasHiddenOption) {
+                      spawnOptions.push({ 
+                        id: 'hidden', 
+                        effective_variable_name: 'Hidden',
+                        variable_name: 'Hidden',
+                        variable_hash: 'Hidden'
+                      });
+                    }
+                    
                     return (
-                      <div
-                        key={dimensionValue.id}
-                        className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors bg-blue-100 border-blue-300 text-blue-800"
-                      >
-                        <span>{dimensionValue.value}</span>
+                      <div key={conditionalVar.id} className="space-y-3">
+                        {/* Conditional Variable Header */}
+                        <div className="flex items-center justify-between group">
+                          <div 
+                            className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1 cursor-pointer"
+                            onClick={() => mainDrawer.openDrawer(conditionalVar)}
+                          >
+                            <h3 className="font-medium text-sm">{conditionalName}</h3>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  mainDrawer.openDrawer(conditionalVar);
+                                }}
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Spawn Variables (Children) */}
+                        <div className="flex flex-wrap gap-2">
+                          {spawnOptions.map((spawn: any) => {
+                            const spawnName = spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash;
+                            const isSelected = selectedConditionalSpawns[conditionalName] === spawnName;
+                            
+                            if (isSelected) {
+                              // Selected spawn badge (no close button - always one selected)
+                              return (
+                                <div
+                                  key={spawn.id}
+                                  className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors bg-blue-100 border-blue-300 text-blue-800"
+                                >
+                                  <span>{spawnName}</span>
+                                </div>
+                              );
+                            } else {
+                              // Unselected spawn badge - clicking switches selection
+                              return (
+                                <Badge
+                                  key={spawn.id}
+                                  variant="outline"
+                                  className="text-xs transition-colors hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 active:bg-blue-100 cursor-pointer"
+                                  onClick={() => setSelectedConditionalSpawns(prev => ({
+                                    ...prev,
+                                    [conditionalName]: spawnName
+                                  }))}
+                                >
+                                  {spawnName}
+                                </Badge>
+                              );
+                            }
+                          })}
+                        </div>
                       </div>
                     );
-                  } else {
-                    // Unselected badge - clicking switches selection
-                    return (
-                      <Badge
-                        key={dimensionValue.id}
-                        variant="outline"
-                        className="text-xs transition-colors hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 active:bg-blue-100 cursor-pointer"
-                        onClick={() => setSelectedDimensionValues(prev => ({
-                          ...prev,
-                          [dimension.id]: dimensionValue.value
-                        }))}
-                      >
-                        {dimensionValue.value}
-                      </Badge>
-                    );
-                  }
-                })}
-              </div>
-            </div>
-                ))}
-              </div>
-                          ) : (
-                <div className="text-muted-foreground text-center text-sm ml-6">
-                  No dimensions found in this project.
+                  })}
                 </div>
-              )}
+              ) : (
+                <div className="text-muted-foreground text-center text-sm ml-6">
+                  No conditional variables found in this project.
+                </div>
+              );
+            })()}
           </div>
           
 

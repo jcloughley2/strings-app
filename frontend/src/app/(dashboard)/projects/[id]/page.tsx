@@ -66,7 +66,7 @@ export default function ProjectDetailPage() {
   // String deletion state
   const [deleteStringDialog, setDeleteStringDialog] = useState<any>(null);
 
-  // Dimension form state
+  // Legacy dimension form state - keeping for backward compatibility with existing dimension sheet
   const [dimensionName, setDimensionName] = useState("");
   const [dimensionValues, setDimensionValues] = useState<string[]>([]);
   const [newDimensionValue, setNewDimensionValue] = useState("");
@@ -1632,141 +1632,9 @@ export default function ProjectDetailPage() {
     return !allValues.includes(filterText.trim()) && !selectedValues.includes(filterText.trim());
   };
 
-  // Handle dimension form submission
-  const handleDimensionSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!dimensionName.trim()) {
-      toast.error('Dimension name is required');
-      return;
-    }
+  // Legacy duplicate handleDimensionSubmit removed
 
-    // Frontend validation for duplicate dimension names
-    if (!editingDimension) {
-      // For new dimensions, check if name already exists
-      const existingDimension = project.dimensions?.find(
-        (d: any) => d.name.toLowerCase() === dimensionName.trim().toLowerCase()
-      );
-      if (existingDimension) {
-        toast.error(`A dimension with the name "${dimensionName.trim()}" already exists in this project.`);
-        return;
-      }
-    } else {
-      // For editing dimensions, check if name conflicts with other dimensions
-      const existingDimension = project.dimensions?.find(
-        (d: any) => d.name.toLowerCase() === dimensionName.trim().toLowerCase() && d.id !== editingDimension.id
-      );
-      if (existingDimension) {
-        toast.error(`A dimension with the name "${dimensionName.trim()}" already exists in this project.`);
-        return;
-      }
-    }
-
-    try {
-      let dimensionResponse;
-      
-      if (editingDimension) {
-        // Update existing dimension
-        dimensionResponse = await apiFetch(`/api/dimensions/${editingDimension.id}/`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: dimensionName.trim(),
-          }),
-        });
-        toast.success(`Updated dimension "${dimensionName}"`);
-      } else {
-        // Create new dimension
-        dimensionResponse = await apiFetch('/api/dimensions/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-            name: dimensionName.trim(),
-              project: id,
-            }),
-          });
-        toast.success(`Created dimension "${dimensionName}"`);
-      }
-
-      const dimensionId = dimensionResponse.id || editingDimension?.id;
-
-      // Handle dimension values - simplified approach: delete all existing and recreate
-      if (editingDimension && editingDimension.values) {
-        // Delete all existing dimension values for this dimension
-        for (const dimensionValue of editingDimension.values) {
-          try {
-            await apiFetch(`/api/dimension-values/${dimensionValue.id}/`, {
-              method: 'DELETE',
-            });
-          } catch (deleteError) {
-            console.warn(`Failed to delete dimension value ${dimensionValue.id}:`, deleteError);
-          }
-        }
-      }
-
-      // Create new dimension values
-      for (const value of dimensionValues) {
-        if (value.trim()) {
-          try {
-            await apiFetch('/api/dimension-values/', {
-              method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                dimension: dimensionId,
-                value: value.trim(),
-            }),
-          });
-          } catch (valueError) {
-            console.error(`Failed to create dimension value "${value}":`, valueError);
-          }
-        }
-      }
-
-      // Refresh project data
-      const updatedProject = await apiFetch(`/api/projects/${id}/`);
-      setProject(sortProjectStrings(updatedProject));
-      setCreateDialog(null);
-      setDimensionName("");
-      setDimensionValues([]);
-      setEditingDimension(null);
-    } catch (err: any) {
-      console.error('Failed to save dimension:', err);
-      
-      // Check if it's a validation error about duplicate names
-      if (err.message && err.message.includes('already exists')) {
-        toast.error(err.message);
-      } else {
-        toast.error('Failed to save dimension. Please try again.');
-      }
-    }
-  };
-
-  // Add dimension value to list
-  const addDimensionValue = () => {
-    const trimmedValue = newDimensionValue.trim();
-    if (!trimmedValue) {
-      toast.error('Dimension value cannot be empty');
-      return;
-    }
-    
-    // Check for duplicates (case-insensitive)
-    if (dimensionValues.some(value => value.toLowerCase() === trimmedValue.toLowerCase())) {
-      toast.error(`Dimension value "${trimmedValue}" already exists`);
-      return;
-    }
-    
-    setDimensionValues(prev => [...prev, trimmedValue]);
-    setNewDimensionValue("");
-  };
-
-  // Close dimension dialog and reset state
-  const closeDimensionDialog = () => {
-    setCreateDialog(null);
-    setEditingDimension(null);
-    setDimensionName("");
-    setDimensionValues([]);
-    setNewDimensionValue("");
-  };
+  // Legacy duplicate dimension functions removed
 
   // Handle nested string split into conditional
   const handleNestedStringSplit = () => {
@@ -3611,13 +3479,7 @@ export default function ProjectDetailPage() {
 
 
 
-   // Dimension dialog handlers
-   const openCreateDimension = () => {
-     setDimensionName("");
-     setDimensionValues([]);
-     setNewDimensionValue("");
-     setCreateDialog("Dimension");
-   };
+   // Legacy dimension dialog handlers - REMOVED (no longer needed)
 
   const openEditDimension = (dimension: any) => {
     // Find the conditional variable that corresponds to this dimension
@@ -3644,8 +3506,7 @@ export default function ProjectDetailPage() {
      setNewDimensionValue("");
    };
 
-   // Dimension value management functions
-   const addDimensionValue = () => {
+   // Legacy duplicate dimension functions removed - addDimensionValue
      const trimmedValue = newDimensionValue.trim();
      if (!trimmedValue) {
        toast.error('Dimension value cannot be empty');
@@ -3686,101 +3547,7 @@ export default function ProjectDetailPage() {
 
 
 
-   const handleDimensionSubmit = async (e: React.FormEvent) => {
-     e.preventDefault();
-     
-     if (!dimensionName.trim()) {
-       toast.error('Dimension name is required');
-       return;
-     }
-
-     // Frontend validation for duplicate dimension names
-     if (!editingDimension) {
-       // For new dimensions, check if name already exists
-       const existingDimension = project.dimensions?.find(
-         (d: any) => d.name.toLowerCase() === dimensionName.trim().toLowerCase()
-       );
-       if (existingDimension) {
-         toast.error(`A dimension with the name "${dimensionName.trim()}" already exists in this project.`);
-         return;
-       }
-     } else {
-       // For editing dimensions, check if name conflicts with other dimensions
-       const existingDimension = project.dimensions?.find(
-         (d: any) => d.name.toLowerCase() === dimensionName.trim().toLowerCase() && d.id !== editingDimension.id
-       );
-       if (existingDimension) {
-         toast.error(`A dimension with the name "${dimensionName.trim()}" already exists in this project.`);
-         return;
-       }
-     }
-
-     try {
-       let dimensionResponse;
-       
-       if (editingDimension) {
-         // Update existing dimension
-         dimensionResponse = await apiFetch(`/api/dimensions/${editingDimension.id}/`, {
-           method: 'PATCH',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({
-             name: dimensionName.trim(),
-           }),
-         });
-         toast.success(`Updated dimension "${dimensionName}"`);
-       } else {
-         // Create new dimension
-         dimensionResponse = await apiFetch('/api/dimensions/', {
-           method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({
-             name: dimensionName.trim(),
-             project: id,
-           }),
-         });
-         toast.success(`Created dimension "${dimensionName}"`);
-       }
-
-       const dimensionId = dimensionResponse.id || editingDimension?.id;
-
-       // Handle dimension values - simplified approach: delete all existing and recreate
-       if (editingDimension && editingDimension.values) {
-         // Delete all existing dimension values for this dimension
-         for (const dimensionValue of editingDimension.values) {
-           await apiFetch(`/api/dimension-values/${dimensionValue.id}/`, {
-             method: 'DELETE',
-           });
-         }
-       }
-
-       // Create all new dimension values
-       for (const value of dimensionValues) {
-         await apiFetch('/api/dimension-values/', {
-           method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({
-             dimension: dimensionId,
-             value: value,
-           }),
-         });
-       }
-
-       // Refresh project data
-       const updatedProject = await apiFetch(`/api/projects/${id}/`);
-       setProject(sortProjectStrings(updatedProject));
-
-       closeDimensionDialog();
-     } catch (err: any) {
-       console.error('Failed to save dimension:', err);
-       
-       // Check if it's a validation error about duplicate names
-       if (err.message && err.message.includes('already exists')) {
-         toast.error(err.message);
-       } else {
-         toast.error('Failed to save dimension. Please try again.');
-       }
-     }
-   };
+   // handleDimensionSubmit moved to be with other dimension functions
 
   // Helper function to detect circular references in string variables
   const detectCircularReferences = (content: string, currentStringId?: number, visited: Set<number> = new Set()): string | null => {
@@ -4645,12 +4412,156 @@ export default function ProjectDetailPage() {
     setImportDialog(true);
   };
 
+  // Legacy dimension dialog functions - keeping for backward compatibility
   const openCreateDimension = () => {
     setDimensionName("");
     setDimensionValues([]);
     setNewDimensionValue("");
     setEditingDimension(null);
     setCreateDialog("Dimension");
+  };
+
+  const closeDimensionDialog = () => {
+    setCreateDialog(null);
+    setEditingDimension(null);
+    setDimensionName("");
+    setDimensionValues([]);
+    setNewDimensionValue("");
+  };
+
+  const addDimensionValue = () => {
+    const trimmedValue = newDimensionValue.trim();
+    if (!trimmedValue) {
+      toast.error('Please enter a dimension value');
+      return;
+    }
+    
+    // Check for duplicates (case-insensitive)
+    if (dimensionValues.some(value => value.toLowerCase() === trimmedValue.toLowerCase())) {
+      toast.error(`Dimension value "${trimmedValue}" already exists`);
+      return;
+    }
+    
+    setDimensionValues(prev => [...prev, trimmedValue]);
+    setNewDimensionValue("");
+  };
+
+  const removeDimensionValue = (valueToRemove: string) => {
+    setDimensionValues(prev => prev.filter(value => value !== valueToRemove));
+  };
+
+  const updateDimensionValue = (oldValue: string, newValue: string) => {
+    const trimmedValue = newValue.trim();
+    if (!trimmedValue) {
+      toast.error('Dimension value cannot be empty');
+      return;
+    }
+    
+    // Check for duplicates (case-insensitive), excluding the current value being edited
+    if (dimensionValues.some(value => value !== oldValue && value.toLowerCase() === trimmedValue.toLowerCase())) {
+      toast.error(`Dimension value "${trimmedValue}" already exists`);
+      return;
+    }
+    
+    setDimensionValues(prev => prev.map(value => value === oldValue ? trimmedValue : value));
+  };
+
+  const handleDimensionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!dimensionName.trim()) {
+      toast.error('Dimension name is required');
+      return;
+    }
+
+    // Frontend validation for duplicate dimension names
+    if (!editingDimension) {
+      // For new dimensions, check if name already exists
+      const existingDimension = project.dimensions?.find(
+        (d: any) => d.name.toLowerCase() === dimensionName.trim().toLowerCase()
+      );
+      if (existingDimension) {
+        toast.error(`A dimension with the name "${dimensionName.trim()}" already exists in this project.`);
+        return;
+      }
+    } else {
+      // For editing dimensions, check if name conflicts with other dimensions
+      const existingDimension = project.dimensions?.find(
+        (d: any) => d.name.toLowerCase() === dimensionName.trim().toLowerCase() && d.id !== editingDimension.id
+      );
+      if (existingDimension) {
+        toast.error(`A dimension with the name "${dimensionName.trim()}" already exists in this project.`);
+        return;
+      }
+    }
+
+    try {
+      let dimensionResponse;
+      
+      if (editingDimension) {
+        // Update existing dimension
+        dimensionResponse = await apiFetch(`/api/dimensions/${editingDimension.id}/`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: dimensionName.trim(),
+          }),
+        });
+        toast.success(`Updated dimension "${dimensionName}"`);
+      } else {
+        // Create new dimension
+        dimensionResponse = await apiFetch('/api/dimensions/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: dimensionName.trim(),
+            project: id,
+          }),
+        });
+        toast.success(`Created dimension "${dimensionName}"`);
+      }
+
+      const dimensionId = dimensionResponse.id || editingDimension?.id;
+
+      // Handle dimension values - simplified approach: delete all existing and recreate
+      if (editingDimension && editingDimension.values) {
+        // Delete all existing dimension values for this dimension
+        for (const dimensionValue of editingDimension.values) {
+          await apiFetch(`/api/dimension-values/${dimensionValue.id}/`, {
+            method: 'DELETE',
+          });
+        }
+      }
+
+      // Create all new dimension values
+      for (const value of dimensionValues) {
+        if (value.trim()) {
+          await apiFetch('/api/dimension-values/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              dimension: dimensionId,
+              value: value.trim(),
+            }),
+          });
+        }
+      }
+
+      // Refresh project data
+      const updatedProject = await apiFetch(`/api/projects/${id}/`);
+      setProject(sortProjectStrings(updatedProject));
+
+      closeDimensionDialog();
+    } catch (err: any) {
+      console.error('Failed to save dimension:', err);
+      
+      // Check if it's a validation error about duplicate names
+      if (err.message && err.message.includes('already exists')) {
+        toast.error(err.message);
+      } else {
+        toast.error('Failed to save dimension. Please try again.');
+      }
+    }
   };
 
   const handleDuplicateProject = async () => {
@@ -4725,14 +4636,7 @@ export default function ProjectDetailPage() {
                   <Globe className="h-4 w-4 text-muted-foreground" />
                   <h3 className="font-medium text-sm">Conditions</h3>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
-                  onClick={() => openCreateDimension()}
-                >
-                  <Plus className="h-3 w-3" />
-                </Button>
+                {/* Plus button removed - conditions are created via conditional variables now */}
               </div>
             </div>
             {/* Conditional Variable Filters - NEW: Direct conditional variable display */}

@@ -33,7 +33,7 @@ Let's say I have the sentence "My favorite color is `{{color-option}}`". If opti
 - **Every String is a Variable**: Automatic variable creation with 6-character hash or custom name
 - **Variable Embedding**: Recursive `{{variableName}}` references with circular protection
 - **Conditionals**: Convert strings to directories containing multiple variations (spawns)
-- **Dimension Inheritance**: Strings automatically inherit metadata from embedded variables
+- **Spawn Selection**: Users select which spawn variable displays for each conditional variable
 - **Cascading Editing**: Deep nested editing with stacked drawer system
 - **Root-Level Interface**: Clean view showing only top-level (non-embedded) strings
 - **Real-time Variable Detection**: Yellow boxes for new variables, purple for existing
@@ -68,14 +68,13 @@ Let's say I have the sentence "My favorite color is `{{color-option}}`". If opti
 2. **String**: The "file" system - every string is automatically a variable
    - Fields: content, project, variable_name (optional), variable_hash (auto), is_conditional, is_conditional_container
    - **Effective Variable Name**: Returns variable_name || variable_hash
-3. **Dimension**: Categories for organizing strings (name, project)
-4. **DimensionValue**: Predefined values for dimensions
-5. **StringDimensionValue**: Automatic inheritance from embedded variables
+   - **Conditional Variables**: Containers that hold multiple spawn variables
+   - **Spawn Variables**: Individual variations within a conditional variable
 
 ### Key Relationships
 - Strings reference other strings via `{{variableName}}` embedding
-- Conditionals contain spawns (multiple string variations)
-- Automatic dimension inheritance through variable references
+- Conditional variables contain spawn variables (multiple string variations)
+- Spawn selection determines which content displays for conditional variables
 - Circular reference protection prevents infinite loops
 
 ---
@@ -107,10 +106,10 @@ Let's say I have the sentence "My favorite color is `{{color-option}}`". If opti
 ## User Interface
 
 ### Layout (Three Panels)
-- **Left**: Filter Sidebar (360px) - dimensions only (traits removed)
+- **Left**: Filter Sidebar (360px) - conditional variables and spawn selection
 - **Center**: Main Canvas - all strings including conditionals and embedded strings, orange/purple badges
   - **"Show variables" toggle**: Controls whether conditional variables show as badges or resolved content
-- **Right**: Variables Sidebar (collapsible) - dimension variable management
+- **Right**: Variables Sidebar (collapsible) - variable management
 
 ### Unified Drawer System ⭐
 **MAJOR ARCHITECTURE**: Single, consolidated drawer component replaces all previous drawer systems
@@ -167,7 +166,7 @@ Nested String 2 (Same Component, Stacked)
 - **Variable Type Selection**: Select dropdown for choosing String or Conditional mode
   - **String Mode**: Text content editing + variable detection boxes
   - **Conditional Mode**: Spawn management with yellow/purple variable boxes
-- **Three Main Tabs**: Content, Dimensions, Advanced (consistent across all use cases)
+- **Three Main Tabs**: Content, Spawns, Advanced (consistent across all use cases)
 - **Variable Name Display**: Shows at top with orange (conditional) or purple (string) badges
 - **ShadCN Integration**: Proper close button handling, no custom duplicates
 - **Unified Save Logic**: Single save function handles all creation, updating, and conversion scenarios
@@ -210,33 +209,33 @@ Nested String 2 (Same Component, Stacked)
 - `DELETE /api/strings/{id}/` - Delete string
 
 ### Other Entities
-- Dimensions, DimensionValues, StringDimensionValues follow standard REST patterns
-- All support embedding `{{variableName}}` in content fields
+- All entities support embedding `{{variableName}}` in content fields
+- Spawn variables are managed through conditional variable operations
 
 ---
 
 ## Project Duplication
 
 ### Overview
-Complete project duplication with "Copy of" naming and full data preservation including all strings, dimensions, dimension values, and relationships.
+Complete project duplication with "Copy of" naming and full data preservation including all strings, conditional variables, spawn variables, and relationships.
 
 ### Key Features
 - **Identifier Preservation**: Original variable names and hashes are preserved to maintain user familiarity
-- **Complete Relationship Mapping**: All string-dimension-value associations are accurately recreated
-- **Signal Management**: Automatic dimension creation is temporarily disabled during duplication to prevent conflicts
+- **Complete Relationship Mapping**: All conditional-spawn relationships are accurately recreated
+- **Signal Management**: Automatic relationship creation is temporarily disabled during duplication to prevent conflicts
 - **Graceful Conflict Handling**: Falls back to new hash generation only if necessary (rare hash collisions)
 
 ### Technical Implementation
-- **Dimension Value Mapping**: Creates precise mappings between old and new dimension value IDs
+- **Spawn Relationship Mapping**: Creates precise mappings between conditional variables and their spawn variables
 - **Signal Disconnection**: Temporarily disconnects post_save signals during duplication process
 - **Error Recovery**: Handles hash conflicts gracefully with fallback to auto-generation
 - **Comprehensive Logging**: Detailed logging for debugging and monitoring duplication process
 
 ### Expected Behavior
 - ✅ All strings copied with original identifiers preserved
-- ✅ All dimensions and dimension values recreated exactly
-- ✅ All StringDimensionValue relationships maintained
-- ✅ No extra empty dimensions created
+- ✅ All conditional variables and spawn variables recreated exactly
+- ✅ All conditional-spawn relationships maintained
+- ✅ No orphaned variables created
 - ✅ Conditional variables and their spawns properly linked
 - ✅ Users see familiar variable names/hashes in the duplicated project
 
@@ -253,7 +252,7 @@ Complete project duplication with "Copy of" naming and full data preservation in
 ### Variable Embedding
 - **Syntax**: `{{variableName}}` format only
 - **Depth Limits**: Max 10 levels with visited set tracking  
-- **Context Aware**: Process with current filters
+- **Context Aware**: Process with current spawn selections
 - **Circular Protection**: Validate against self-reference
 
 ### Unified Drawer System ⭐
@@ -335,12 +334,15 @@ Complete project duplication with "Copy of" naming and full data preservation in
 // Null-safe data access
 const strings = project?.strings || [];
 
+// Conditional spawn selection state
+const [selectedConditionalSpawns, setSelectedConditionalSpawns] = useState<{[conditionalVariableName: string]: string | null}>({});
+
 // Unified drawer system (replaces multiple drawer states)
 const mainDrawer = useStringEditDrawer({
   projectId: project?.id,
   existingStrings: strings,
   pendingStringVariables,
-  selectedDimensionValues,
+  selectedConditionalSpawns,
   onSuccess: () => {
     // Handle successful save
     fetchProject();
@@ -404,18 +406,28 @@ const spawnPromises = conditionalSpawns.map(async (spawn) => {
 Conditional variables in plaintext mode require special handling for nested/embedded strings:
 
 ```javascript
-// In processStringContent() for plaintext mode:
-if (stringVariable) {
-  const regex = new RegExp(`{{${variableName}}}`, 'g');
-  // CRITICAL: Process conditional variables in embedded string content
-  const processedEmbeddedContent = processConditionalVariables(stringVariable.content);
-  result = result.replace(regex, processedEmbeddedContent);
+// In processConditionalVariables() for plaintext mode:
+if (conditionalVariable) {
+  const conditionalName = conditionalVariable.effective_variable_name || conditionalVariable.variable_hash;
+  const selectedSpawnName = selectedConditionalSpawns[conditionalName];
+  
+  if (selectedSpawnName) {
+    const spawnVariable = project?.strings?.find((str: any) =>
+      str.effective_variable_name === selectedSpawnName ||
+      str.variable_name === selectedSpawnName ||
+      str.variable_hash === selectedSpawnName
+    );
+    
+    if (spawnVariable) {
+      const regex = new RegExp(`{{${variableName}}}`, 'g');
+      const spawnContent = processConditionalVariables(spawnVariable.content || '');
+      result = result.replace(regex, spawnContent);
+    }
+  }
 }
 ```
 
-**Issue**: When a string variable contains conditional variables (e.g., `{{MRCZFN}}` contains `"a {{Options}} {{animals}}"`), the nested conditional variables weren't being processed during plaintext expansion.
-
-**Solution**: Always call `processConditionalVariables()` on embedded string content before insertion, ensuring conditional variables resolve at any nesting level.
+**Key**: Direct spawn selection lookup using `selectedConditionalSpawns[conditionalName]` provides the spawn variable name, which is then used to find and render the appropriate spawn content.
 
 ### API Integration  
 ```javascript
@@ -675,10 +687,10 @@ const handleDeleteString = async () => {
 ## Recent Changes (2025)
 
 ### UI Simplification Updates
-- **✅ Removed Conditionals Sidebar Section**: Eliminated the dedicated "Conditionals" section from the left filter sidebar
-- **✅ Unified Main Canvas**: Conditional variables now appear in the main canvas alongside regular strings
+- **✅ Direct Conditional Display**: Conditional variables appear directly in the filter sidebar with their spawn variables
+- **✅ Unified Main Canvas**: Conditional variables appear in the main canvas alongside regular strings
 - **✅ Select Dropdown Interface**: Replaced String/Conditional tabs with a cleaner select dropdown for variable type selection
-- **✅ Streamlined Filtering**: Removed conditional variable filtering from export and processing functions
+- **✅ Streamlined Filtering**: Direct spawn selection controls content display
 - **✅ Removed Traits System**: Completely eliminated traits, trait variables, and trait-based filtering from the application
 
 ### Additional Updates (Latest)
@@ -701,12 +713,12 @@ const handleDeleteString = async () => {
 - **✅ Conditional Variables in Plaintext Mode**: Fixed conditional variables not resolving to spawn content in nested/embedded strings when in plaintext mode
 
 ### Benefits
-- **Cleaner Interface**: Reduced sidebar complexity by removing redundant conditional management and traits
+- **Cleaner Interface**: Direct conditional variable display eliminates abstraction layers
 - **Unified Workflow**: All string management happens in one place (main canvas) with consistent interfaces
 - **Better UX**: Select dropdown is more compact and mobile-friendly than tabs, works across all drawer types
 - **Complete Visibility**: All strings visible independently, better understanding of project structure
-- **Simplified Logic**: Fewer filtering mechanisms to maintain, no trait complexity
-- **Focused Architecture**: System now focuses purely on string variables and dimensions
+- **Simplified Logic**: Direct spawn selection without complex mappings
+- **Focused Architecture**: System now focuses purely on string variables and conditional variables
 - **Robust Conversions**: String-to-conditional conversion works reliably in any editing context
 
 ---
@@ -770,14 +782,14 @@ return <StringEditDrawer {...drawer} />;
 - **✅ Content Resolution**: Fixed conditional variables properly resolving to spawn content in plaintext mode
 - **✅ Performance**: Eliminated redundant processing and improved rendering efficiency
 
-### Enhanced Variable Deletion & Dimension Cleanup (January 2025)
+### Enhanced Variable Deletion & Cleanup (January 2025)
 - **✅ Comprehensive Cleanup**: Enhanced deletion logic to handle variables serving as spawns for multiple conditionals
-- **✅ Multi-Conditional Support**: Single variable can be spawn for multiple conditional variables - all dimension values cleaned up on deletion
-- **✅ Automated Detection**: System automatically finds all dimension values referencing deleted variable across entire project
+- **✅ Multi-Conditional Support**: Single variable can be spawn for multiple conditional variables - all relationships cleaned up on deletion
+- **✅ Automated Detection**: System automatically finds all spawn relationships referencing deleted variable across entire project
 - **✅ Parent Resync**: Automatically resyncs all affected conditional variables after spawn deletion
-- **✅ Detailed Logging**: Comprehensive cleanup summaries with affected conditionals and removed dimension values
-- **✅ Utility Functions**: Added `cleanup_dimension_values_for_deleted_variable()` and `cleanup_as_spawn_variable()` methods
-- **✅ Data Integrity**: Prevents orphaned dimension values and maintains consistent project state
+- **✅ Detailed Logging**: Comprehensive cleanup summaries with affected conditionals and removed relationships
+- **✅ Utility Functions**: Added cleanup methods for spawn variable deletion
+- **✅ Data Integrity**: Prevents orphaned relationships and maintains consistent project state
 
 ### Conditional Variable Flexibility (January 2025)
 - **✅ Zero Spawn Support**: Removed restriction requiring conditional variables to have at least one spawn
@@ -789,11 +801,11 @@ return <StringEditDrawer {...drawer} />;
 
 ### "Include Hide as Option" Feature for Conditional Variables
 - **✅ Hide Option Checkbox**: Added "Include hide as option" checkbox to conditional variable editing in both main drawer and cascading drawers
-- **✅ Hidden Dimension Values**: When checked, automatically creates a "Hidden" dimension value for the conditional's paired dimension
-- **✅ Canvas Invisibility**: When users select "Hidden" from dimension filter, conditional variables become completely invisible (replaced with empty string)
-- **✅ Automatic Management**: System automatically creates/removes "Hidden" dimension value based on checkbox state
+- **✅ Hidden Spawn Option**: When checked, automatically creates a "Hidden" spawn option for the conditional variable
+- **✅ Canvas Invisibility**: When users select "Hidden" from spawn options, conditional variables become completely invisible (replaced with empty string)
+- **✅ Automatic Management**: System automatically creates/removes "Hidden" spawn option based on checkbox state
 - **✅ Cascading Drawer Support**: Feature works identically in both main string drawer and cascading drawers for nested editing
-- **✅ Consistent UX**: Seamless integration with existing dimension-based filtering system
+- **✅ Consistent UX**: Seamless integration with spawn selection system
 
 ### Conditional to String Conversion Fix
 - **✅ Bidirectional Conversion**: Users can now freely convert conditional variables back to string variables using the Variable Type dropdown
@@ -814,9 +826,9 @@ return <StringEditDrawer {...drawer} />;
   - String variables show actual content by default, only show identifiers when "Show Variables" is active
 - **✅ Conditional Resolution in Canvas**: Fixed conditional variables properly resolving to active spawn content in main canvas
 - **✅ Badge Styling System**: Proper separation between resolved content view and badge view via "Show Variables" toggle
-- **✅ Backend Dimension Management**: Enhanced signal handlers for automatic dimension cleanup on conditional deletion/conversion
-- **✅ Spawn Variable Renaming**: Fixed dimension value sync when spawn variables are renamed
-- **✅ Instant UI Updates**: Implemented immediate project data refresh after conditional deletions for instant dimension cleanup visibility
+- **✅ Backend Relationship Management**: Enhanced signal handlers for automatic spawn relationship cleanup on conditional deletion/conversion
+- **✅ Spawn Variable Renaming**: Fixed relationship sync when spawn variables are renamed
+- **✅ Instant UI Updates**: Implemented immediate project data refresh after conditional deletions for instant cleanup visibility
 
 ### "Add Existing Variable as Spawn" Feature (January 2025) ⭐
 - **✅ Content Reuse**: Users can now add existing variables (both string and conditional) as spawn variables instead of recreating content
@@ -829,7 +841,7 @@ return <StringEditDrawer {...drawer} />;
   - 🔵 **Blue "Existing variable" tag** = Clear indication of reused variables
 - **✅ Mixed Spawn Management**: Seamlessly supports combinations of new spawns and existing variables in the same conditional
 - **✅ Backend Integration**: Enhanced `stringOperations.ts` with `_isExisting` flag handling to prevent modification of original variables
-- **✅ Dimension Value Creation**: Automatically creates dimension values for existing variables just like new spawns
+- **✅ Spawn Relationship Creation**: Automatically creates spawn relationships for existing variables just like new spawns
 - **✅ Both Workflows**: Available for both creating new conditional variables and editing existing ones
 - **✅ Unified Architecture**: Integrated into the single `StringEditDrawer` component without creating duplicates
 
@@ -839,28 +851,28 @@ return <StringEditDrawer {...drawer} />;
 
 ### Recent Major Updates (Latest)
 
-#### "Show Variables" Toggle & Dimension-Based Spawn Selection
+#### "Show Variables" Toggle & Spawn-Based Content Selection
 - **"Show variables" toggle button** in canvas header (inactive by default, orange styling when active)
 - **Dynamic conditional resolution**: When toggle is OFF, shows actual spawn content instead of variable badges
-- **Real-time dimension control**: Selecting different dimension values changes displayed content instantly
+- **Real-time spawn control**: Selecting different spawn variables changes displayed content instantly
 - **Two display modes**:
   - Toggle OFF: Shows resolved content (e.g., "My favorite color is blue")
   - Toggle ON: Shows variable structure with orange badges (e.g., "My favorite color is {{color}}")
 
-#### Always-Selected Dimensions System
-- **Automatic default selection**: Each dimension always has one value selected (uses first value as default)
-- **No deselection allowed**: Removed X buttons, users can only switch between dimension values
-- **Streamlined filtering**: All strings always visible, dimensions control spawn resolution only
+#### Always-Selected Spawn System
+- **Automatic default selection**: Each conditional variable always has one spawn selected (uses first spawn as default)
+- **No deselection allowed**: Removed X buttons, users can only switch between spawn variables
+- **Streamlined filtering**: All strings always visible, spawn selection controls content resolution only
 - **Improved UX**: Consistent state, no confusing "nothing selected" scenarios
 
 #### Enhanced Cascading Drawer System
 - **Fixed conditional creation**: Proper handling of new vs existing strings in cascading drawers
-- **Robust spawn management**: Added existence checks to prevent dimension value conflicts
+- **Robust spawn management**: Added existence checks to prevent spawn relationship conflicts
 - **Variable name population**: Advanced tab now shows current variable names for existing variables
 - **Unified interface**: Consistent select dropdown for String/Conditional mode across all drawer types
 
 #### Technical Improvements
-- **Dimension-spawn lookup**: Fixed spawn content resolution using variable name matching
+- **Spawn content resolution**: Fixed spawn content resolution using variable name matching
 - **Uniqueness constraint handling**: Prevents "fields must make a unique set" errors when adding spawns
 - **Temporary string detection**: Proper POST vs PATCH API calls for new vs existing strings
 - **Advanced tab fixes**: Variable name field now pre-populated with effective_variable_name/variable_hash

@@ -4798,6 +4798,7 @@ export default function ProjectDetailPage() {
               <div className="space-y-4 ml-6">
                   {conditionalVariables.map((conditionalVar: any) => {
                     const conditionalName = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
+                    const conditionalDisplayName = conditionalVar.display_name || conditionalName;
                     
                     // Find spawns for this conditional variable using multiple methods
                     const dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
@@ -4870,7 +4871,7 @@ export default function ProjectDetailPage() {
                   className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1 cursor-pointer"
                             onClick={() => mainDrawer.openEditDrawer(conditionalVar)}
                 >
-                            <h3 className="font-medium text-sm">{conditionalName}</h3>
+                            <h3 className="font-medium text-sm">{conditionalDisplayName}</h3>
                   <div className="flex items-center gap-2">
                     <Button
                       variant="ghost"
@@ -4890,8 +4891,9 @@ export default function ProjectDetailPage() {
                         {/* Spawn Variables (Children) */}
               <div className="flex flex-wrap gap-2">
                           {spawnOptions.map((spawn: any) => {
-                            const spawnName = spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash;
-                            const isSelected = selectedConditionalSpawns[conditionalName] === spawnName;
+                            const spawnHash = spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash;
+                            const spawnDisplayName = spawn.display_name || spawnHash;
+                            const isSelected = selectedConditionalSpawns[conditionalName] === spawnHash;
                   
                   if (isSelected) {
                               // Selected spawn badge (no close button - always one selected)
@@ -4900,7 +4902,7 @@ export default function ProjectDetailPage() {
                                   key={spawn.id}
                         className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors bg-blue-100 border-blue-300 text-blue-800"
                       >
-                                  <span>{spawnName}</span>
+                                  <span>{spawnDisplayName}</span>
                       </div>
                     );
                   } else {
@@ -4912,10 +4914,10 @@ export default function ProjectDetailPage() {
                         className="text-xs transition-colors hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 active:bg-blue-100 cursor-pointer"
                                   onClick={() => setSelectedConditionalSpawns(prev => ({
                           ...prev,
-                                    [conditionalName]: spawnName
+                          [conditionalName]: spawnHash
                         }))}
                       >
-                                  {spawnName}
+                                  {spawnDisplayName}
                       </Badge>
                     );
                   }
@@ -5106,6 +5108,8 @@ export default function ProjectDetailPage() {
         onContentChange={mainDrawer.updateContent}
         variableName={mainDrawer.variableName}
         onVariableNameChange={mainDrawer.updateVariableName}
+        displayName={mainDrawer.displayName}
+        onDisplayNameChange={mainDrawer.updateDisplayName}
         isConditional={mainDrawer.isConditional}
         onTypeChange={mainDrawer.updateType}
         conditionalSpawns={mainDrawer.conditionalSpawns}

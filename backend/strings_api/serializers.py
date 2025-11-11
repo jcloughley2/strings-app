@@ -9,28 +9,18 @@ class StringSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = String
-        fields = ['id', 'content', 'project', 'variable_name', 'variable_hash', 'effective_variable_name', 'is_conditional', 'is_conditional_container', 'dimension_values', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'variable_hash', 'effective_variable_name', 'created_at', 'updated_at']
+        fields = ['id', 'content', 'project', 'variable_name', 'variable_hash', 'display_name', 'effective_variable_name', 'is_conditional', 'is_conditional_container', 'dimension_values', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'variable_name', 'variable_hash', 'effective_variable_name', 'created_at', 'updated_at']
     
     def get_dimension_values(self, obj):
         return StringDimensionValueSerializer(obj.dimension_values.all(), many=True).data
 
     def validate(self, data):
-        # Check for duplicate variable names within the same project if variable_name is provided
-        variable_name = data.get('variable_name')
+        # Note: variable_name is now auto-generated from display_name in the model's save() method
+        # No need to validate variable_name here as it's read-only
+        
         project = data.get('project')
         content = data.get('content', '')
-        
-        if variable_name and project:
-            # For updates, exclude the current instance
-            queryset = String.objects.filter(variable_name=variable_name, project=project)
-            if self.instance:
-                queryset = queryset.exclude(id=self.instance.id)
-            
-            if queryset.exists():
-                raise serializers.ValidationError({
-                    'variable_name': f'A string variable with the name "{variable_name}" already exists in this project.'
-                })
         
         # Check for circular references in string variables
         if content and project:

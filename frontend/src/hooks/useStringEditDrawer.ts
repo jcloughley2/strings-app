@@ -10,6 +10,7 @@ export interface DrawerState {
   // Form state
   content: string;
   variableName: string;
+  displayName: string;
   isConditional: boolean;
   conditionalSpawns: any[];
   includeHiddenOption: boolean;
@@ -48,6 +49,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     stringData: null,
     content: '',
     variableName: '',
+    displayName: '',
     isConditional: false,
     conditionalSpawns: [],
     includeHiddenOption: false,
@@ -67,6 +69,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
       stringData: null,
       content: options.content || '',
       variableName: '',
+      displayName: '',
       isConditional: options.isConditional || false,
       conditionalSpawns: options.isConditional ? [{
         id: `temp-${Date.now()}`,
@@ -134,6 +137,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
       stringData,
       content: stringData.content || '',
       variableName: stringData.effective_variable_name || stringData.variable_hash || stringData.variable_name || '',
+      displayName: stringData.display_name || '',
       isConditional: stringData.is_conditional_container || false,
       conditionalSpawns: spawns,
       includeHiddenOption: hasHiddenOption,
@@ -158,6 +162,10 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
 
   const updateVariableName = useCallback((variableName: string) => {
     setState(prev => ({ ...prev, variableName }));
+  }, []);
+
+  const updateDisplayName = useCallback((displayName: string) => {
+    setState(prev => ({ ...prev, displayName }));
   }, []);
 
   const updateType = useCallback((isConditional: boolean) => {
@@ -314,6 +322,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
         stringData: state.stringData,
         content: state.content,
         variableName: state.variableName,
+        displayName: state.displayName,
         isConditional: state.isConditional,
         projectId: project?.id,
         conditionalSpawns: state.conditionalSpawns,
@@ -365,6 +374,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     closeDrawer,
     updateContent,
     updateVariableName,
+    updateDisplayName,
     updateType,
     updateConditionalSpawns,
     updateHiddenOption,

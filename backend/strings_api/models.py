@@ -5,6 +5,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
+from slugify import slugify
 
 class Project(models.Model):
     name = models.CharField(max_length=200)
@@ -22,6 +23,8 @@ class String(models.Model):
     # Every string is now automatically a variable with either a hash or custom name
     variable_name = models.CharField(max_length=100, blank=True, null=True)
     variable_hash = models.CharField(max_length=6, blank=True)
+    # Human-readable display name (optional, separate from identifier)
+    display_name = models.CharField(max_length=200, blank=True, null=True)
     is_conditional = models.BooleanField(default=False)
     # Add explicit field to identify conditionals (directory containers)
     is_conditional_container = models.BooleanField(default=False)
@@ -33,13 +36,39 @@ class String(models.Model):
         ordering = ['-created_at']  # Newest first by default
 
     def save(self, *args, **kwargs):
-        # Generate hash for new strings if not provided
+        # Auto-generate variable_name from display_name using slugify
+        if self.display_name and self.display_name.strip():
+            # Generate slug from display_name
+            base_slug = slugify(self.display_name, max_length=50)
+            self.variable_name = self.generate_unique_slug(base_slug)
+        elif not self.variable_name:
+            # No display_name provided, use random hash as variable_name
+            self.variable_name = self.generate_unique_hash()
+        
+        # Always keep variable_hash as a fallback (for backward compatibility)
         if not self.variable_hash:
             self.variable_hash = self.generate_unique_hash()
+            
         super().save(*args, **kwargs)
 
+    def generate_unique_slug(self, base_slug):
+        """Generate a unique slug from the base slug, adding numbers if needed"""
+        slug = base_slug
+        counter = 1
+        
+        # Check if slug is unique within the project
+        while String.objects.filter(
+            project=self.project,
+            variable_name=slug
+        ).exclude(id=self.id).exists():
+            # Append counter to make it unique
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+        
+        return slug
+
     def generate_unique_hash(self):
-        """Generate a unique 6-character hash for this string"""
+        """Generate a unique 6-character random hash for this string"""
         while True:
             # Generate 6-character hash using uppercase letters and numbers
             hash_chars = string.ascii_uppercase + string.digits

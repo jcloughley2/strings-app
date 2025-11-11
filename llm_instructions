@@ -66,7 +66,10 @@ Let's say I have the sentence "My favorite color is `{{color-option}}`". If opti
 ### Core Models
 1. **Project**: Container for all content (name, description, user)
 2. **String**: The "file" system - every string is automatically a variable
-   - Fields: content, project, variable_name (optional), variable_hash (auto), is_conditional, is_conditional_container
+   - Fields: content, project, display_name (optional), variable_name (auto-generated), variable_hash (auto-fallback), is_conditional, is_conditional_container
+   - **Display Name**: Human-readable name (e.g., "Welcome Message")
+   - **Variable Name**: Auto-generated slug from display_name (e.g., "welcome-message") or random hash if no display_name
+   - **Variable Hash**: 6-character fallback identifier (e.g., "A7B2K9")
    - **Effective Variable Name**: Returns variable_name || variable_hash
    - **Conditional Variables**: Containers that hold multiple spawn variables
    - **Spawn Variables**: Individual variations within a conditional variable
@@ -224,10 +227,23 @@ Nested String 2 (Same Component, Stacked)
 - `POST /api/projects/{id}/duplicate/` - Duplicate project with all content
 
 ### Strings (Core API)
-- `POST /api/strings/` - Create string (auto-variable)
-- `PATCH /api/strings/{id}/` - Update string  
+- `POST /api/strings/` - Create string (auto-generates variable_name from display_name using slugify)
+- `PATCH /api/strings/{id}/` - Update string (auto-updates variable_name if display_name changes)
 - `DELETE /api/strings/{id}/` - Delete string
 - `POST /api/strings/{id}/duplicate/` - Duplicate string (preserves embedded variable references)
+
+**String Creation/Update Payload**:
+```json
+{
+  "content": "String content here",
+  "display_name": "Welcome Message",  // Optional - generates slug: "welcome-message"
+  "is_conditional": false,
+  "is_conditional_container": false,
+  "project": 1
+}
+// Note: variable_name is auto-generated (read-only) from display_name
+// If no display_name provided, uses random 6-char hash
+```
 
 ### Other Entities
 - All entities support embedding `{{variableName}}` in content fields
@@ -872,7 +888,20 @@ return <StringEditDrawer {...drawer} />;
 
 ### Recent Major Updates (Latest)
 
-#### String Duplication Feature (January 2025) ⭐ **NEWEST**
+#### Slugify-Based Variable Naming System (January 2025) ⭐ **NEWEST**
+- **Automatic Hash Generation**: Variable hashes are now auto-generated from display names using python-slugify
+- **Human-Readable Identifiers**: Names like "Welcome Message" automatically become `{{welcome-message}}`
+- **No Manual Hash Editing**: Users can no longer manually edit hashes - they're derived from names
+- **Smart Fallback**: If no display name is provided, uses random 6-character hash (e.g., `{{A7B2K9}}`)
+- **Uniqueness Handling**: Automatically appends `-1`, `-2`, etc. for duplicate names within a project
+- **Display Name Field**: New optional field for human-readable labels separate from identifiers
+- **Filter Sidebar Enhancement**: Shows display names for both conditional and spawn variables
+- **Short & Sweet**: Slugs optimized for brevity while maintaining name recognition (max 50 chars)
+- **Backend**: Uses `python-slugify` package with `generate_unique_slug()` method
+- **Frontend**: Live preview shows generated hash as user types display name
+- **Read-Only Hash Display**: Advanced tab shows current hash and fallback hash (non-editable)
+
+#### String Duplication Feature (January 2025) ⭐
 - **One-Click Duplication**: Added "Duplicate string" option to each string's overflow menu (three-dot menu)
 - **Variable Reference Preservation**: Duplicated strings maintain all embedded variable references (`{{variableName}}`)
 - **No Variable Duplication**: Embedded variables are referenced, not copied - both original and duplicate point to same variables

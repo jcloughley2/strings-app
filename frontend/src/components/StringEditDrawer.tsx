@@ -11,6 +11,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Spool, Folder, ArrowLeft, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
+// Simple slugify function for preview
+function slugify(text: string): string {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')        // Replace spaces with -
+    .replace(/[^\w\-]+/g, '')    // Remove all non-word chars
+    .replace(/\-\-+/g, '-')      // Replace multiple - with single -
+    .replace(/^-+/, '')          // Trim - from start of text
+    .replace(/-+$/, '')          // Trim - from end of text
+    .substring(0, 50);           // Limit length
+}
+
 export interface StringEditDrawerProps {
   // Core state
   isOpen: boolean;
@@ -25,6 +39,9 @@ export interface StringEditDrawerProps {
   
   variableName: string;
   onVariableNameChange: (name: string) => void;
+  
+  displayName: string;
+  onDisplayNameChange: (name: string) => void;
   
   // Type and conditional state
   isConditional: boolean;
@@ -75,6 +92,8 @@ export function StringEditDrawer({
   onContentChange,
   variableName,
   onVariableNameChange,
+  displayName,
+  onDisplayNameChange,
   isConditional,
   onTypeChange,
   conditionalSpawns,
@@ -599,25 +618,43 @@ export function StringEditDrawer({
             <TabsContent value="advanced" className="space-y-4">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="variableName">Variable Name</Label>
+                  <Label htmlFor="displayName">Variable Name</Label>
                   <Input
-                    id="variableName"
-                    value={variableName}
-                    onChange={(e) => onVariableNameChange(e.target.value)}
-                    placeholder="Enter custom variable name (optional)"
+                    id="displayName"
+                    value={displayName}
+                    onChange={(e) => onDisplayNameChange(e.target.value)}
+                    placeholder="Enter a descriptive name (e.g., Welcome Message)"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Leave empty to use auto-generated hash
+                    {displayName ? 
+                      `Will create hash: {{${slugify(displayName)}}}` : 
+                      "Leave empty to use random hash"
+                    }
                   </p>
                 </div>
                 
                 {stringData && (
-                  <div className="space-y-2">
-                    <Label>Variable Hash</Label>
-                    <div className="text-sm text-muted-foreground font-mono">
-                      {stringData.variable_hash}
+                  <>
+                    <div className="space-y-2">
+                      <Label>Variable Hash (Identifier)</Label>
+                      <div className="text-sm font-mono bg-muted px-3 py-2 rounded-md">
+                        {`{{${stringData.effective_variable_name || stringData.variable_hash}}}`}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Use this identifier to reference this variable in other strings
+                      </p>
                     </div>
-                  </div>
+                    
+                    <div className="space-y-2">
+                      <Label>Fallback Hash</Label>
+                      <div className="text-sm text-muted-foreground font-mono">
+                        {stringData.variable_hash}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Auto-generated 6-character backup identifier
+                      </p>
+                    </div>
+                  </>
                 )}
               </div>
             </TabsContent>

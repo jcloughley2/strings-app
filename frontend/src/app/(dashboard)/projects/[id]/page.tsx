@@ -4896,29 +4896,48 @@ export default function ProjectDetailPage() {
                             const isSelected = selectedConditionalSpawns[conditionalName] === spawnHash;
                   
                   if (isSelected) {
-                              // Selected spawn badge (no close button - always one selected)
+                              // Selected spawn badge with edit icon
                     return (
                       <div
                                   key={spawn.id}
-                        className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors bg-blue-100 border-blue-300 text-blue-800"
+                        className="group inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors bg-blue-100 border-blue-300 text-blue-800"
                       >
                                   <span>{spawnDisplayName}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            mainDrawer.openEditDrawer(spawn);
+                          }}
+                          className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-200 rounded p-0.5"
+                          aria-label="Edit spawn variable"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </button>
                       </div>
                     );
                   } else {
-                              // Unselected spawn badge - clicking switches selection
+                              // Unselected spawn badge with edit icon
                     return (
-                      <Badge
+                      <div
                                   key={spawn.id}
-                        variant="outline"
-                        className="text-xs transition-colors hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 active:bg-blue-100 cursor-pointer"
-                                  onClick={() => setSelectedConditionalSpawns(prev => ({
+                        className="group inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs transition-colors hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 cursor-pointer"
+                        onClick={() => setSelectedConditionalSpawns(prev => ({
                           ...prev,
                           [conditionalName]: spawnHash
                         }))}
                       >
-                                  {spawnDisplayName}
-                      </Badge>
+                                  <span>{spawnDisplayName}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            mainDrawer.openEditDrawer(spawn);
+                          }}
+                          className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-100 rounded p-0.5"
+                          aria-label="Edit spawn variable"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     );
                   }
                 })}

@@ -110,6 +110,12 @@ Let's say I have the sentence "My favorite color is `{{color-option}}`". If opti
 
 ### Layout (Three Panels)
 - **Left**: Filter Sidebar (360px) - conditional variables and spawn selection
+  - **Conditional Variables**: Listed with display names, hover to reveal edit pencil icon
+  - **Spawn Variables**: Tag-style badges with hover-triggered edit icons
+    - Click tag → Select/deselect spawn
+    - Click pencil icon → Edit spawn variable
+    - Selected spawns: Blue background
+    - Unselected spawns: Outline style
 - **Center**: Main Canvas - all strings including conditionals and embedded strings, orange/purple badges
   - **Canvas Settings Button**: Opens right-hand drawer with display and filtering options
   - **New String Button**: Creates new strings or conditional variables
@@ -888,7 +894,19 @@ return <StringEditDrawer {...drawer} />;
 
 ### Recent Major Updates (Latest)
 
-#### Slugify-Based Variable Naming System (January 2025) ⭐ **NEWEST**
+#### Filter Sidebar Spawn Edit Icons (January 2025) ⭐ **NEWEST**
+- **Quick Edit Access**: Added edit pencil icons to spawn variable tags in filter sidebar
+- **Hover-Triggered Visibility**: Icons hidden by default, appear on hover with smooth transition
+- **Preserved Layout**: Icon space reserved even when hidden to prevent tag width changes
+- **Smart Click Handling**: 
+  - Click pencil icon → Opens edit drawer for spawn variable
+  - Click tag elsewhere → Selects/deselects spawn (existing behavior)
+- **Consistent Styling**: Works for both selected (blue) and unselected (outline) spawn tags
+- **Stop Propagation**: Prevents tag selection when clicking edit icon
+- **Accessibility**: Includes aria-label for screen readers
+- **Small & Unobtrusive**: 3x3 icon size with subtle hover effects
+
+#### Slugify-Based Variable Naming System (January 2025) ⭐
 - **Automatic Hash Generation**: Variable hashes are now auto-generated from display names using python-slugify
 - **Human-Readable Identifiers**: Names like "Welcome Message" automatically become `{{welcome-message}}`
 - **No Manual Hash Editing**: Users can no longer manually edit hashes - they're derived from names

@@ -227,6 +227,7 @@ Nested String 2 (Same Component, Stacked)
 - `POST /api/strings/` - Create string (auto-variable)
 - `PATCH /api/strings/{id}/` - Update string  
 - `DELETE /api/strings/{id}/` - Delete string
+- `POST /api/strings/{id}/duplicate/` - Duplicate string (preserves embedded variable references)
 
 ### Other Entities
 - All entities support embedding `{{variableName}}` in content fields
@@ -871,7 +872,18 @@ return <StringEditDrawer {...drawer} />;
 
 ### Recent Major Updates (Latest)
 
-#### Canvas Settings Drawer Implementation (January 2025) ⭐ **NEWEST**
+#### String Duplication Feature (January 2025) ⭐ **NEWEST**
+- **One-Click Duplication**: Added "Duplicate string" option to each string's overflow menu (three-dot menu)
+- **Variable Reference Preservation**: Duplicated strings maintain all embedded variable references (`{{variableName}}`)
+- **No Variable Duplication**: Embedded variables are referenced, not copied - both original and duplicate point to same variables
+- **New Unique Identifier**: Each duplicate gets a new auto-generated hash (e.g., ABC123 → XYZ789)
+- **Conditional Support**: Works with both string variables and conditional variables (including spawn relationships)
+- **Toast Notifications**: Shows "Duplicating string..." during process and "String duplicated successfully!" on completion
+- **Overflow Menu Enhancement**: Added Copy icon to duplicate option, Trash2 icon to delete option for consistency
+- **Backend Endpoint**: `POST /api/strings/{id}/duplicate/` creates new string with preserved content and relationships
+- **Instant UI Update**: Automatically refreshes project data to display the new duplicate in canvas
+
+#### Canvas Settings Drawer Implementation (January 2025) ⭐
 - **Consolidated Display Controls**: Moved "Plaintext" and "Show variables" toggles from canvas header to dedicated right-hand drawer
 - **Canvas Settings Button**: Added "Canvas settings" button with Settings icon to canvas header (left of "New String")
 - **Three Display Modes**: 
@@ -1014,6 +1026,7 @@ async function syncDimensionValuesForSpawns(dimension, spawns, conditionalName) 
 - ✅ **Auto-Repair**: Conditional container flag detection and fixing
 - ✅ **Automatic Variable Creation**: New embedded variables automatically created when parent string is saved
 - ✅ **String Deletion**: Restored delete functionality with single, clean confirmation modal
+- ✅ **String Duplication**: One-click duplication preserving embedded variable references without duplicating the variables themselves
 - ✅ **Variable Detection UI**: Yellow (new) and purple (existing) badges display below content textarea
 - ✅ **Conditional Resolution**: Embedded conditional variables resolve to active spawn content in canvas
 - ✅ **Badge Styling**: Orange badges for conditional variables, purple badges for string variables

@@ -183,7 +183,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Project.objects.filter(user=self.request.user)
+        return Project.objects.filter(user=self.request.user).order_by('-created_at')
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -434,7 +434,33 @@ class StringViewSet(viewsets.ModelViewSet):
             raise serializers.ValidationError({'project': 'Project not found or you do not have permission to add strings to it.'})
         serializer.save()
 
-
+    @action(detail=True, methods=['post'], url_path='duplicate')
+    def duplicate(self, request, pk=None):
+        """
+        Duplicate a string, preserving its content (including embedded variable references)
+        but generating a new hash. Does NOT duplicate embedded variables.
+        """
+        original_string = self.get_object()
+        
+        # Create a new string with the same content and properties
+        new_string = String.objects.create(
+            content=original_string.content,
+            project=original_string.project,
+            variable_name=None,  # Don't copy variable_name, let it generate a new hash
+            is_conditional=original_string.is_conditional,
+            is_conditional_container=original_string.is_conditional_container
+        )
+        
+        # Copy dimension_values relationships
+        for sdv in original_string.dimension_values.all():
+            StringDimensionValue.objects.create(
+                string=new_string,
+                dimension=sdv.dimension,
+                dimension_value=sdv.dimension_value
+            )
+        
+        serializer = self.get_serializer(new_string)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 

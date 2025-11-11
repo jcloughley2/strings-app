@@ -1203,6 +1203,7 @@ export default function ProjectDetailPage() {
     
     if (isPlaintextMode) {
       // Plaintext Mode: Show variable content without any styling, hide conditionals with "hidden" or no spawns
+      console.log(`🔄 PLAINTEXT MODE: Processing content: "${content}"`);
       const variablePattern = /\{\{([^}]+)\}\}/g;
       let finalContent = content;
       
@@ -1218,44 +1219,83 @@ export default function ProjectDetailPage() {
           str.effective_variable_name === variableName
         );
         
+        console.log(`🔍 Plaintext processing variable: ${variableName}`, {
+          match,
+          stringVariable: stringVariable ? {
+            id: stringVariable.id,
+            is_conditional_container: stringVariable.is_conditional_container,
+            effective_variable_name: stringVariable.effective_variable_name,
+            variable_hash: stringVariable.variable_hash
+          } : null
+        });
+        
         if (stringVariable) {
           if (stringVariable.is_conditional_container) {
             // Handle conditional variables in plaintext mode
             const conditionalName = stringVariable.effective_variable_name || stringVariable.variable_hash;
+            
+            // NEW: Use selectedConditionalSpawns instead of selectedDimensionValues
+            const selectedSpawnName = selectedConditionalSpawns[conditionalName];
+            
+            console.log(`🎯 Processing conditional: ${conditionalName}`, {
+              selectedSpawnName,
+              selectedConditionalSpawns
+            });
+            
+            // If "Hidden" is selected, remove completely in plaintext mode
+            if (selectedSpawnName === "Hidden") {
+              console.log(`❌ Hidden selected for ${conditionalName}, removing`);
+              finalContent = finalContent.replace(match, '');
+              return;
+            }
+            
+            // Find spawns for this conditional using the same method as filter sidebar
             const dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
             
-            if (!dimension) {
-              // No dimension, remove the variable completely
-              finalContent = finalContent.replace(match, '');
-              return;
-            }
-            
-            const selectedValue = selectedDimensionValues[dimension.id];
-            
-            // If "Hidden" is selected or no spawns exist, remove completely in plaintext mode
-            if (selectedValue === "Hidden") {
-              finalContent = finalContent.replace(match, '');
-              return;
-            }
-            
-            // Find spawns for this conditional
-            const spawns = project?.strings?.filter((str: any) => 
+            // Method 1: Use dimension_values relationship (existing spawns)
+            const spawnsViaDimension = dimension ? project?.strings?.filter((str: any) => 
               !str.is_conditional_container && 
               str.dimension_values?.some((dv: any) => dv.dimension === dimension.id)
-            ) || [];
+            ) || [] : [];
+            
+            // Method 2: Find spawns by naming pattern (fallback for newly created spawns)
+            const spawnsByPattern = project?.strings?.filter((str: any) => {
+              if (str.is_conditional_container) return false;
+              const strName = str.effective_variable_name || str.variable_hash;
+              // Check if this string name appears as a dimension value for this conditional
+              return dimension?.values?.some((dv: any) => dv.value === strName);
+            }) || [];
+            
+            // Combine both methods and remove duplicates
+            const allSpawns = [...spawnsViaDimension, ...spawnsByPattern];
+            const spawns = allSpawns.filter((spawn, index, self) => 
+              index === self.findIndex(s => s.id === spawn.id)
+            );
+            
+            console.log(`🔍 Found spawns for ${conditionalName}:`, {
+              dimension: dimension ? { id: dimension.id, name: dimension.name } : null,
+              spawnsCount: spawns.length,
+              spawns: spawns.map(s => ({
+                id: s.id,
+                effective_variable_name: s.effective_variable_name,
+                variable_hash: s.variable_hash,
+                content: s.content?.substring(0, 50) + '...'
+              }))
+            });
             
             if (spawns.length === 0) {
               // No spawns, remove completely
+              console.log(`❌ No spawns found for ${conditionalName}, removing`);
               finalContent = finalContent.replace(match, '');
               return;
             }
             
-            // Find active spawn
+            // Find active spawn using selectedConditionalSpawns
             let activeSpawn = null;
-            if (selectedValue) {
+            if (selectedSpawnName) {
               activeSpawn = spawns.find((spawn: any) => {
-                const spawnName = spawn.effective_variable_name || spawn.variable_hash;
-                return spawnName === selectedValue;
+                const spawnName = spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash;
+                return spawnName === selectedSpawnName;
               });
             }
             
@@ -1263,13 +1303,25 @@ export default function ProjectDetailPage() {
               activeSpawn = spawns[0];
             }
             
+            console.log(`🎯 Active spawn for ${conditionalName}:`, {
+              selectedSpawnName,
+              activeSpawn: activeSpawn ? {
+                id: activeSpawn.id,
+                effective_variable_name: activeSpawn.effective_variable_name,
+                variable_hash: activeSpawn.variable_hash,
+                content: activeSpawn.content
+              } : null
+            });
+            
             if (activeSpawn && activeSpawn.content) {
               // Replace with spawn content (recursively processed)
               const spawnContent = renderContentRecursively(activeSpawn.content, depth + 1, `${keyPrefix}${variableName}-`);
               const contentString = spawnContent.map(part => typeof part === 'string' ? part : '').join('');
+              console.log(`✅ Replacing ${match} with: "${contentString}"`);
               finalContent = finalContent.replace(match, contentString);
             } else {
               // Empty spawn content, remove completely
+              console.log(`❌ No active spawn content for ${conditionalName}, removing`);
               finalContent = finalContent.replace(match, '');
             }
           } else {
@@ -1778,6 +1830,33 @@ export default function ProjectDetailPage() {
     } catch (error) {
       console.error('Failed to delete string:', error);
       toast.error('Failed to delete string');
+    }
+  };
+
+  // String duplication handler
+  const handleDuplicateString = async (str: any) => {
+    if (!str || !str.id) return;
+
+    try {
+      toast.loading('Duplicating string...');
+      
+      // Call the duplicate endpoint
+      const duplicatedString = await apiFetch(`/api/strings/${str.id}/duplicate/`, {
+        method: 'POST',
+      });
+
+      // Refresh project data to show the new string
+      if (project?.id) {
+        const updatedProject = await apiFetch(`/api/projects/${project.id}/`);
+        setProject(updatedProject);
+      }
+
+      toast.dismiss();
+      toast.success('String duplicated successfully!');
+    } catch (err: any) {
+      console.error('Failed to duplicate string:', err);
+      toast.dismiss();
+      toast.error(err.message || 'Failed to duplicate string');
     }
   };
 
@@ -4767,13 +4846,29 @@ export default function ProjectDetailPage() {
                       });
                     }
                     
+                    // Ensure there's always a default selection if spawns exist
+                    const currentSelection = selectedConditionalSpawns[conditionalName];
+                    if (spawnOptions.length > 0 && !currentSelection) {
+                      // Set default selection to first spawn
+                      const firstSpawn = spawnOptions[0];
+                      const firstSpawnName = firstSpawn.effective_variable_name || firstSpawn.variable_name || firstSpawn.variable_hash;
+                      
+                      // Use setTimeout to avoid state update during render
+                      setTimeout(() => {
+                        setSelectedConditionalSpawns(prev => ({
+                          ...prev,
+                          [conditionalName]: firstSpawnName
+                        }));
+                      }, 0);
+                    }
+                    
                     return (
                       <div key={conditionalVar.id} className="space-y-3">
                         {/* Conditional Variable Header */}
               <div className="flex items-center justify-between group">
                 <div 
                   className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1 cursor-pointer"
-                            onClick={() => mainDrawer.openDrawer(conditionalVar)}
+                            onClick={() => mainDrawer.openEditDrawer(conditionalVar)}
                 >
                             <h3 className="font-medium text-sm">{conditionalName}</h3>
                   <div className="flex items-center gap-2">
@@ -4783,7 +4878,7 @@ export default function ProjectDetailPage() {
                       className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
                       onClick={(e) => {
                         e.stopPropagation();
-                                  mainDrawer.openDrawer(conditionalVar);
+                                  mainDrawer.openEditDrawer(conditionalVar);
                       }}
                     >
                       <Edit2 className="h-3 w-3" />
@@ -4929,7 +5024,8 @@ export default function ProjectDetailPage() {
                         ) : renderStyledContent(str.content, str.variables || [], str.id)
                         }
                         </div>
-                        {/* Variable hash/name display */}
+                        {/* Variable hash/name display - hidden in plaintext mode */}
+                        {!isPlaintextMode && (
                         <div className="mt-2 flex items-center gap-2">
                           <Badge
                             variant="outline"
@@ -4951,6 +5047,7 @@ export default function ProjectDetailPage() {
                             {`{{${str.effective_variable_name || str.variable_hash}}}`}
                           </Badge>
                         </div>
+                        )}
                       </div>
                       <div className="flex gap-1 shrink-0">
                         <DropdownMenu>
@@ -4967,10 +5064,21 @@ export default function ProjectDetailPage() {
                             <DropdownMenuItem
                               onClick={(e) => {
                                 e.stopPropagation();
+                                handleDuplicateString(str);
+                              }}
+                            >
+                              <Copy className="h-4 w-4 mr-2" />
+                              Duplicate string
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 openDeleteStringDialog(str);
                               }}
                               className="text-red-600 focus:text-red-600"
                             >
+                              <Trash2 className="h-4 w-4 mr-2" />
                               Delete string
                             </DropdownMenuItem>
                           </DropdownMenuContent>

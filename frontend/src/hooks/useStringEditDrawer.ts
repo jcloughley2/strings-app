@@ -235,6 +235,16 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     }));
   }, []);
 
+  // Update spawn in conditional
+  const updateSpawn = useCallback((index: number, updatedSpawn: any) => {
+    setState(prev => ({
+      ...prev,
+      conditionalSpawns: prev.conditionalSpawns.map((spawn, i) => 
+        i === index ? updatedSpawn : spawn
+      )
+    }));
+  }, []);
+
   // Remove spawn from conditional
   const removeSpawn = useCallback((spawn: any, index: number) => {
     setState(prev => ({
@@ -390,6 +400,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     updateControlledBySpawnId,
     updateTab,
     addSpawn,
+    updateSpawn,
     removeSpawn,
     addExistingVariableAsSpawn,
     save,

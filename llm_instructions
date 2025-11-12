@@ -218,6 +218,14 @@ Nested String 2 (Same Component, Stacked)
 
 #### Conditional Mode Features
 - **Spawn Variables**: Yellow boxes (new/temporary), purple boxes (existing string variables), orange boxes (existing conditional variables)
+- **Inline Spawn Editing** ⭐ **NEW**: Edit spawn names and content directly within conditional variable drawer
+  - **Variable Name Input**: Always visible for all spawn types (triggers slugify on save)
+  - **Content Textarea**: Visible for string variables only (3 rows, resizable)
+  - **Conditional Spawns**: Show name input + edit button to open full drawer
+  - **Real-time Updates**: Changes reflected immediately in state
+  - **Batch Save**: All spawn edits saved together when parent conditional is saved
+  - **Slugify Integration**: Names automatically converted to URL-friendly identifiers
+  - **Filter Sidebar Sync**: Tags update to show new slugified names after save
 - **Add New Spawn Button**: Creates new spawn with random hash naming
 - **Add Existing Variable as Spawn**: Autocomplete search to reuse existing variables as spawns
   - Real-time filtering by variable name
@@ -911,7 +919,44 @@ return <StringEditDrawer {...drawer} />;
 
 ### Recent Major Updates (Latest)
 
-#### Conditions Tab in Edit Drawer (January 2025) ⭐ **NEWEST**
+#### Inline Spawn Editing Feature (January 2025) ⭐ **NEWEST**
+- **Direct Editing**: Edit spawn variable names and content directly within conditional variable drawer
+- **UI Implementation**:
+  - **Variable Name Input**: Always visible for all spawn types (string and conditional)
+  - **Content Textarea**: Only visible for string variables (3 rows, auto-resizing)
+  - **Conditional Spawns**: Show name input + blue edit button to open full drawer
+  - **Action Buttons**: Hover-triggered edit (blue) and remove (red) buttons in top-right
+  - **Visual Hierarchy**: Header with icon/badges, then inline fields, then action buttons
+- **Smart Behavior**:
+  - **String Spawns**: Full inline editing (name + content)
+  - **Conditional Spawns**: Name editing only + edit button for complex spawn management
+  - **Existing Variables**: Pre-populate with current `display_name` and `content`
+  - **New Spawns**: Start with empty fields ready for input
+- **Backend Integration**:
+  - **Slugify Support**: Names automatically converted to URL-friendly `variable_name` via python-slugify
+  - **Signal Handling**: Django signals automatically sync dimension values when names change
+  - **Graceful Errors**: Frontend handles "Not found" errors when backend pre-emptively updates dimension values
+- **Save Flow**:
+  1. User edits spawn name/content inline
+  2. `onUpdateSpawn` updates state immediately
+  3. User clicks "Save" on parent conditional
+  4. All spawns saved with `display_name` (triggers slugify)
+  5. Backend returns updated spawns with new `variable_name`
+  6. Dimension values sync (with "Not found" error handling)
+  7. Filter sidebar tags update to show new slugified names
+- **Technical Details**:
+  - **Component**: `StringEditDrawer.tsx` - Added inline input/textarea fields
+  - **Hook**: `useStringEditDrawer.ts` - Added `updateSpawn` function
+  - **Save Logic**: `stringOperations.ts` - Changed spawn payload to use `display_name` instead of `variable_name`
+  - **Error Handling**: Added graceful handling for 404 errors during dimension value cleanup
+- **User Benefits**:
+  - ✅ Faster workflow - no separate drawers for each spawn
+  - ✅ Better overview - see all spawn names/content at once
+  - ✅ Batch editing - edit multiple spawns before saving
+  - ✅ Consistent UX - same slugify behavior as main variable editing
+  - ✅ Filter sync - tags automatically update with new names
+
+#### Conditions Tab in Edit Drawer (January 2025) ⭐
 - **Tab Renamed**: "Dimensions" tab renamed to "Conditions" for clarity
 - **Parent Conditional Display**: Shows all conditional variables that use the current variable as a spawn
 - **Helper Text**: Clear explanation of what the tab shows

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Spool, Folder, ArrowLeft, Search, X } from "lucide-react";
+import { Plus, Spool, Folder, ArrowLeft, Search, X, Edit2 } from "lucide-react";
 import { toast } from "sonner";
 
 // Simple slugify function for preview
@@ -74,6 +74,7 @@ export interface StringEditDrawerProps {
   onVariableClick?: (variableName: string, isExisting: boolean) => void;
   onAddSpawn?: () => void;
   onEditSpawn?: (spawn: any) => void;
+  onUpdateSpawn?: (index: number, updatedSpawn: any) => void;
   onRemoveSpawn?: (spawn: any, index: number) => void;
   onEditVariable?: (variableName: string) => void;
   onAddExistingVariableAsSpawn?: (variableId: string) => void;
@@ -115,6 +116,7 @@ export function StringEditDrawer({
   onCancel,
   onAddSpawn,
   onEditSpawn,
+  onUpdateSpawn,
   onRemoveSpawn,
   onEditVariable,
   onAddExistingVariableAsSpawn,
@@ -467,14 +469,10 @@ export function StringEditDrawer({
                         return (
                           <div 
                             key={spawn.id || `spawn-${index}`} 
-                            className={`border rounded-lg p-4 hover:bg-muted/30 transition-colors group relative ${bgClass}`}
+                            className={`border rounded-lg p-4 transition-colors group relative ${bgClass}`}
                           >
-                            {/* Main content area - clickable for editing */}
-                            <div 
-                              className="cursor-pointer"
-                              onClick={() => onEditSpawn?.(spawn)}
-                            >
-                              <div className="flex items-center gap-2 mb-2">
+                            {/* Header with icon and badges */}
+                            <div className="flex items-center gap-2 mb-3">
                                 <div className={`flex items-center gap-1 p-1 rounded ${iconBgClass}`}>
                                   <IconComponent className="h-3 w-3" />
                                 </div>
@@ -492,19 +490,74 @@ export function StringEditDrawer({
                                   </Badge>
                                 )}
                               </div>
-                              {!isTemporary && (
-                                <p className="text-sm text-muted-foreground line-clamp-2">
-                                  {spawn.content || "Empty content"}
+                            
+                            {/* Inline editing fields */}
+                            <div className="space-y-3">
+                              {/* Display Name field - always shown */}
+                              <div className="space-y-1">
+                                <Label htmlFor={`spawn-name-${index}`} className="text-xs">
+                                  Variable Name
+                                </Label>
+                                <Input
+                                  id={`spawn-name-${index}`}
+                                  value={spawn.display_name || ''}
+                                  onChange={(e) => onUpdateSpawn?.(index, { ...spawn, display_name: e.target.value })}
+                                  placeholder="Enter variable name"
+                                  className="h-8 text-sm"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                              
+                              {/* Content field - only for string variables (not conditionals) */}
+                              {!isConditionalSpawn && (
+                                <div className="space-y-1">
+                                  <Label htmlFor={`spawn-content-${index}`} className="text-xs">
+                                    Content
+                                  </Label>
+                                  <Textarea
+                                    id={`spawn-content-${index}`}
+                                    value={spawn.content || ''}
+                                    onChange={(e) => onUpdateSpawn?.(index, { ...spawn, content: e.target.value })}
+                                    placeholder="Enter spawn content"
+                                    rows={3}
+                                    className="text-sm resize-none"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </div>
+                              )}
+                              
+                              {/* Read-only message for conditional spawns */}
+                              {isConditionalSpawn && (
+                                <p className="text-xs text-muted-foreground italic">
+                                  This is a conditional variable. Click the edit icon to modify its spawns.
                                 </p>
                               )}
                             </div>
                             
-                            {/* Remove button - visible on hover */}
+                            {/* Action buttons in top-right */}
+                            <div className="absolute top-2 right-2 flex items-center gap-1">
+                              {/* Edit button - opens full drawer for conditionals */}
+                              {isConditionalSpawn && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onEditSpawn?.(spawn);
+                                  }}
+                                  title={`Edit conditional variable ${spawnVariableName}`}
+                                >
+                                  <Edit2 className="h-3 w-3" />
+                                </Button>
+                              )}
+                              
+                              {/* Remove button */}
                             {onRemoveSpawn && (
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="absolute top-2 right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700"
+                                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   onRemoveSpawn(spawn, index);
@@ -514,6 +567,7 @@ export function StringEditDrawer({
                                 <X className="h-3 w-3" />
                               </Button>
                             )}
+                            </div>
                           </div>
                         );
                       })}

@@ -431,6 +431,66 @@ export default function ProjectDetailPage() {
     setSelectedStringIds(new Set());
   }, [selectedDimensionValues]);
 
+  // Auto-select controlled spawns when their controller is selected
+  useEffect(() => {
+    if (!project?.strings) return;
+    
+    const controllingMap = getControllingSpawnMap();
+    const { controllerToControlled } = controllingMap;
+    
+    // Build a map of what should be selected based on controllers
+    const autoSelections: {[conditionalName: string]: string} = {};
+    
+    // For each currently selected spawn, check if it controls other spawns
+    Object.entries(selectedConditionalSpawns).forEach(([conditionalName, selectedSpawnName]) => {
+      if (!selectedSpawnName) return;
+      
+      // Find the selected spawn's ID
+      const selectedSpawn = project.strings.find((s: any) => 
+        (s.effective_variable_name === selectedSpawnName || s.variable_hash === selectedSpawnName)
+      );
+      
+      if (!selectedSpawn) return;
+      
+      // Check if this spawn controls other spawns
+      const controlledSpawnIds = controllerToControlled.get(selectedSpawn.id);
+      if (!controlledSpawnIds) return;
+      
+      // For each controlled spawn, find its conditional and auto-select it
+      controlledSpawnIds.forEach((controlledId: number) => {
+        const controlledSpawn = project.strings.find((s: any) => s.id === controlledId);
+        if (!controlledSpawn) return;
+        
+        const controlledSpawnName = controlledSpawn.effective_variable_name || controlledSpawn.variable_hash;
+        
+        // Find which conditional this controlled spawn belongs to
+        project.dimensions?.forEach((dimension: any) => {
+          const isSpawnOfThisDimension = dimension.values?.some((dv: any) => 
+            dv.value === controlledSpawnName && dv.value !== "Hidden"
+          );
+          
+          if (isSpawnOfThisDimension) {
+            autoSelections[dimension.name] = controlledSpawnName;
+          }
+        });
+      });
+    });
+    
+    // Only apply auto-selections if they differ from current selections
+    if (Object.keys(autoSelections).length > 0) {
+      const hasChanges = Object.entries(autoSelections).some(
+        ([conditionalName, spawnName]) => selectedConditionalSpawns[conditionalName] !== spawnName
+      );
+      
+      if (hasChanges) {
+        setSelectedConditionalSpawns(prev => ({
+          ...prev,
+          ...autoSelections
+        }));
+      }
+    }
+  }, [selectedConditionalSpawns, project?.strings]);
+
   // Detect new variables in string content and add them as pending variables
   useEffect(() => {
     if (!stringContent.trim()) {
@@ -896,6 +956,91 @@ export default function ProjectDetailPage() {
     }
     
     return embeddedIds;
+  };
+
+  // Helper function to build controlling spawn relationships
+  const getControllingSpawnMap = () => {
+    if (!project?.strings) return { controllerToControlled: new Map(), controlledToController: new Map() };
+    
+    const controllerToControlled = new Map<number, number[]>(); // controller spawn ID -> array of controlled spawn IDs
+    const controlledToController = new Map<number, number>(); // controlled spawn ID -> controller spawn ID
+    
+    project.strings.forEach((str: any) => {
+      if (str.controlled_by_spawn_id) {
+        // This spawn is controlled by another spawn
+        controlledToController.set(str.id, str.controlled_by_spawn_id);
+        
+        // Add to controller's list of controlled spawns
+        if (!controllerToControlled.has(str.controlled_by_spawn_id)) {
+          controllerToControlled.set(str.controlled_by_spawn_id, []);
+        }
+        controllerToControlled.get(str.controlled_by_spawn_id)!.push(str.id);
+      }
+    });
+    
+    return { controllerToControlled, controlledToController };
+  };
+
+  // Helper function to check if a spawn should be auto-selected due to controller
+  const shouldAutoSelectSpawn = (spawnId: number, controllingMap: ReturnType<typeof getControllingSpawnMap>) => {
+    const { controlledToController } = controllingMap;
+    const controllerId = controlledToController.get(spawnId);
+    
+    if (!controllerId) return false;
+    
+    // Check if the controller spawn is currently selected
+    const controllerSpawn = project?.strings?.find((s: any) => s.id === controllerId);
+    if (!controllerSpawn) return false;
+    
+    const controllerName = controllerSpawn.effective_variable_name || controllerSpawn.variable_hash;
+    
+    // Find which conditional the controller belongs to
+    for (const [conditionalName, selectedSpawnName] of Object.entries(selectedConditionalSpawns)) {
+      if (selectedSpawnName === controllerName) {
+        return true; // Controller is selected, so this spawn should be auto-selected
+      }
+    }
+    
+    return false;
+  };
+
+  // Helper function to check if a spawn should be disabled (sibling of controlled spawn)
+  const shouldDisableSpawn = (spawnId: number, conditionalName: string, controllingMap: ReturnType<typeof getControllingSpawnMap>) => {
+    const { controlledToController } = controllingMap;
+    
+    // Find all spawns for this conditional
+    const dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
+    if (!dimension) return false;
+    
+    const spawnsForConditional = project?.strings?.filter((str: any) => {
+      if (str.is_conditional_container) return false;
+      const spawnName = str.effective_variable_name || str.variable_hash;
+      return dimension.values?.some((dv: any) => dv.value === spawnName && dv.value !== "Hidden");
+    }) || [];
+    
+    // Check if any sibling spawn is controlled and its controller is active
+    for (const siblingSpawn of spawnsForConditional) {
+      if (siblingSpawn.id === spawnId) continue; // Skip self
+      
+      const siblingControllerId = controlledToController.get(siblingSpawn.id);
+      if (siblingControllerId) {
+        // This sibling is controlled - check if its controller is active
+        const controllerSpawn = project?.strings?.find((s: any) => s.id === siblingControllerId);
+        if (controllerSpawn) {
+          const controllerName = controllerSpawn.effective_variable_name || controllerSpawn.variable_hash;
+          
+          // Check if controller is selected in any conditional
+          for (const selectedSpawnName of Object.values(selectedConditionalSpawns)) {
+            if (selectedSpawnName === controllerName) {
+              // Controller is active, so this spawn should be disabled
+              return true;
+            }
+          }
+        }
+      }
+    }
+    
+    return false;
   };
 
   // Show all strings with optional filtering for embedded strings and string type
@@ -4896,21 +5041,35 @@ export default function ProjectDetailPage() {
                             const spawnHash = spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash;
                             const spawnDisplayName = spawn.display_name || spawnHash;
                             const isSelected = selectedConditionalSpawns[conditionalName] === spawnHash;
+                            
+                            // Check if this spawn should be disabled due to controlling logic
+                            const controllingMap = getControllingSpawnMap();
+                            const isControlled = shouldAutoSelectSpawn(spawn.id, controllingMap);
+                            const isDisabled = shouldDisableSpawn(spawn.id, conditionalName, controllingMap);
                   
                   if (isSelected) {
                               // Selected spawn badge with edit icon
                     return (
                       <div
                                   key={spawn.id}
-                        className="group inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors bg-blue-100 border-blue-300 text-blue-800"
+                        className={`group inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors ${
+                          isControlled 
+                            ? 'bg-green-100 border-green-300 text-green-800' 
+                            : 'bg-blue-100 border-blue-300 text-blue-800'
+                        }`}
                       >
                                   <span>{spawnDisplayName}</span>
+                                  {isControlled && (
+                                    <span className="text-[10px] opacity-70">(auto)</span>
+                                  )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             mainDrawer.openEditDrawer(spawn);
                           }}
-                          className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-200 rounded p-0.5"
+                          className={`ml-1 opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 ${
+                            isControlled ? 'hover:bg-green-200' : 'hover:bg-blue-200'
+                          }`}
                           aria-label="Edit spawn variable"
                         >
                           <Edit2 className="h-3 w-3" />
@@ -4922,19 +5081,32 @@ export default function ProjectDetailPage() {
                     return (
                       <div
                                   key={spawn.id}
-                        className="group inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs transition-colors hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 cursor-pointer"
-                        onClick={() => setSelectedConditionalSpawns(prev => ({
+                        className={`group inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors ${
+                          isDisabled
+                            ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                            : 'border-input hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 cursor-pointer'
+                        }`}
+                        onClick={() => {
+                          if (!isDisabled) {
+                            setSelectedConditionalSpawns(prev => ({
                           ...prev,
-                          [conditionalName]: spawnHash
-                        }))}
+                              [conditionalName]: spawnHash
+                            }));
+                          }
+                        }}
                       >
                                   <span>{spawnDisplayName}</span>
+                                  {isDisabled && (
+                                    <span className="text-[10px] opacity-70">(locked)</span>
+                                  )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             mainDrawer.openEditDrawer(spawn);
                           }}
-                          className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-100 rounded p-0.5"
+                          className={`ml-1 opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 ${
+                            isDisabled ? 'hover:bg-gray-100' : 'hover:bg-blue-100'
+                          }`}
                           aria-label="Edit spawn variable"
                         >
                           <Edit2 className="h-3 w-3" />
@@ -5145,6 +5317,8 @@ export default function ProjectDetailPage() {
         onConditionalSpawnsChange={mainDrawer.updateConditionalSpawns}
         includeHiddenOption={mainDrawer.includeHiddenOption}
         onHiddenOptionChange={mainDrawer.updateHiddenOption}
+        controlledBySpawnId={mainDrawer.controlledBySpawnId}
+        onControlledBySpawnIdChange={mainDrawer.updateControlledBySpawnId}
         activeTab={mainDrawer.activeTab}
         onTabChange={mainDrawer.updateTab}
         project={project}

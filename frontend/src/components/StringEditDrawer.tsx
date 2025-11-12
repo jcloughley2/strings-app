@@ -53,6 +53,10 @@ export interface StringEditDrawerProps {
   includeHiddenOption: boolean;
   onHiddenOptionChange: (include: boolean) => void;
   
+  // Controlling condition state
+  controlledBySpawnId: number | null;
+  onControlledBySpawnIdChange: (spawnId: number | null) => void;
+  
   // Tab state
   activeTab: string;
   onTabChange: (tab: string) => void;
@@ -100,6 +104,8 @@ export function StringEditDrawer({
   onConditionalSpawnsChange,
   includeHiddenOption,
   onHiddenOptionChange,
+  controlledBySpawnId,
+  onControlledBySpawnIdChange,
   activeTab,
   onTabChange,
   project,
@@ -122,6 +128,10 @@ export function StringEditDrawer({
   // State for adding existing variables as spawns
   const [existingVariableSearch, setExistingVariableSearch] = useState("");
   const [showExistingVariableResults, setShowExistingVariableResults] = useState(false);
+  
+  // State for controlling spawn selector
+  const [controllingSpawnSearch, setControllingSpawnSearch] = useState("");
+  const [isControllingConditionEnabled, setIsControllingConditionEnabled] = useState(false);
   
   // Detect variables in content for display
   const detectVariables = (content: string) => {
@@ -340,7 +350,7 @@ export function StringEditDrawer({
                         {/* Search Results Dropdown */}
                         {showExistingVariableResults && availableVariablesForSpawn.length > 0 && (
                           <div className="absolute top-full left-0 w-full mt-1 bg-background border rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
-                            {availableVariablesForSpawn.slice(0, 8).map((variable) => (
+                            {availableVariablesForSpawn.slice(0, 8).map((variable: any) => (
                               <div
                                 key={variable.id}
                                 className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"
@@ -607,8 +617,162 @@ export function StringEditDrawer({
             </TabsContent>
 
             {/* Conditions Tab */}
-            <TabsContent value="dimensions" className="space-y-4">
-              <div className="space-y-4">
+            <TabsContent value="dimensions" className="space-y-6">
+              <div className="space-y-6">
+                {/* Controlling Condition Section */}
+                {(() => {
+                  const currentVarName = stringData?.effective_variable_name || stringData?.variable_name || stringData?.variable_hash;
+                  const currentStringId = stringData?.id;
+                  
+                  // Check if this variable is a spawn for any conditional
+                  const isSpawn = currentVarName && project?.strings?.some((str: any) => {
+                    if (!str.is_conditional_container) return false;
+                    const conditionalName = str.effective_variable_name || str.variable_hash;
+                    const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
+                    return dimension?.values?.some((dv: any) => dv.value === currentVarName);
+                  });
+
+                  if (!isSpawn) return null;
+
+                  // Build grouped spawn list for dropdown
+                  const groupedSpawns: {conditionalName: string; conditionalDisplayName: string; spawns: any[]}[] = [];
+                  
+                  project?.strings?.forEach((str: any) => {
+                    if (!str.is_conditional_container) return;
+                    
+                    const conditionalName = str.effective_variable_name || str.variable_hash;
+                    const conditionalDisplayName = str.display_name || conditionalName;
+                    const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
+                    
+                    if (!dimension) return;
+                    
+                    // Find spawns for this conditional
+                    const spawns = project.strings.filter((spawnStr: any) => {
+                      if (spawnStr.is_conditional_container) return false;
+                      const spawnName = spawnStr.effective_variable_name || spawnStr.variable_hash;
+                      return dimension.values?.some((dv: any) => dv.value === spawnName && dv.value !== "Hidden");
+                    });
+                    
+                    if (spawns.length > 0) {
+                      groupedSpawns.push({
+                        conditionalName,
+                        conditionalDisplayName,
+                        spawns
+                      });
+                    }
+                  });
+                  
+                  // Filter by search
+                  const filteredGroups = groupedSpawns.map(group => ({
+                    ...group,
+                    spawns: group.spawns.filter(spawn => {
+                      const spawnDisplayName = spawn.display_name || spawn.effective_variable_name || spawn.variable_hash;
+                      return spawnDisplayName.toLowerCase().includes(controllingSpawnSearch.toLowerCase());
+                    })
+                  })).filter(group => group.spawns.length > 0);
+
+                  return (
+                    <div className="space-y-4 p-4 rounded-lg border bg-card">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-semibold">Controlling Condition</h3>
+                          <p className="text-xs text-muted-foreground">
+                            Link this spawn to another spawn variable. When the controlling spawn is selected, this spawn will also show.
+                          </p>
+                        </div>
+                        <Button
+                          variant={isControllingConditionEnabled ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            setIsControllingConditionEnabled(!isControllingConditionEnabled);
+                            if (isControllingConditionEnabled) {
+                              // Disable - clear the selection
+                              onControlledBySpawnIdChange(null);
+                            }
+                          }}
+                        >
+                          {isControllingConditionEnabled ? 'Enabled' : 'Enable'}
+                        </Button>
+                      </div>
+
+                      {/* Controlling Spawn Selector */}
+                      {isControllingConditionEnabled && (
+                        <div className="space-y-2">
+                          <Label>Select Controlling Spawn</Label>
+                          <div className="relative">
+                            <Input
+                              type="text"
+                              placeholder="Search for a spawn variable..."
+                              className="pr-10"
+                              value={controllingSpawnSearch}
+                              onChange={(e) => setControllingSpawnSearch(e.target.value)}
+                            />
+                            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          </div>
+                          
+                          {/* Grouped spawn list */}
+                          <div className="max-h-[300px] overflow-y-auto border rounded-md bg-background">
+                            {filteredGroups.length === 0 ? (
+                              <div className="p-4 text-center text-sm text-muted-foreground">
+                                No spawn variables found
+                              </div>
+                            ) : (
+                              <div className="py-1">
+                                {filteredGroups.map((group) => (
+                                  <div key={group.conditionalName}>
+                                    {/* Conditional Header */}
+                                    <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0 flex items-center gap-2">
+                                      <Folder className="h-3 w-3 text-orange-600" />
+                                      {group.conditionalDisplayName}
+                                    </div>
+                                    
+                                    {/* Spawns */}
+                                    {group.spawns.map((spawn) => {
+                                      const spawnDisplayName = spawn.display_name || spawn.effective_variable_name || spawn.variable_hash;
+                                      const isCurrentSpawn = spawn.id === currentStringId;
+                                      const isSelected = controlledBySpawnId === spawn.id;
+                                      
+                                      return (
+                                        <button
+                                          key={spawn.id}
+                                          disabled={isCurrentSpawn}
+                                          onClick={() => {
+                                            if (!isCurrentSpawn) {
+                                              onControlledBySpawnIdChange(spawn.id);
+                                            }
+                                          }}
+                                          className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between transition-colors ${
+                                            isCurrentSpawn
+                                              ? 'text-muted-foreground bg-muted/30 cursor-not-allowed'
+                                              : isSelected
+                                              ? 'bg-blue-50 text-blue-900 font-medium'
+                                              : 'hover:bg-muted/50'
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            <Spool className="h-3 w-3" />
+                                            <span>{spawnDisplayName}</span>
+                                          </div>
+                                          {isCurrentSpawn && (
+                                            <span className="text-xs text-muted-foreground">(current)</span>
+                                          )}
+                                          {isSelected && !isCurrentSpawn && (
+                                            <span className="text-xs text-blue-600">✓ Selected</span>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Helper Text */}
                 <div className="rounded-lg bg-muted/50 p-4">
                   <p className="text-sm text-muted-foreground">
@@ -645,7 +809,7 @@ export function StringEditDrawer({
 
                   if (parentConditionals.length === 0) {
                     return (
-                      <div className="text-center py-8 text-muted-foreground">
+              <div className="text-center py-8 text-muted-foreground">
                         <p className="text-sm">This variable is not currently used as a spawn for any conditional variables</p>
                       </div>
                     );
@@ -717,10 +881,10 @@ export function StringEditDrawer({
                       </p>
                     </div>
                     
-                    <div className="space-y-2">
+                  <div className="space-y-2">
                       <Label>Fallback Hash</Label>
-                      <div className="text-sm text-muted-foreground font-mono">
-                        {stringData.variable_hash}
+                    <div className="text-sm text-muted-foreground font-mono">
+                      {stringData.variable_hash}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         Auto-generated 6-character backup identifier

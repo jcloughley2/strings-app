@@ -14,6 +14,7 @@ export interface DrawerState {
   isConditional: boolean;
   conditionalSpawns: any[];
   includeHiddenOption: boolean;
+  controlledBySpawnId: number | null;
   activeTab: string;
   
   // UI state
@@ -53,6 +54,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     isConditional: false,
     conditionalSpawns: [],
     includeHiddenOption: false,
+    controlledBySpawnId: null,
     activeTab: 'content',
     isSaving: false,
   });
@@ -82,6 +84,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
         _isTemporary: true
       }] : [],
       includeHiddenOption: false,
+      controlledBySpawnId: null,
       activeTab: 'content',
       title: options.title,
       level: options.level || 0,
@@ -141,6 +144,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
       isConditional: stringData.is_conditional_container || false,
       conditionalSpawns: spawns,
       includeHiddenOption: hasHiddenOption,
+      controlledBySpawnId: stringData.controlled_by_spawn_id || null,
       activeTab: 'content',
       title: options.title,
       level: options.level || 0,
@@ -202,6 +206,10 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
 
   const updateHiddenOption = useCallback((includeHiddenOption: boolean) => {
     setState(prev => ({ ...prev, includeHiddenOption }));
+  }, []);
+
+  const updateControlledBySpawnId = useCallback((controlledBySpawnId: number | null) => {
+    setState(prev => ({ ...prev, controlledBySpawnId }));
   }, []);
 
   const updateTab = useCallback((activeTab: string) => {
@@ -327,6 +335,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
         projectId: project?.id,
         conditionalSpawns: state.conditionalSpawns,
         includeHiddenOption: state.includeHiddenOption,
+        controlledBySpawnId: state.controlledBySpawnId,
         project,
         onProjectUpdate,
         detectCircularReferences: (content: string, stringId?: string | number) => 
@@ -378,6 +387,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     updateType,
     updateConditionalSpawns,
     updateHiddenOption,
+    updateControlledBySpawnId,
     updateTab,
     addSpawn,
     removeSpawn,

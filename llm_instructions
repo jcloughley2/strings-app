@@ -66,13 +66,14 @@ Let's say I have the sentence "My favorite color is `{{color-option}}`". If opti
 ### Core Models
 1. **Project**: Container for all content (name, description, user)
 2. **String**: The "file" system - every string is automatically a variable
-   - Fields: content, project, display_name (optional), variable_name (auto-generated), variable_hash (auto-fallback), is_conditional, is_conditional_container
+   - Fields: content, project, display_name (optional), variable_name (auto-generated), variable_hash (auto-fallback), is_conditional, is_conditional_container, controlled_by_spawn (optional)
    - **Display Name**: Human-readable name (e.g., "Welcome Message")
    - **Variable Name**: Auto-generated slug from display_name (e.g., "welcome-message") or random hash if no display_name
    - **Variable Hash**: 6-character fallback identifier (e.g., "A7B2K9")
    - **Effective Variable Name**: Returns variable_name || variable_hash
    - **Conditional Variables**: Containers that hold multiple spawn variables
    - **Spawn Variables**: Individual variations within a conditional variable
+   - **Controlled By Spawn**: Optional ForeignKey to another spawn variable that controls this spawn's selection
 
 ### Key Relationships
 - Strings reference other strings via `{{variableName}}` embedding
@@ -203,6 +204,13 @@ Nested String 2 (Same Component, Stacked)
     - Helper text explaining the tab's purpose
     - List of parent conditionals with display names, hashes, and orange badges
     - Empty state when variable is not used as a spawn
+    - **Controlling Condition Feature** (for spawn variables only):
+      - Toggle to enable/disable controlling condition
+      - Dropdown to select another spawn variable as the controller
+      - Grouped list of all available spawns (organized by parent conditional)
+      - Type-ahead search filtering
+      - Current spawn is greyed out and disabled in the list
+      - When a controller spawn is selected in the filter sidebar, all controlled spawns auto-select
   - **Advanced Tab**: Variable naming, display name, and hash management
 - **Variable Name Display**: Shows at top with orange (conditional) or purple (string) badges
 - **ShadCN Integration**: Proper close button handling, no custom duplicates
@@ -253,6 +261,7 @@ Nested String 2 (Same Component, Stacked)
   "display_name": "Welcome Message",  // Optional - generates slug: "welcome-message"
   "is_conditional": false,
   "is_conditional_container": false,
+  "controlled_by_spawn_id": null,  // Optional - ID of controlling spawn variable
   "project": 1
 }
 // Note: variable_name is auto-generated (read-only) from display_name
@@ -1504,6 +1513,245 @@ if (!selectedSpawnName && dimension) {
 
 #### **Testing Focus**
 - Create new conditional variables with spawns
+- Test controlling condition relationships
+- Verify auto-selection and disabled states in filter sidebar
+
+---
+
+## Controlling Condition Feature
+
+### Overview
+The Controlling Condition feature allows spawn variables to be automatically selected based on the selection of another spawn variable (the "controller"). This creates dependent relationships between spawn variables across different conditional variables.
+
+### Use Case
+**Example**: You have a conditional variable `{{platform}}` with spawns `{{ios}}` and `{{android}}`. You also have a conditional variable `{{button-style}}` with spawns `{{ios-button}}` and `{{android-button}}`. By setting `{{ios}}` as the controller for `{{ios-button}}`, whenever the user selects `{{ios}}` in the filter sidebar, `{{ios-button}}` automatically gets selected for the `{{button-style}}` conditional.
+
+### Backend Implementation
+
+#### Database Model
+```python
+# backend/strings_api/models.py
+class String(models.Model):
+    # ... existing fields ...
+    controlled_by_spawn = models.ForeignKey(
+        'self', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='controls_spawns'
+    )
+```
+
+#### API Serializer
+```python
+# backend/strings_api/serializers.py
+class StringSerializer(serializers.ModelSerializer):
+    controlled_by_spawn_id = serializers.PrimaryKeyRelatedField(
+        source='controlled_by_spawn',
+        queryset=String.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    
+    class Meta:
+        fields = [..., 'controlled_by_spawn_id']
+```
+
+### Frontend Implementation
+
+#### Edit Drawer UI (Conditions Tab)
+**Location**: `frontend/src/components/StringEditDrawer.tsx`
+
+**Features**:
+1. **Toggle Switch**: Enable/disable controlling condition
+2. **Grouped Dropdown**: Lists all available spawn variables
+   - Organized by parent conditional variable (headers)
+   - Type-ahead search filtering
+   - Current spawn is greyed out and disabled
+   - Selected controller is highlighted in blue
+3. **Visual Feedback**: Icons and styling for clear UX
+
+**Code Pattern**:
+```typescript
+// State management
+const [isControllingConditionEnabled, setIsControllingConditionEnabled] = useState(false);
+const [controllingSpawnSearch, setControllingSpawnSearch] = useState('');
+
+// Props from hook
+controlledBySpawnId: number | null;
+onControlledBySpawnIdChange: (spawnId: number | null) => void;
+
+// Save to backend
+controlled_by_spawn_id: controlledBySpawnId || null
+```
+
+#### Filter Sidebar Logic
+**Location**: `frontend/src/app/(dashboard)/projects/[id]/page.tsx`
+
+**Helper Functions**:
+```javascript
+// Build bidirectional maps of controlling relationships
+const getControllingSpawnMap = () => {
+  const controllerToControlled = new Map<number, number[]>();
+  const controlledToController = new Map<number, number>();
+  
+  project.strings.forEach((str: any) => {
+    if (str.controlled_by_spawn_id) {
+      controlledToController.set(str.id, str.controlled_by_spawn_id);
+      if (!controllerToControlled.has(str.controlled_by_spawn_id)) {
+        controllerToControlled.set(str.controlled_by_spawn_id, []);
+      }
+      controllerToControlled.get(str.controlled_by_spawn_id)!.push(str.id);
+    }
+  });
+  
+  return { controllerToControlled, controlledToController };
+};
+
+// Check if spawn should be auto-selected
+const shouldAutoSelectSpawn = (spawnId: number, controllingMap) => {
+  const { controlledToController } = controllingMap;
+  const controllerId = controlledToController.get(spawnId);
+  
+  if (!controllerId) return false;
+  
+  // Check if controller is currently selected
+  const controllerSpawn = project.strings.find(s => s.id === controllerId);
+  const controllerName = controllerSpawn.effective_variable_name || controllerSpawn.variable_hash;
+  
+  return Object.values(selectedConditionalSpawns).includes(controllerName);
+};
+
+// Check if spawn should be disabled
+const shouldDisableSpawn = (spawnId: number, conditionalName: string, controllingMap) => {
+  // Check if any sibling spawn is controlled and its controller is active
+  // If yes, disable this spawn
+};
+```
+
+**Auto-Selection Logic**:
+```javascript
+useEffect(() => {
+  if (!project?.strings) return;
+  
+  const controllingMap = getControllingSpawnMap();
+  const { controllerToControlled } = controllingMap;
+  const autoSelections: {[conditionalName: string]: string} = {};
+  
+  // For each selected spawn, check if it controls other spawns
+  Object.entries(selectedConditionalSpawns).forEach(([conditionalName, selectedSpawnName]) => {
+    const selectedSpawn = project.strings.find(s => 
+      s.effective_variable_name === selectedSpawnName || s.variable_hash === selectedSpawnName
+    );
+    
+    const controlledSpawnIds = controllerToControlled.get(selectedSpawn.id);
+    if (!controlledSpawnIds) return;
+    
+    // Auto-select all controlled spawns
+    controlledSpawnIds.forEach(controlledId => {
+      const controlledSpawn = project.strings.find(s => s.id === controlledId);
+      const controlledSpawnName = controlledSpawn.effective_variable_name || controlledSpawn.variable_hash;
+      
+      // Find which conditional this controlled spawn belongs to
+      project.dimensions?.forEach(dimension => {
+        const isSpawnOfThisDimension = dimension.values?.some(dv => 
+          dv.value === controlledSpawnName && dv.value !== "Hidden"
+        );
+        
+        if (isSpawnOfThisDimension) {
+          autoSelections[dimension.name] = controlledSpawnName;
+        }
+      });
+    });
+  });
+  
+  // Only update if there are actual changes (prevents infinite loop)
+  if (Object.keys(autoSelections).length > 0) {
+    const hasChanges = Object.entries(autoSelections).some(
+      ([conditionalName, spawnName]) => selectedConditionalSpawns[conditionalName] !== spawnName
+    );
+    
+    if (hasChanges) {
+      setSelectedConditionalSpawns(prev => ({
+        ...prev,
+        ...autoSelections
+      }));
+    }
+  }
+}, [selectedConditionalSpawns, project?.strings]);
+```
+
+### Visual Indicators
+
+#### Filter Sidebar Spawn States
+1. **Normal Selected** (Blue):
+   - `bg-blue-100 border-blue-300 text-blue-800`
+   - User manually selected this spawn
+
+2. **Auto-Selected** (Green with "(auto)" label):
+   - `bg-green-100 border-green-300 text-green-800`
+   - Automatically selected due to controller being active
+   - Shows "(auto)" text indicator
+
+3. **Available** (White/Outline):
+   - `border-input hover:bg-blue-50`
+   - Can be clicked to select
+
+4. **Disabled/Locked** (Grey with "(locked)" label):
+   - `border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed`
+   - Cannot be clicked (sibling of controlled spawn with active controller)
+   - Shows "(locked)" text indicator
+   - Edit icon still works
+
+### Enforcement Rules
+
+1. **Rule 1 - Auto-Selection**: When controller spawn B is selected → controlled spawn A is FORCE-SELECTED
+2. **Rule 2 - Sibling Locking**: When spawn A is force-selected → its sibling spawns are DISABLED
+3. **Rule 3 - Click Prevention**: Disabled spawns cannot be clicked or manually selected
+4. **Rule 4 - Edit Preservation**: Edit icons work on all spawns (disabled or not)
+5. **Rule 5 - Content Control**: Controller determines what displays for all conditionals containing controlled spawns
+
+### User Workflow
+
+1. User creates spawn variable A (e.g., `{{ios-button}}`)
+2. User opens spawn A's edit drawer → Conditions tab
+3. User toggles "Enable Controlling Condition" to ON
+4. User searches and selects spawn variable B (e.g., `{{ios}}`) as the controller
+5. User saves the relationship
+6. **In Filter Sidebar**:
+   - When user selects `{{ios}}` → `{{ios-button}}` auto-selects (green, shows "(auto)")
+   - `{{android-button}}` (sibling of `{{ios-button}}`) becomes disabled (grey, shows "(locked)")
+   - User cannot click `{{android-button}}` but can still edit it
+7. **In Content Display**:
+   - All strings with `{{button-style}}` now show `{{ios-button}}` content
+   - This persists as long as `{{ios}}` is selected
+
+### Edge Cases Handled
+
+1. **Infinite Loop Prevention**: `hasChanges` check before updating state
+2. **Circular Dependencies**: Not explicitly prevented (user responsibility)
+3. **Controller Deletion**: `on_delete=models.SET_NULL` clears the relationship
+4. **Multiple Controllers**: Not supported (one spawn can only have one controller)
+5. **Controller is Controlled**: Allowed (creates chain relationships)
+
+### Performance Considerations
+
+- **Map Building**: O(n) where n = number of strings
+- **Auto-Selection Check**: O(m × k) where m = selected spawns, k = controlled spawns per controller
+- **Disabled State Check**: O(s) where s = spawns in conditional
+- **Optimization**: Maps are rebuilt on every render (acceptable for typical project sizes)
+
+### Testing Checklist
+
+- ✅ Create controlling relationship in edit drawer
+- ✅ Verify auto-selection when controller is selected
+- ✅ Verify sibling spawns get disabled
+- ✅ Verify disabled spawns cannot be clicked
+- ✅ Verify edit icons work on disabled spawns
+- ✅ Verify content displays correctly based on controlled spawn
+- ✅ Verify no infinite loops occur
+- ✅ Verify relationship persists after page reload
+- ✅ Delete controller and verify controlled spawn is unaffected (relationship cleared)
 - Verify spawns appear in filter sidebar
 - Test spawn selection changes content display
 - Ensure backward compatibility with existing projects

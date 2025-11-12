@@ -6,10 +6,16 @@ from django.db import models
 class StringSerializer(serializers.ModelSerializer):
     dimension_values = serializers.SerializerMethodField()
     effective_variable_name = serializers.ReadOnlyField()
+    controlled_by_spawn_id = serializers.PrimaryKeyRelatedField(
+        source='controlled_by_spawn',
+        queryset=String.objects.all(),
+        required=False,
+        allow_null=True
+    )
     
     class Meta:
         model = String
-        fields = ['id', 'content', 'project', 'variable_name', 'variable_hash', 'display_name', 'effective_variable_name', 'is_conditional', 'is_conditional_container', 'dimension_values', 'created_at', 'updated_at']
+        fields = ['id', 'content', 'project', 'variable_name', 'variable_hash', 'display_name', 'effective_variable_name', 'is_conditional', 'is_conditional_container', 'controlled_by_spawn_id', 'dimension_values', 'created_at', 'updated_at']
         read_only_fields = ['id', 'variable_name', 'variable_hash', 'effective_variable_name', 'created_at', 'updated_at']
     
     def get_dimension_values(self, obj):

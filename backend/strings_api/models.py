@@ -28,6 +28,8 @@ class String(models.Model):
     is_conditional = models.BooleanField(default=False)
     # Add explicit field to identify conditionals (directory containers)
     is_conditional_container = models.BooleanField(default=False)
+    # Controlling spawn: when this spawn is selected, the controlled spawn also shows
+    controlled_by_spawn = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='controls_spawns')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

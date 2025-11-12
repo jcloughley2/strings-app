@@ -300,7 +300,7 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             content: `Content for ${varName}`, // Default content
-            variable_name: varName,
+            display_name: varName, // Use display_name so backend can slugify it to create variable_name
             is_conditional: false,
             is_conditional_container: false,
             project: project.id,

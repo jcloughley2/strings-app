@@ -128,6 +128,8 @@ Let's say I have the sentence "My favorite color is `{{color-option}}`". If opti
 - **Plaintext Mode**: Show resolved content without styling or conditional variables
 - **Show Variables**: Display variable names as badges instead of resolved content  
 - **Hide Embedded Strings**: Hide strings that are used as variables or spawn variables in other strings
+- **Show Variable Names** (ON by default): Display the variable name (title/display_name) on each string card
+- **Show Variable Hashes** (OFF by default): Display the copiable variable hash badge on each string card
 
 #### String Type Filter Section
 - **Show All** (default): Display both string variables and conditional variables
@@ -462,7 +464,7 @@ if (conditionalVariable) {
     );
     
     if (spawnVariable) {
-      const regex = new RegExp(`{{${variableName}}}`, 'g');
+  const regex = new RegExp(`{{${variableName}}}`, 'g');
       const spawnContent = processConditionalVariables(spawnVariable.content || '');
       result = result.replace(regex, spawnContent);
     }
@@ -894,7 +896,38 @@ return <StringEditDrawer {...drawer} />;
 
 ### Recent Major Updates (Latest)
 
-#### Filter Sidebar Spawn Edit Icons (January 2025) ⭐ **NEWEST**
+#### Canvas Display Controls Enhancement (January 2025) ⭐ **NEWEST**
+- **Show Variable Names Toggle**: Added control to show/hide display names (titles) on string cards
+  - **Default**: ON (shown) - displays `display_name` above string content when set
+  - **Styling**: Semibold text above content for clear visual hierarchy
+  - **Smart Display**: Only shows when `display_name` exists
+  - **Icon**: Type icon with green toggle button
+- **Show Variable Hashes Toggle**: Added control to show/hide copiable hash badges
+  - **Default**: OFF (hidden) - cleaner interface without hash clutter
+  - **Functionality**: When enabled, shows clickable `{{variable-hash}}` badges
+  - **Colors**: Orange for conditionals, purple for strings
+  - **Icon**: Hash icon with purple toggle button
+- **Improved UX**: Cleaner default view with optional hash badges for power users
+- **Independent Controls**: Both toggles work independently and respect plaintext mode
+
+#### Embedded Variable Creation Fix (January 2025) ⭐
+- **Auto-Creation Fixed**: Embedded variables like `{{new-variable-1}}` now properly create and render
+- **Root Cause**: `createNewVariablesFromContent` was passing read-only `variable_name` field
+- **Solution**: Changed to pass `display_name` so backend can slugify to create correct identifier
+- **Purple Rendering**: Embedded variables now render with proper purple interactive treatment
+- **Hide Filter Works**: "Hide embedded strings" filter correctly detects auto-created variables
+- **Files Modified**: `frontend/src/hooks/useStringEditDrawer.ts`
+
+#### Empty Content Validation Fix (January 2025) ⭐
+- **User-Friendly Defaults**: Removed strict "Content cannot be empty" validation error
+- **Smart Fallbacks**: When content is empty, automatically uses:
+  1. Display name as content (if provided)
+  2. Variable name as content (if no display name)
+  3. "New string content" as last resort
+- **Better UX**: Users can create strings with just a title/name
+- **Files Modified**: `frontend/src/lib/stringOperations.ts`
+
+#### Filter Sidebar Spawn Edit Icons (January 2025) ⭐
 - **Quick Edit Access**: Added edit pencil icons to spawn variable tags in filter sidebar
 - **Hover-Triggered Visibility**: Icons hidden by default, appear on hover with smooth transition
 - **Preserved Layout**: Icon space reserved even when hidden to prevent tag width changes

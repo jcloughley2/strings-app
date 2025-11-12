@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 
 
-import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Globe, Settings, EyeOff, FileText, Filter } from "lucide-react";
+import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Globe, Settings, EyeOff, FileText, Filter, Hash } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -34,6 +34,8 @@ export default function ProjectDetailPage() {
   const [showVariableBadges, setShowVariableBadges] = useState(false);
   const [hideEmbeddedStrings, setHideEmbeddedStrings] = useState(false);
   const [stringTypeFilter, setStringTypeFilter] = useState<'all' | 'strings' | 'conditionals'>('all');
+  const [showVariableNames, setShowVariableNames] = useState(true); // Show display names by default
+  const [showVariableHashes, setShowVariableHashes] = useState(false); // Hide copiable hashes by default
   const [isStringDrawerOpen, setIsStringDrawerOpen] = useState(false);
   const [isCanvasSettingsOpen, setIsCanvasSettingsOpen] = useState(false);
   
@@ -5036,6 +5038,13 @@ export default function ProjectDetailPage() {
                       onClick={() => openEditInCascadingDrawer(str)}
                     >
                       <div className="flex-1">
+                        {/* Variable Name (Display Name) - shown when enabled */}
+                        {showVariableNames && str.display_name && (
+                          <div className="text-sm font-semibold text-foreground mb-2">
+                            {str.display_name}
+                          </div>
+                        )}
+                        
                         <div className={`font-medium text-base ${isPlaintextMode ? 'leading-normal' : 'leading-loose'}`}>
                         {str.is_conditional_container ? (
                           <div className="flex items-center gap-2 text-muted-foreground italic">
@@ -5045,8 +5054,9 @@ export default function ProjectDetailPage() {
                         ) : renderStyledContent(str.content, str.variables || [], str.id)
                         }
                         </div>
-                        {/* Variable hash/name display - hidden in plaintext mode */}
-                        {!isPlaintextMode && (
+                        
+                        {/* Variable hash badge - shown when enabled and not in plaintext mode */}
+                        {!isPlaintextMode && showVariableHashes && (
                         <div className="mt-2 flex items-center gap-2">
                           <Badge
                             variant="outline"
@@ -7458,6 +7468,56 @@ export default function ProjectDetailPage() {
                     }`}
                   >
                     {hideEmbeddedStrings ? 'On' : 'Off'}
+                  </Button>
+                </div>
+
+                {/* Show Variable Names Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Type className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Show Variable Names</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Display the variable name (title) on each string card
+                    </p>
+                  </div>
+                  <Button
+                    variant={showVariableNames ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowVariableNames(!showVariableNames)}
+                    className={`ml-4 ${
+                      showVariableNames 
+                        ? 'bg-green-500 hover:bg-green-600 text-white' 
+                        : 'hover:bg-muted'
+                    }`}
+                  >
+                    {showVariableNames ? 'On' : 'Off'}
+                  </Button>
+                </div>
+
+                {/* Show Variable Hashes Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Hash className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Show Variable Hashes</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Display the copiable variable hash badge on each string card
+                    </p>
+                  </div>
+                  <Button
+                    variant={showVariableHashes ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowVariableHashes(!showVariableHashes)}
+                    className={`ml-4 ${
+                      showVariableHashes 
+                        ? 'bg-purple-500 hover:bg-purple-600 text-white' 
+                        : 'hover:bg-muted'
+                    }`}
+                  >
+                    {showVariableHashes ? 'On' : 'Off'}
                   </Button>
                 </div>
               </div>

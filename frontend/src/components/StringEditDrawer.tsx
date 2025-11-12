@@ -259,7 +259,7 @@ export function StringEditDrawer({
             <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="content">Content</TabsTrigger>
-                <TabsTrigger value="dimensions">Dimensions</TabsTrigger>
+                <TabsTrigger value="dimensions">Conditions</TabsTrigger>
                 <TabsTrigger value="advanced">Advanced</TabsTrigger>
               </TabsList>
             </Tabs>
@@ -606,11 +606,83 @@ export function StringEditDrawer({
               )}
             </TabsContent>
 
-            {/* Dimensions Tab */}
+            {/* Conditions Tab */}
             <TabsContent value="dimensions" className="space-y-4">
-              <div className="text-center py-8 text-muted-foreground">
-                <p className="text-sm">Dimension management coming soon</p>
-                <p className="text-xs">This will show dimension assignments and filtering options</p>
+              <div className="space-y-4">
+                {/* Helper Text */}
+                <div className="rounded-lg bg-muted/50 p-4">
+                  <p className="text-sm text-muted-foreground">
+                    Below you will find all the conditional variables that this variable serves as a spawn for.
+                  </p>
+                </div>
+
+                {/* Parent Conditional Variables List */}
+                {(() => {
+                  // Find all conditional variables where this string is a spawn
+                  const currentVarName = stringData?.effective_variable_name || stringData?.variable_name || stringData?.variable_hash;
+                  
+                  if (!currentVarName || !project?.strings) {
+                    return (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <p className="text-sm">No parent conditional variables found</p>
+                      </div>
+                    );
+                  }
+
+                  // Find parent conditionals by checking dimension values
+                  const parentConditionals = project.strings.filter((str: any) => {
+                    if (!str.is_conditional_container) return false;
+                    
+                    // Check if this string is listed as a spawn for this conditional
+                    const conditionalName = str.effective_variable_name || str.variable_hash;
+                    const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
+                    
+                    if (!dimension) return false;
+                    
+                    // Check if current variable is in this dimension's values
+                    return dimension.values?.some((dv: any) => dv.value === currentVarName);
+                  });
+
+                  if (parentConditionals.length === 0) {
+                    return (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <p className="text-sm">This variable is not currently used as a spawn for any conditional variables</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                        Parent Conditional Variables ({parentConditionals.length})
+                      </h3>
+                      <div className="space-y-2">
+                        {parentConditionals.map((conditional: any) => {
+                          const conditionalDisplayName = conditional.display_name || conditional.effective_variable_name || conditional.variable_hash;
+                          const conditionalHash = conditional.effective_variable_name || conditional.variable_hash;
+                          
+                          return (
+                            <div
+                              key={conditional.id}
+                              className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Folder className="h-4 w-4 text-orange-600" />
+                                <div>
+                                  <p className="font-medium text-sm">{conditionalDisplayName}</p>
+                                  <p className="text-xs text-muted-foreground font-mono">{`{{${conditionalHash}}}`}</p>
+                                </div>
+                              </div>
+                              <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                                Conditional
+                              </Badge>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </TabsContent>
 

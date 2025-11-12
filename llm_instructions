@@ -197,7 +197,13 @@ Nested String 2 (Same Component, Stacked)
 - **Variable Type Selection**: Select dropdown for choosing String or Conditional mode
   - **String Mode**: Text content editing + variable detection boxes
   - **Conditional Mode**: Spawn management with yellow/purple variable boxes
-- **Three Main Tabs**: Content, Spawns, Advanced (consistent across all use cases)
+- **Three Main Tabs**: Content, Conditions, Advanced (consistent across all use cases)
+  - **Content Tab**: Main editing area with variable type selection and content/spawn management
+  - **Conditions Tab**: Shows all parent conditional variables that this variable serves as a spawn for
+    - Helper text explaining the tab's purpose
+    - List of parent conditionals with display names, hashes, and orange badges
+    - Empty state when variable is not used as a spawn
+  - **Advanced Tab**: Variable naming, display name, and hash management
 - **Variable Name Display**: Shows at top with orange (conditional) or purple (string) badges
 - **ShadCN Integration**: Proper close button handling, no custom duplicates
 - **Unified Save Logic**: Single save function handles all creation, updating, and conversion scenarios
@@ -896,7 +902,24 @@ return <StringEditDrawer {...drawer} />;
 
 ### Recent Major Updates (Latest)
 
-#### Canvas Display Controls Enhancement (January 2025) ⭐ **NEWEST**
+#### Conditions Tab in Edit Drawer (January 2025) ⭐ **NEWEST**
+- **Tab Renamed**: "Dimensions" tab renamed to "Conditions" for clarity
+- **Parent Conditional Display**: Shows all conditional variables that use the current variable as a spawn
+- **Helper Text**: Clear explanation of what the tab shows
+- **Visual Design**: 
+  - Orange folder icons for parent conditionals
+  - Display names with fallback to hashes
+  - Monospace hash display: `{{conditional-name}}`
+  - Orange "Conditional" badges
+  - Hover effects for better interactivity
+- **Smart Detection**: Automatically finds parent conditionals via dimension value relationships
+- **Empty States**: 
+  - "No parent conditional variables found" when editing new variables
+  - "Not currently used as a spawn" when variable has no parents
+- **Use Case**: Helps users understand where a variable is being used in the project
+- **Files Modified**: `frontend/src/components/StringEditDrawer.tsx`
+
+#### Canvas Display Controls Enhancement (January 2025) ⭐
 - **Show Variable Names Toggle**: Added control to show/hide display names (titles) on string cards
   - **Default**: ON (shown) - displays `display_name` above string content when set
   - **Styling**: Semibold text above content for clear visual hierarchy

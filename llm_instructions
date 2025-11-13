@@ -128,7 +128,7 @@ Let's say I have the sentence "My favorite color is `{{color-option}}`". If opti
 #### Display Mode Section
 - **Plaintext Mode**: Show resolved content without styling or conditional variables
 - **Show Variables**: Display variable names as badges instead of resolved content  
-- **Hide Embedded Strings**: Hide strings that are used as variables or spawn variables in other strings
+- **Hide Embedded Strings** (ON by default): Hide strings that are used as variables or spawn variables in other strings
 - **Show Variable Names** (ON by default): Display the variable name (title/display_name) on each string card
 - **Show Variable Hashes** (OFF by default): Display the copiable variable hash badge on each string card
 

@@ -57,6 +57,14 @@ export interface StringEditDrawerProps {
   controlledBySpawnId: number | null;
   onControlledBySpawnIdChange: (spawnId: number | null) => void;
   
+  // Embedded variable edits (local state)
+  embeddedVariableEdits: {[variableId: string]: {display_name?: string; content?: string}};
+  onEmbeddedVariableEditsChange: (edits: {[variableId: string]: {display_name?: string; content?: string}}) => void;
+  
+  // Pending variable content (for new variables detected in content)
+  pendingVariableContent: {[variableName: string]: string};
+  onPendingVariableContentChange: (content: {[variableName: string]: string}) => void;
+  
   // Tab state
   activeTab: string;
   onTabChange: (tab: string) => void;
@@ -107,6 +115,10 @@ export function StringEditDrawer({
   onHiddenOptionChange,
   controlledBySpawnId,
   onControlledBySpawnIdChange,
+  embeddedVariableEdits,
+  onEmbeddedVariableEditsChange,
+  pendingVariableContent,
+  onPendingVariableContentChange,
   activeTab,
   onTabChange,
   project,
@@ -595,62 +607,160 @@ export function StringEditDrawer({
                     />
                   </div>
 
-                  {/* Variable Detection and Display */}
+                  {/* Embedded Variables - Inline Editing */}
                   {(usedStringVariables.length > 0 || pendingVariablesInContent.length > 0) && (
                     <div className="space-y-3">
                       <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
-                        <span>Variables Used</span>
+                        <span>Embedded Variables</span>
                         <Badge variant="secondary" className="text-xs">
                           {usedStringVariables.length + pendingVariablesInContent.length}
                         </Badge>
                       </h4>
                       
                       <div className="grid gap-3">
-                        {/* Existing Variables */}
+                        {/* Existing Variables - Inline Editing */}
                         {usedStringVariables.map((stringVar: any) => {
                           const variableName = stringVar.effective_variable_name || stringVar.variable_hash;
+                          const isConditional = stringVar.is_conditional_container;
+                          
+                          // Get current edit state (local edits take precedence)
+                          const currentEdits = embeddedVariableEdits[stringVar.id] || {};
+                          const currentDisplayName = currentEdits.display_name !== undefined 
+                            ? currentEdits.display_name 
+                            : (stringVar.display_name || '');
+                          const currentContent = currentEdits.content !== undefined 
+                            ? currentEdits.content 
+                            : (stringVar.content || '');
+                          
+                          // Determine styling based on variable type
+                          let bgClass, borderClass, iconBgClass, badgeClass, IconComponent;
+                          
+                          if (isConditional) {
+                            bgClass = 'bg-orange-50/50 border-orange-200';
+                            iconBgClass = 'text-orange-600 bg-orange-50 border border-orange-200';
+                            badgeClass = 'bg-orange-50 text-orange-700 border-orange-200';
+                            IconComponent = Folder;
+                          } else {
+                            bgClass = 'bg-purple-50/50 border-purple-200';
+                            iconBgClass = 'text-purple-600 bg-purple-50 border border-purple-200';
+                            badgeClass = 'bg-purple-50 text-purple-700 border-purple-200';
+                            IconComponent = Spool;
+                          }
+                          
                           return (
                             <div 
                               key={stringVar.id} 
-                              className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer"
-                              onClick={() => onEditVariable?.(variableName)}
+                              className={`border rounded-lg p-4 transition-colors group relative ${bgClass}`}
                             >
-                              <div className="flex items-center gap-2 mb-2">
-                                {stringVar.is_conditional_container ? (
-                                  <div className="flex items-center gap-1 text-orange-600 bg-orange-50 p-1 rounded border border-orange-200">
-                                    <Folder className="h-3 w-3" />
+                              {/* Header with icon and badges */}
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className={`flex items-center gap-1 p-1 rounded ${iconBgClass}`}>
+                                  <IconComponent className="h-3 w-3" />
                                   </div>
-                                ) : (
-                                  <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
-                                    <Spool className="h-3 w-3" />
-                                  </div>
-                                )}
-                                <Badge 
-                                  variant="outline" 
-                                  className={`text-xs font-mono ${
-                                    stringVar.is_conditional_container 
-                                      ? 'bg-orange-50 text-orange-700 border-orange-200'
-                                      : 'bg-purple-50 text-purple-700 border-purple-200'
-                                  }`}
-                                >
+                                <Badge variant="outline" className={`text-xs font-mono ${badgeClass}`}>
                                   {`{{${variableName}}}`}
                                 </Badge>
+                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
+                                  Existing variable
+                                </Badge>
                               </div>
-                              <p className="text-sm text-muted-foreground line-clamp-2">
-                                {stringVar.content || "Empty content"}
-                              </p>
+                              
+                              {/* Inline editing fields */}
+                              <div className="space-y-3">
+                                {/* Display Name field - always shown */}
+                                <div className="space-y-1">
+                                  <Label htmlFor={`embedded-name-${stringVar.id}`} className="text-xs">
+                                    Variable Name
+                                  </Label>
+                                  <Input
+                                    id={`embedded-name-${stringVar.id}`}
+                                    value={currentDisplayName}
+                                    onChange={(e) => {
+                                      const newEdits = {
+                                        ...embeddedVariableEdits,
+                                        [stringVar.id]: {
+                                          ...currentEdits,
+                                          display_name: e.target.value
+                                        }
+                                      };
+                                      onEmbeddedVariableEditsChange(newEdits);
+                                    }}
+                                    placeholder="Enter variable name"
+                                    className="h-8 text-sm"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </div>
+                                
+                                {/* Content field - only for string variables (not conditionals) */}
+                                {!isConditional && (
+                                  <div className="space-y-1">
+                                    <Label htmlFor={`embedded-content-${stringVar.id}`} className="text-xs">
+                                      Content
+                                    </Label>
+                                    <Textarea
+                                      id={`embedded-content-${stringVar.id}`}
+                                      value={currentContent}
+                                      onChange={(e) => {
+                                        const newEdits = {
+                                          ...embeddedVariableEdits,
+                                          [stringVar.id]: {
+                                            ...currentEdits,
+                                            content: e.target.value
+                                          }
+                                        };
+                                        onEmbeddedVariableEditsChange(newEdits);
+                                      }}
+                                      placeholder="Enter variable content"
+                                      rows={3}
+                                      className="text-sm resize-none"
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                  </div>
+                                )}
+                                
+                                {/* Read-only message for conditional variables */}
+                                {isConditional && (
+                                  <p className="text-xs text-muted-foreground italic">
+                                    This is a conditional variable. Click the edit icon to modify its spawns.
+                                  </p>
+                                )}
+                              </div>
+                              
+                              {/* Action buttons in top-right */}
+                              <div className="absolute top-2 right-2 flex items-center gap-1">
+                                {/* Edit button - opens full drawer for conditionals */}
+                                {isConditional && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onEditVariable?.(variableName);
+                                    }}
+                                    title={`Edit conditional variable ${variableName}`}
+                                  >
+                                    <Edit2 className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
 
-                        {/* Pending Variables */}
-                        {pendingVariablesInContent.map((variableName) => (
+                        {/* Pending Variables - Inline Editing */}
+                        {pendingVariablesInContent.map((variableName) => {
+                          // Get pending variable data if it exists
+                          const pendingData = pendingStringVariables[variableName];
+                          const isConditional = pendingData?.is_conditional || false;
+                          
+                          return (
                           <div 
                             key={variableName} 
-                            className="border rounded-lg p-4 hover:bg-muted/30 transition-colors cursor-pointer bg-yellow-50/50 border-yellow-200"
-                            onClick={() => onEditVariable?.(variableName)}
+                              className="border rounded-lg p-4 transition-colors group relative bg-yellow-50/50 border-yellow-200"
                           >
-                            <div className="flex items-center gap-2">
+                              {/* Header with icon and badges */}
+                              <div className="flex items-center gap-2 mb-3">
                               <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 p-1 rounded border border-yellow-200">
                                 <Plus className="h-3 w-3" />
                               </div>
@@ -661,8 +771,63 @@ export function StringEditDrawer({
                                 New variable!
                               </Badge>
                             </div>
+                              
+                              {/* Inline editing fields */}
+                              <div className="space-y-3">
+                                {/* Display Name field - pre-filled with detected name */}
+                                <div className="space-y-1">
+                                  <Label htmlFor={`pending-name-${variableName}`} className="text-xs">
+                                    Variable Name
+                                  </Label>
+                                  <Input
+                                    id={`pending-name-${variableName}`}
+                                    value={variableName}
+                                    disabled
+                                    className="h-8 text-sm bg-muted"
+                                    title="Name is detected from content - edit in content field to change"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    This name comes from your content. Edit the {`{{${variableName}}}`} reference to change it.
+                                  </p>
                           </div>
-                        ))}
+                                
+                                {/* Content field - only for string variables */}
+                                {!isConditional && (
+                                  <div className="space-y-1">
+                                    <Label htmlFor={`pending-content-${variableName}`} className="text-xs">
+                                      Content (Optional)
+                                    </Label>
+                                    <Textarea
+                                      id={`pending-content-${variableName}`}
+                                      value={pendingVariableContent[variableName] || ''}
+                                      onChange={(e) => {
+                                        const newContent = {
+                                          ...pendingVariableContent,
+                                          [variableName]: e.target.value
+                                        };
+                                        onPendingVariableContentChange(newContent);
+                                      }}
+                                      placeholder="Enter content or leave blank for default"
+                                      rows={3}
+                                      className="text-sm resize-none"
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                      Leave blank to use default content. You can edit it later.
+                                    </p>
+                                  </div>
+                                )}
+                                
+                                {/* Info message for conditional pending variables */}
+                                {isConditional && (
+                                  <p className="text-xs text-muted-foreground italic">
+                                    This conditional variable will be created when you save.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -841,7 +1006,7 @@ export function StringEditDrawer({
                   
                   if (!currentVarName || !project?.strings) {
                     return (
-                      <div className="text-center py-8 text-muted-foreground">
+              <div className="text-center py-8 text-muted-foreground">
                         <p className="text-sm">No parent conditional variables found</p>
                       </div>
                     );
@@ -925,7 +1090,7 @@ export function StringEditDrawer({
                 
                 {stringData && (
                   <>
-                    <div className="space-y-2">
+                  <div className="space-y-2">
                       <Label>Variable Hash (Identifier)</Label>
                       <div className="text-sm font-mono bg-muted px-3 py-2 rounded-md">
                         {`{{${stringData.effective_variable_name || stringData.variable_hash}}}`}
@@ -939,11 +1104,11 @@ export function StringEditDrawer({
                       <Label>Fallback Hash</Label>
                     <div className="text-sm text-muted-foreground font-mono">
                       {stringData.variable_hash}
-                      </div>
+                    </div>
                       <p className="text-xs text-muted-foreground">
                         Auto-generated 6-character backup identifier
                       </p>
-                    </div>
+                  </div>
                   </>
                 )}
               </div>

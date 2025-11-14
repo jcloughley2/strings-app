@@ -15,6 +15,8 @@ export interface DrawerState {
   conditionalSpawns: any[];
   includeHiddenOption: boolean;
   controlledBySpawnId: number | null;
+  embeddedVariableEdits: {[variableId: string]: {display_name?: string; content?: string}};
+  pendingVariableContent: {[variableName: string]: string};
   activeTab: string;
   
   // UI state
@@ -55,6 +57,8 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     conditionalSpawns: [],
     includeHiddenOption: false,
     controlledBySpawnId: null,
+    embeddedVariableEdits: {},
+    pendingVariableContent: {},
     activeTab: 'content',
     isSaving: false,
   });
@@ -85,6 +89,8 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
       }] : [],
       includeHiddenOption: false,
       controlledBySpawnId: null,
+      embeddedVariableEdits: {},
+      pendingVariableContent: {},
       activeTab: 'content',
       title: options.title,
       level: options.level || 0,
@@ -145,6 +151,8 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
       conditionalSpawns: spawns,
       includeHiddenOption: hasHiddenOption,
       controlledBySpawnId: stringData.controlled_by_spawn_id || null,
+      embeddedVariableEdits: {},
+      pendingVariableContent: {},
       activeTab: 'content',
       title: options.title,
       level: options.level || 0,
@@ -212,6 +220,14 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     setState(prev => ({ ...prev, controlledBySpawnId }));
   }, []);
 
+  const updateEmbeddedVariableEdits = useCallback((edits: {[variableId: string]: {display_name?: string; content?: string}}) => {
+    setState(prev => ({ ...prev, embeddedVariableEdits: edits }));
+  }, []);
+
+  const updatePendingVariableContent = useCallback((content: {[variableName: string]: string}) => {
+    setState(prev => ({ ...prev, pendingVariableContent: content }));
+  }, []);
+
   const updateTab = useCallback((activeTab: string) => {
     setState(prev => ({ ...prev, activeTab }));
   }, []);
@@ -244,6 +260,36 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
       )
     }));
   }, []);
+
+  // Save embedded variable edits (called during main save)
+  const saveEmbeddedVariableEdits = useCallback(async () => {
+    if (!state.embeddedVariableEdits || Object.keys(state.embeddedVariableEdits).length === 0) {
+      return; // No edits to save
+    }
+    
+    // Save each edited embedded variable
+    const savePromises = Object.entries(state.embeddedVariableEdits).map(async ([variableId, edits]) => {
+      try {
+        const payload: any = {};
+        if (edits.display_name !== undefined) {
+          payload.display_name = edits.display_name?.trim() || null;
+        }
+        if (edits.content !== undefined) {
+          payload.content = edits.content?.trim() || 'Default content';
+        }
+        
+        await apiFetch(`/api/strings/${variableId}/`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+      } catch (error: any) {
+        console.error(`Failed to update embedded variable ${variableId}:`, error);
+        throw error;
+      }
+    });
+    
+    await Promise.all(savePromises);
+  }, [state.embeddedVariableEdits]);
 
   // Remove spawn from conditional
   const removeSpawn = useCallback((spawn: any, index: number) => {
@@ -313,11 +359,18 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     for (const varName of newVariables) {
       try {
         console.log(`Creating new variable: ${varName}`);
+        
+        // Use custom content if provided, otherwise use default
+        const customContent = state.pendingVariableContent[varName];
+        const content = customContent && customContent.trim() 
+          ? customContent.trim() 
+          : `Content for ${varName}`; // Default content
+        
         await apiFetch('/api/strings/', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            content: `Content for ${varName}`, // Default content
+            content,
             display_name: varName, // Use display_name so backend can slugify it to create variable_name
             is_conditional: false,
             is_conditional_container: false,
@@ -329,13 +382,56 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
         // Continue creating other variables even if one fails
       }
     }
-  }, [project, pendingStringVariables]);
+  }, [project, pendingStringVariables, state.pendingVariableContent]);
 
   // Save function
   const save = useCallback(async () => {
     setState(prev => ({ ...prev, isSaving: true }));
     
     try {
+      // Validation: Check for nested variables in spawn content
+      if (state.isConditional && state.conditionalSpawns.length > 0) {
+        for (const spawn of state.conditionalSpawns) {
+          if (spawn.content && spawn.content.includes('{{')) {
+            setState(prev => ({ ...prev, isSaving: false }));
+            throw new Error(
+              `Spawn variable "${spawn.display_name || spawn.effective_variable_name || 'Unnamed'}" contains embedded variables ({{...}}). ` +
+              `Nested variables cannot be added in this view. Please open the variable directly to add embedded variables.`
+            );
+          }
+        }
+      }
+      
+      // Validation: Check for nested variables in embedded variable edits
+      if (Object.keys(state.embeddedVariableEdits).length > 0) {
+        for (const [variableId, edits] of Object.entries(state.embeddedVariableEdits)) {
+          if (edits.content && edits.content.includes('{{')) {
+            // Find the variable to get its name for the error message
+            const variable = project?.strings?.find((str: any) => str.id === parseInt(variableId));
+            const varName = variable?.display_name || variable?.effective_variable_name || 'Unnamed';
+            
+            setState(prev => ({ ...prev, isSaving: false }));
+            throw new Error(
+              `Embedded variable "${varName}" contains nested variables ({{...}}). ` +
+              `Nested variables cannot be added in this view. Please open the variable directly to add embedded variables.`
+            );
+          }
+        }
+      }
+      
+      // Validation: Check for nested variables in pending variable content
+      if (Object.keys(state.pendingVariableContent).length > 0) {
+        for (const [varName, content] of Object.entries(state.pendingVariableContent)) {
+          if (content && content.includes('{{')) {
+            setState(prev => ({ ...prev, isSaving: false }));
+            throw new Error(
+              `New variable "${varName}" contains embedded variables ({{...}}). ` +
+              `Nested variables cannot be added in this view. Please open the variable directly after creation to add embedded variables.`
+            );
+          }
+        }
+      }
+      
       const saveOptions: SaveStringOptions = {
         stringData: state.stringData,
         content: state.content,
@@ -355,10 +451,13 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
       // 1. First, create any new variables found in the content
       await createNewVariablesFromContent(state.content);
       
-      // 2. Then save the main string
+      // 2. Save any embedded variable edits
+      await saveEmbeddedVariableEdits();
+      
+      // 3. Then save the main string
       await saveString(saveOptions);
       
-      // 3. Refresh project data
+      // 4. Refresh project data
       if (onProjectUpdate && project?.id) {
         try {
           const updatedProject = await apiFetch(`/api/projects/${project.id}/`);
@@ -398,6 +497,8 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
     updateConditionalSpawns,
     updateHiddenOption,
     updateControlledBySpawnId,
+    updateEmbeddedVariableEdits,
+    updatePendingVariableContent,
     updateTab,
     addSpawn,
     updateSpawn,

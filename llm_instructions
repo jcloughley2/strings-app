@@ -36,7 +36,11 @@ String: "My favorite color is `{{color-option}}`"
 - **Spawn Selection**: Users select which spawn variable displays for each conditional variable
 - **Controlling Conditions**: Spawn variables can auto-select based on other spawn selections
 - **Inline Spawn Editing**: Edit spawn names/content directly within conditional drawer
-- **Canvas Display Control**: Hide embedded strings, filter by type, toggle plaintext mode
+- **Inline Embedded Variable Editing**: Edit existing embedded variables' names/content directly within parent string drawer
+- **Custom Content for New Variables**: Provide custom content for new embedded variables during creation
+- **Nested Variable Prevention**: Validation prevents adding nested variables in inline editing contexts
+- **Canvas Display Control**: Hide embedded strings, toggle variable names/hashes, plaintext mode
+- **Conditions-Only Sidebar**: Conditional variables managed exclusively in left sidebar, not shown in canvas
 - **Real-time Variable Detection**: Yellow boxes for new variables, purple for existing
 
 ---
@@ -98,7 +102,7 @@ String: "My favorite color is `{{color-option}}`"
 
 ### Layout (Three Panels)
 
-**Left - Filter Sidebar (360px)**:
+**Left - Conditions Sidebar (360px)**:
 - Conditional variables with display names
 - Spawn variables as selectable tags beneath each conditional
 - Hover-triggered edit pencil icons
@@ -107,8 +111,8 @@ String: "My favorite color is `{{color-option}}`"
 - Disabled/locked spawns: Grey with "(locked)" label
 
 **Center - Main Canvas**:
-- All strings including conditionals and embedded strings
-- Orange badges for conditionals, purple badges for strings
+- String variables only (conditionals excluded - managed in sidebar)
+- Purple badges for strings
 - Canvas Settings button opens right-hand drawer
 - New String button for creating variables
 
@@ -123,15 +127,10 @@ String: "My favorite color is `{{color-option}}`"
 - **Show Variable Names** (ON by default): Display the variable name (title/display_name) on each string card
 - **Show Variable Hashes** (OFF by default): Display the copiable variable hash badge on each string card
 
-**String Type Filter Section**:
-- **Show All** (default): Display both string variables and conditional variables
-- **String Variables Only**: Show only regular string variables (not conditional containers)
-- **Conditional Variables Only**: Show only conditional variables (the "folder" containers)
-
 **Key Features**:
-- Layered filtering: All filters work together
 - Real-time updates: Canvas updates instantly
 - Smart detection: Automatically identifies embedded strings
+- Conditional variables always hidden from canvas (managed in Conditions sidebar)
 
 ### Unified Drawer System
 
@@ -146,7 +145,10 @@ String: "My favorite color is `{{color-option}}`"
 
 **Content Tab**:
 - Variable Type dropdown: String or Conditional
-- **String Mode**: Text content editing + variable detection boxes
+- **String Mode**: 
+  - Text content editing + variable detection boxes
+  - Embedded Variables section with inline editing for existing variables
+  - Custom content input for new variables (optional)
 - **Conditional Mode**: Spawn management with inline editing
 
 **Conditions Tab**:
@@ -171,7 +173,7 @@ String: "My favorite color is `{{color-option}}`"
 - **Conditional Spawns**: Show name input + edit button to open full drawer
 - **Real-time Updates**: Changes reflected immediately in state
 - **Batch Save**: All spawn edits saved together when parent conditional is saved
-- **Filter Sidebar Sync**: Tags update to show new slugified names after save
+- **Conditions Sidebar Sync**: Tags update to show new slugified names after save
 
 **Spawn Management**:
 - Yellow boxes: New/temporary spawns
@@ -181,6 +183,30 @@ String: "My favorite color is `{{color-option}}`"
 - Add Existing Variable as Spawn (autocomplete search)
 - Remove spawn button (hover-triggered)
 - Include Hide Option checkbox
+
+### Inline Embedded Variable Editing
+
+**For Existing Embedded Variables**:
+- Shows all embedded variables detected in parent string content
+- Purple/orange tiles with icon badges
+- **Variable Name Input**: Editable, triggers slugify on save
+- **Content Textarea**: Editable for string variables only
+- **Conditional Variables**: Read-only with edit button to open full drawer
+- Changes saved when parent string is saved
+
+**For New/Pending Embedded Variables**:
+- Yellow tiles for variables detected but not yet created
+- **Variable Name**: Read-only (comes from `{{variableName}}` in content)
+- **Content Input**: Optional custom content field
+- If left blank: Uses default content "Content for {variableName}"
+- If filled: Creates variable with custom content
+- Created automatically when parent string is saved
+
+**Nested Variable Prevention**:
+- Validation prevents `{{...}}` syntax in spawn/embedded variable content
+- Error message guides user to open variable directly for nesting
+- Applies to: spawn content, embedded variable edits, pending variable content
+- Parent string content is not restricted
 
 ---
 
@@ -363,6 +389,90 @@ const spawnPayload = {
 };
 ```
 
+### Inline Embedded Variable Editing
+```typescript
+// State management in useStringEditDrawer.ts
+embeddedVariableEdits: {[variableId: string]: {display_name?: string; content?: string}};
+pendingVariableContent: {[variableName: string]: string};
+
+// Component: StringEditDrawer.tsx - Existing variables
+const currentEdits = embeddedVariableEdits[stringVar.id] || {};
+const currentDisplayName = currentEdits.display_name !== undefined 
+  ? currentEdits.display_name 
+  : (stringVar.display_name || '');
+
+<Input
+  value={currentDisplayName}
+  onChange={(e) => {
+    const newEdits = {
+      ...embeddedVariableEdits,
+      [stringVar.id]: { ...currentEdits, display_name: e.target.value }
+    };
+    onEmbeddedVariableEditsChange(newEdits);
+  }}
+/>
+
+// Component: StringEditDrawer.tsx - Pending variables
+<Textarea
+  value={pendingVariableContent[variableName] || ''}
+  onChange={(e) => {
+    const newContent = { ...pendingVariableContent, [variableName]: e.target.value };
+    onPendingVariableContentChange(newContent);
+  }}
+  placeholder="Enter content or leave blank for default"
+/>
+
+// Save logic: useStringEditDrawer.ts
+const saveEmbeddedVariableEdits = async () => {
+  for (const [variableId, edits] of Object.entries(state.embeddedVariableEdits)) {
+    const payload: any = {};
+    if (edits.display_name !== undefined) payload.display_name = edits.display_name?.trim() || null;
+    if (edits.content !== undefined) payload.content = edits.content?.trim() || 'Default content';
+    await apiFetch(`/api/strings/${variableId}/`, { method: 'PATCH', body: JSON.stringify(payload) });
+  }
+};
+
+// Custom content for new variables
+const customContent = state.pendingVariableContent[varName];
+const content = customContent && customContent.trim() 
+  ? customContent.trim() 
+  : `Content for ${varName}`;
+```
+
+### Nested Variable Prevention
+```typescript
+// Validation in save function (useStringEditDrawer.ts)
+// Check spawn content
+for (const spawn of state.conditionalSpawns) {
+  if (spawn.content && spawn.content.includes('{{')) {
+    throw new Error(
+      `Spawn variable "${spawn.display_name || 'Unnamed'}" contains embedded variables ({{...}}). ` +
+      `Nested variables cannot be added in this view. Please open the variable directly.`
+    );
+  }
+}
+
+// Check embedded variable edits
+for (const [variableId, edits] of Object.entries(state.embeddedVariableEdits)) {
+  if (edits.content && edits.content.includes('{{')) {
+    throw new Error(
+      `Embedded variable "${varName}" contains nested variables ({{...}}). ` +
+      `Please open the variable directly to add embedded variables.`
+    );
+  }
+}
+
+// Check pending variable content
+for (const [varName, content] of Object.entries(state.pendingVariableContent)) {
+  if (content && content.includes('{{')) {
+    throw new Error(
+      `New variable "${varName}" contains embedded variables ({{...}}). ` +
+      `Please open the variable directly after creation.`
+    );
+  }
+}
+```
+
 ### Error Handling
 ```javascript
 // Graceful handling of backend pre-emptive updates
@@ -374,7 +484,7 @@ try {
   const errorStr = deleteError.message || String(deleteError);
   if (errorStr.includes('Not found') || errorStr.includes('404')) {
     console.log(`Already removed by backend signal, continuing...`);
-  } else {
+    } else {
     console.error(`Failed to delete:`, deleteError);
   }
 }
@@ -401,7 +511,7 @@ Frontend:  selectedConditionalSpawns[conditionalName] = spawnName
 ```
 
 **Key Changes**:
-- Filter sidebar shows actual conditional/spawn variable names
+- Conditions sidebar shows actual conditional/spawn variable names
 - Direct spawn selection without dimension ID lookups
 - Automatic migration from old dimension state to new conditional state
 - Backward compatible via fallback logic
@@ -437,24 +547,29 @@ Frontend:  selectedConditionalSpawns[conditionalName] = spawnName
 - ✅ Conditional system with spawn management
 - ✅ Controlling condition relationships
 - ✅ Inline spawn editing
+- ✅ Inline embedded variable editing
+- ✅ Custom content for new variables
+- ✅ Nested variable prevention validation
 - ✅ Circular reference protection
-- ✅ Canvas display control (hide embedded, filter by type)
+- ✅ Canvas display control (hide embedded, toggle names/hashes)
 
 ### UI/UX
-- ✅ Three-panel responsive layout
+- ✅ Three-panel responsive layout (Conditions sidebar, Canvas, Variables sidebar)
 - ✅ Unified drawer system for all editing
-- ✅ Canvas Settings drawer with display/filter options
-- ✅ Filter sidebar with spawn selection
+- ✅ Canvas Settings drawer with display options
+- ✅ Conditions sidebar with spawn selection (conditionals excluded from canvas)
 - ✅ Yellow/purple/orange variable detection boxes
 - ✅ Bulk operations with floating action bar
 - ✅ String duplication preserving variable references
+- ✅ Grand Hotel font for logo
 
 ### Technical
 - ✅ Idempotent operations throughout
-- ✅ Comprehensive content validation
+- ✅ Comprehensive content validation (including nested variable prevention)
 - ✅ Django signals for auto-inheritance and dimension sync
 - ✅ Frontend/backend validation alignment
 - ✅ Slugify-based variable naming
+- ✅ Local state management for inline editing
 - ✅ Graceful error handling for race conditions
 
 ---
@@ -462,17 +577,22 @@ Frontend:  selectedConditionalSpawns[conditionalName] = spawnName
 ## Testing Focus Areas
 
 ### Critical Flows
-1. **Inline Spawn Editing**: Edit spawn names/content → save → verify slugify → check filter sidebar updates
-2. **Controlling Conditions**: Set controller → select controller spawn → verify auto-selection and disabled states
-3. **Variable Embedding**: Multi-level A→B→C references work correctly
-4. **Circular Protection**: Self-reference and loops properly blocked
-5. **Canvas Filtering**: Hide embedded strings, filter by type, toggle display modes
+1. **Inline Embedded Variable Editing**: Edit embedded variable names/content → save parent → verify slugify → check updates
+2. **Custom Content for New Variables**: Add new variable with custom content → save → verify content persists
+3. **Nested Variable Prevention**: Try adding `{{var}}` in spawn/embedded content → verify validation blocks it
+4. **Inline Spawn Editing**: Edit spawn names/content → save → verify slugify → check conditions sidebar updates
+5. **Controlling Conditions**: Set controller → select controller spawn → verify auto-selection and disabled states
+6. **Variable Embedding**: Multi-level A→B→C references work correctly
+7. **Circular Protection**: Self-reference and loops properly blocked
+8. **Canvas Filtering**: Hide embedded strings, toggle names/hashes, plaintext mode
 
 ### UI/UX
 1. **Drawer System**: Unified drawer handles create/edit for strings and conditionals
-2. **Filter Sidebar**: Spawn selection, auto-selection, disabled states display correctly
-3. **Variable Boxes**: Yellow (new), purple (existing strings), orange (conditionals) appear correctly
-4. **Canvas Settings**: All toggles and filters work together properly
+2. **Embedded Variables Section**: Shows existing (purple/orange) and new (yellow) variables with inline editing
+3. **Conditions Sidebar**: Spawn selection, auto-selection, disabled states display correctly
+4. **Canvas**: Only shows string variables (conditionals excluded)
+5. **Variable Boxes**: Yellow (new), purple (existing strings), orange (conditionals) appear correctly
+6. **Canvas Settings**: All toggles work together properly
 
 ---
 
@@ -497,7 +617,7 @@ frontend/src/
 ```
 
 ### Key Files
-- **`page.tsx`**: Main UI, filter sidebar, canvas, state management
+- **`page.tsx`**: Main UI, conditions sidebar, canvas, state management
 - **`StringEditDrawer.tsx`**: Unified drawer for all editing scenarios
 - **`useStringEditDrawer.ts`**: Drawer state and operations
 - **`stringOperations.ts`**: Save logic for strings and conditionals
@@ -508,13 +628,33 @@ frontend/src/
 
 ## Recent Major Updates (2025)
 
+### Inline Embedded Variable Editing (Latest)
+- Edit existing embedded variables' names/content directly within parent string drawer
+- Custom content input for new embedded variables (optional, defaults to "Content for {name}")
+- Purple/orange tiles for existing variables, yellow tiles for new variables
+- Local state management prevents React mutation issues
+- Batch save: all embedded variable edits saved together with parent string
+- Nested variable prevention: Validation blocks `{{...}}` in inline editing contexts
+
+### Canvas Simplification
+- Conditional variables removed from canvas (managed exclusively in Conditions sidebar)
+- Canvas now shows string variables only
+- Removed String Type Filter section from Canvas Settings
+- Clearer separation: strings in canvas, conditionals in sidebar
+- Improved performance with fewer items to render
+
+### Font Update
+- Logo font changed from Knewave to Grand Hotel
+- Elegant cursive style for more artistic feel
+- Google Fonts integration via Next.js font system
+
 ### Inline Spawn Editing Feature
 - Edit spawn names and content directly within conditional variable drawer
 - Variable Name input for all spawn types (triggers slugify)
 - Content textarea for string variables only
 - Conditional spawns show name + edit button
 - Batch save: all spawn edits saved together
-- Filter sidebar automatically syncs with new slugified names
+- Conditions sidebar automatically syncs with new slugified names
 
 ### Controlling Condition Feature
 - Spawn variables can be controlled by other spawn variables
@@ -528,7 +668,6 @@ frontend/src/
 - Hide Embedded Strings (ON by default)
 - Show Variable Names (ON by default)
 - Show Variable Hashes (OFF by default)
-- String Type Filter (All/Strings Only/Conditionals Only)
 - Plaintext Mode toggle
 - Show Variables toggle
 
@@ -537,7 +676,7 @@ frontend/src/
 - Backend uses python-slugify with uniqueness handling
 - Fallback to random 6-char hash if no display name
 - Frontend shows live preview of generated slug
-- Filter sidebar displays slugified names
+- Conditions sidebar displays slugified names
 
 ### Dimensions Elimination
 - Frontend UI simplified to work directly with conditional/spawn variables
@@ -552,9 +691,10 @@ frontend/src/
 
 ### String Variables
 - Every string is automatically a variable (no opt-in)
-- Orange badges for conditionals, purple badges for strings
+- Purple badges for strings (conditionals not shown in canvas)
 - Always show `{{effectiveVariableName}}` with copy functionality
-- All strings visible in canvas (use filters to hide embedded ones)
+- Canvas shows string variables only (conditionals managed in sidebar)
+- Use Canvas Settings to hide embedded strings
 
 ### Variable Embedding
 - Use `{{variableName}}` syntax only

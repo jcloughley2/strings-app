@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Knewave } from "next/font/google";
+import { Geist, Geist_Mono, Grand_Hotel } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/header";
 import { Toaster } from "@/components/ui/sonner";
@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const knewave = Knewave({
-  variable: "--font-knewave",
+const grandHotel = Grand_Hotel({
+  variable: "--font-grand-hotel",
   subsets: ["latin"],
   weight: "400",
 });
@@ -33,7 +33,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${knewave.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${grandHotel.variable} antialiased`}
       >
         <Header />
         {children}

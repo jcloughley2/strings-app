@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 
 
-import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Globe, Settings, EyeOff, FileText, Filter, Hash } from "lucide-react";
+import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Settings, EyeOff, Hash } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,14 +32,13 @@ export default function ProjectDetailPage() {
 
   const [isPlaintextMode, setIsPlaintextMode] = useState(false);
   const [showVariableBadges, setShowVariableBadges] = useState(false);
-  const [hideEmbeddedStrings, setHideEmbeddedStrings] = useState(false);
-  const [stringTypeFilter, setStringTypeFilter] = useState<'all' | 'strings' | 'conditionals'>('all');
+  const [hideEmbeddedStrings, setHideEmbeddedStrings] = useState(true);
   const [showVariableNames, setShowVariableNames] = useState(true); // Show display names by default
   const [showVariableHashes, setShowVariableHashes] = useState(false); // Hide copiable hashes by default
   const [isStringDrawerOpen, setIsStringDrawerOpen] = useState(false);
   const [isCanvasSettingsOpen, setIsCanvasSettingsOpen] = useState(false);
   
-  // Filter sidebar state - migrated from dimensions to direct conditional variable selection
+  // Conditions sidebar state - migrated from dimensions to direct conditional variable selection
   const [selectedConditionalSpawns, setSelectedConditionalSpawns] = useState<{[conditionalVariableName: string]: string | null}>({});
   
   // Legacy dimension state for backward compatibility during migration
@@ -1054,13 +1053,8 @@ export default function ProjectDetailPage() {
     filteredStrings = filteredStrings.filter((str: any) => !embeddedStringIds.has(str.id));
   }
   
-  // Apply string type filter
-  if (stringTypeFilter === 'strings') {
-    filteredStrings = filteredStrings.filter((str: any) => !str.is_conditional_container);
-  } else if (stringTypeFilter === 'conditionals') {
-    filteredStrings = filteredStrings.filter((str: any) => str.is_conditional_container);
-  }
-  // 'all' shows both types, so no additional filtering needed
+  // Always exclude conditional variables from canvas (they're managed in the Conditions sidebar)
+  filteredStrings = filteredStrings.filter((str: any) => !str.is_conditional_container);
 
   // Bulk selection helper functions
   const handleSelectString = (stringId: number, checked: boolean) => {
@@ -1396,7 +1390,7 @@ export default function ProjectDetailPage() {
               return;
             }
             
-            // Find spawns for this conditional using the same method as filter sidebar
+            // Find spawns for this conditional using the same method as conditions sidebar
             const dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
             
             // Method 1: Use dimension_values relationship (existing spawns)
@@ -4917,32 +4911,23 @@ export default function ProjectDetailPage() {
 
       {/* Main Content Area */}
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Filter Sidebar (left) */}
+        {/* Conditions Sidebar (left) */}
         <aside className="w-90 border-r bg-muted/40 flex flex-col">
-          {/* Filter Header - Sticky */}
+          {/* Conditions Header - Sticky */}
           <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background min-h-[65px] sticky top-0 z-10">
-            <h2 className="text-lg font-semibold">Filters</h2>
+            <h2 className="text-lg font-semibold">Conditions</h2>
           </div>
-          {/* Filter Content - Scrollable */}
+          {/* Conditions Content - Scrollable */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Conditions Section */}
           <div className="space-y-3">
-            <div className="group">
-              <div className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1">
-                <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="font-medium text-sm">Conditions</h3>
-                </div>
-                {/* Plus button removed - conditions are created via conditional variables now */}
-              </div>
-            </div>
             {/* Conditional Variable Filters - NEW: Direct conditional variable display */}
             {(() => {
               // Get all conditional variables from the project
               const conditionalVariables = project?.strings?.filter((str: any) => str.is_conditional_container) || [];
               
               return conditionalVariables.length > 0 ? (
-              <div className="space-y-4 ml-6">
+              <div className="space-y-4">
                   {conditionalVariables.map((conditionalVar: any) => {
                     const conditionalName = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
                     const conditionalDisplayName = conditionalVar.display_name || conditionalName;
@@ -5121,7 +5106,7 @@ export default function ProjectDetailPage() {
                   })}
               </div>
                           ) : (
-                <div className="text-muted-foreground text-center text-sm ml-6">
+                <div className="text-muted-foreground text-center text-sm">
                   No conditional variables found in this project.
                 </div>
               );
@@ -5319,6 +5304,10 @@ export default function ProjectDetailPage() {
         onHiddenOptionChange={mainDrawer.updateHiddenOption}
         controlledBySpawnId={mainDrawer.controlledBySpawnId}
         onControlledBySpawnIdChange={mainDrawer.updateControlledBySpawnId}
+        embeddedVariableEdits={mainDrawer.embeddedVariableEdits}
+        onEmbeddedVariableEditsChange={mainDrawer.updateEmbeddedVariableEdits}
+        pendingVariableContent={mainDrawer.pendingVariableContent}
+        onPendingVariableContentChange={mainDrawer.updatePendingVariableContent}
         activeTab={mainDrawer.activeTab}
         onTabChange={mainDrawer.updateTab}
         project={project}
@@ -7385,7 +7374,7 @@ export default function ProjectDetailPage() {
                 ) : (
                   <div className="text-center text-muted-foreground py-8">
                     <p>No dimensions found in this project.</p>
-                    <p className="text-sm mt-2">Create dimensions in the filter sidebar to categorize your strings.</p>
+                    <p className="text-sm mt-2">Create dimensions in the conditions sidebar to categorize your strings.</p>
                   </div>
                 )}
               </TabsContent>
@@ -7695,65 +7684,6 @@ export default function ProjectDetailPage() {
                     {showVariableHashes ? 'On' : 'Off'}
                   </Button>
                 </div>
-              </div>
-
-              {/* String Type Filter Section */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">String Type Filter</h3>
-                
-                <div className="space-y-3">
-                  {/* All Types Option */}
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="radio"
-                      id="filter-all"
-                      name="stringTypeFilter"
-                      checked={stringTypeFilter === 'all'}
-                      onChange={() => setStringTypeFilter('all')}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <label htmlFor="filter-all" className="flex items-center gap-2 cursor-pointer">
-                      <Filter className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">Show All</span>
-                    </label>
-                  </div>
-                  
-                  {/* Strings Only Option */}
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="radio"
-                      id="filter-strings"
-                      name="stringTypeFilter"
-                      checked={stringTypeFilter === 'strings'}
-                      onChange={() => setStringTypeFilter('strings')}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <label htmlFor="filter-strings" className="flex items-center gap-2 cursor-pointer">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">String Variables Only</span>
-                    </label>
-                  </div>
-                  
-                  {/* Conditionals Only Option */}
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="radio"
-                      id="filter-conditionals"
-                      name="stringTypeFilter"
-                      checked={stringTypeFilter === 'conditionals'}
-                      onChange={() => setStringTypeFilter('conditionals')}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <label htmlFor="filter-conditionals" className="flex items-center gap-2 cursor-pointer">
-                      <Folder className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">Conditional Variables Only</span>
-                    </label>
-                  </div>
-                </div>
-                
-                <p className="text-xs text-muted-foreground">
-                  Filter which types of strings are displayed in the canvas
-                </p>
               </div>
 
               {/* Future Settings Placeholder */}

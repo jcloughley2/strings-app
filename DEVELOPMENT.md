@@ -21,12 +21,12 @@ The project is split into two main parts:
 ### Dimensions & Filtering
 - Dimensions categorize strings and provide filtering capabilities
 - Dimension values are automatically inherited from embedded variables
-- Filter sidebar allows selection of specific dimension values
+- Conditions sidebar allows selection of specific spawn variables
 
 ### Project Layout
 - Main canvas shows all strings including conditionals and embedded strings
-- Left sidebar: Dimension-based filtering (360px)
-- Right sidebar: Dimension variable management (collapsible)
+- Left sidebar: Conditions sidebar for spawn selection (360px)
+- Right sidebar: Variable management (collapsible)
 - Color-coded badges: Orange for conditionals, purple for strings
 
 ## State Management
@@ -77,5 +77,5 @@ npm run dev
 
 ### Working with Dimensions
 1. Dimensions are created automatically when conditionals are made
-2. Use the filter sidebar to view strings by dimension values
+2. Use the conditions sidebar to select spawn variables for each conditional
 3. Dimension inheritance happens automatically through variable embedding

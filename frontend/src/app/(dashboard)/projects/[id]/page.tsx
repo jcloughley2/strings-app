@@ -1085,15 +1085,24 @@ export default function ProjectDetailPage() {
   const isAllSelected = filteredStrings.length > 0 && filteredStrings.every((str: any) => selectedStringIds.has(str.id));
   const isIndeterminate = selectedStringIds.size > 0 && !isAllSelected;
 
-  // Helper function to get CSS class for purple variables based on nesting depth
-  const getPurpleClassForDepth = (depth: number): string => {
-    // Use modulo to cycle through 3 distinct purple shades for better visual distinction
-    const shadeIndex = depth % 3;
-    return `embedded-var embedded-var-purple-${shadeIndex}`;
+  // Helper function to get CSS class based on variable type and same-type nesting depth
+  // colorDepth tracks how many times we've nested the SAME type consecutively
+  const getEmbeddedVarClass = (type: 'string' | 'conditional', colorDepth: number): string => {
+    // Cap at 5 levels of tinting (0-4)
+    const cappedDepth = Math.min(colorDepth, 4);
+    return `embedded-var embedded-var-${type}-${cappedDepth}`;
   };
 
   // Function to resolve conditional content based on conditional spawn selection
-  const resolveConditionalContent = (conditionalVariable: any, variableName: string, depth: number = 0): (string | React.ReactNode)[] => {
+  // colorContext: tracks the type of the parent variable ('string', 'conditional', or null for root)
+  // colorDepth: tracks how many times we've nested the SAME type consecutively
+  const resolveConditionalContent = (
+    conditionalVariable: any, 
+    variableName: string, 
+    depth: number = 0,
+    colorContext: 'string' | 'conditional' | null = null,
+    colorDepth: number = 0
+  ): (string | React.ReactNode)[] => {
     const conditionalName = conditionalVariable.effective_variable_name || conditionalVariable.variable_hash;
     
     // Simple throttling to prevent excessive logging
@@ -1185,12 +1194,16 @@ export default function ProjectDetailPage() {
           const spawnName = activeSpawn.effective_variable_name || activeSpawn.variable_hash;
           
           if (activeSpawn.is_conditional_container) {
-            // If spawn is also a conditional, render it as orange nested conditional
-            const nestedSpawnContent = resolveConditionalContent(activeSpawn, spawnName, depth + 1);
+            // If spawn is also a conditional, render it as nested conditional
+            // Conditional on conditional: increment colorDepth
+            const newColorDepth = colorContext === 'conditional' ? colorDepth + 1 : 0;
+            const nestedSpawnContent = resolveConditionalContent(activeSpawn, spawnName, depth + 1, 'conditional', newColorDepth);
+            const conditionalClass = getEmbeddedVarClass('conditional', newColorDepth);
+            
             return [
               <span
                 key={`fallback-spawn-${conditionalName}-${spawnName}`}
-                className="embedded-var embedded-var-orange"
+                className={conditionalClass}
                 onClick={(e) => {
                   e.stopPropagation();
                   openEditInCascadingDrawer(activeSpawn);
@@ -1201,14 +1214,16 @@ export default function ProjectDetailPage() {
               </span>
             ];
           } else {
-            // For string variable spawns, render as purple styled variable with its content
-            const purpleClass = getPurpleClassForDepth(depth + 1);
+            // For string variable spawns, render as styled string variable with its content
+            // String on conditional: reset colorDepth to 0
+            const newColorDepth = colorContext === 'string' ? colorDepth + 1 : 0;
+            const stringClass = getEmbeddedVarClass('string', newColorDepth);
             
             // If the spawn has content, render it recursively; otherwise show the variable name
             let spawnDisplayContent;
             if (activeSpawn.content && activeSpawn.content.trim() !== '') {
               // Recursively render the spawn's content to handle any nested variables
-              const renderedContent = renderContentRecursively(activeSpawn.content, depth + 1, `fallback-spawn-${conditionalName}-`);
+              const renderedContent = renderContentRecursively(activeSpawn.content, depth + 1, `fallback-spawn-${conditionalName}-`, 'string', newColorDepth);
               spawnDisplayContent = renderedContent;
             } else {
               // If no content, show the variable name as fallback
@@ -1218,7 +1233,7 @@ export default function ProjectDetailPage() {
             return [
               <span
                 key={`fallback-spawn-${conditionalName}-${spawnName}`}
-                className={purpleClass}
+                className={stringClass}
                 onClick={(e) => {
                   e.stopPropagation();
                   openEditInCascadingDrawer(activeSpawn);
@@ -1257,12 +1272,16 @@ export default function ProjectDetailPage() {
     const spawnName = activeSpawn.effective_variable_name || activeSpawn.variable_hash;
     
     if (activeSpawn.is_conditional_container) {
-      // If spawn is also a conditional, render it as orange nested conditional
-      const nestedSpawnContent = resolveConditionalContent(activeSpawn, spawnName, depth + 1);
+      // If spawn is also a conditional, render it as nested conditional
+      // Conditional on conditional: increment colorDepth
+      const newColorDepth = colorContext === 'conditional' ? colorDepth + 1 : 0;
+      const nestedSpawnContent = resolveConditionalContent(activeSpawn, spawnName, depth + 1, 'conditional', newColorDepth);
+      const conditionalClass = getEmbeddedVarClass('conditional', newColorDepth);
+      
       return [
         <span
           key={`spawn-${conditionalName}-${spawnName}`}
-          className="embedded-var embedded-var-orange"
+          className={conditionalClass}
           onClick={(e) => {
             e.stopPropagation();
             // Find the openEditInCascadingDrawer function from the parent scope
@@ -1275,14 +1294,16 @@ export default function ProjectDetailPage() {
         </span>
       ];
     } else {
-      // For string variable spawns, render as purple styled variable with its content
-      const purpleClass = getPurpleClassForDepth(depth + 1);
+      // For string variable spawns, render as styled string variable with its content
+      // String on conditional: reset colorDepth to 0
+      const newColorDepth = colorContext === 'string' ? colorDepth + 1 : 0;
+      const stringClass = getEmbeddedVarClass('string', newColorDepth);
       
       // If the spawn has content, render it recursively; otherwise show the variable name
       let spawnDisplayContent;
       if (activeSpawn.content && activeSpawn.content.trim() !== '') {
         // Recursively render the spawn's content to handle any nested variables
-        const renderedContent = renderContentRecursively(activeSpawn.content, depth + 1, `spawn-${conditionalName}-`);
+        const renderedContent = renderContentRecursively(activeSpawn.content, depth + 1, `spawn-${conditionalName}-`, 'string', newColorDepth);
         spawnDisplayContent = renderedContent;
       } else {
         // If no content, show the variable name as fallback
@@ -1292,7 +1313,7 @@ export default function ProjectDetailPage() {
       return [
         <span
           key={`spawn-${conditionalName}-${spawnName}`}
-          className={purpleClass}
+          className={stringClass}
           onClick={(e) => {
             e.stopPropagation();
             openEditInCascadingDrawer(activeSpawn);
@@ -1306,7 +1327,15 @@ export default function ProjectDetailPage() {
   };
 
   // Recursive function to render content with proper variable substitution and styling
-  const renderContentRecursively = (content: string, depth: number = 0, keyPrefix: string = ""): (string | React.ReactNode)[] => {
+  // colorContext: tracks the type of the parent variable ('string', 'conditional', or null for root)
+  // colorDepth: tracks how many times we've nested the SAME type consecutively
+  const renderContentRecursively = (
+    content: string, 
+    depth: number = 0, 
+    keyPrefix: string = "",
+    colorContext: 'string' | 'conditional' | null = null,
+    colorDepth: number = 0
+  ): (string | React.ReactNode)[] => {
     // Prevent infinite recursion
     if (depth > 10) {
       return [content];
@@ -1426,7 +1455,8 @@ export default function ProjectDetailPage() {
             
             if (activeSpawn && activeSpawn.content) {
               // Replace with spawn content (recursively processed)
-              const spawnContent = renderContentRecursively(activeSpawn.content, depth + 1, `${keyPrefix}${variableName}-`);
+              // In plaintext mode, we don't track color context
+              const spawnContent = renderContentRecursively(activeSpawn.content, depth + 1, `${keyPrefix}${variableName}-`, null, 0);
               const contentString = spawnContent.map(part => typeof part === 'string' ? part : '').join('');
               console.log(`✅ Replacing ${match} with: "${contentString}"`);
               finalContent = finalContent.replace(match, contentString);
@@ -1439,7 +1469,7 @@ export default function ProjectDetailPage() {
             // Handle string variables
             if (stringVariable.content && stringVariable.content.trim() !== '') {
               // Recursively process the string variable's content (plaintext)
-              const expandedContent = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
+              const expandedContent = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`, null, 0);
               // Convert React nodes back to string for text replacement
               const contentString = expandedContent.map(part => typeof part === 'string' ? part : `{{${variableName}}}`).join('');
               finalContent = finalContent.replace(match, contentString);
@@ -1479,12 +1509,12 @@ export default function ProjectDetailPage() {
               </Badge>
             );
           } else if (stringVariable) {
-            // Purple badge for string variables
+            // Badge for string variables
             return (
               <Badge
                 key={`${keyPrefix}${depth}-${index}-${variableName}`}
                 variant="outline"
-                className="embedded-var-badge-purple"
+                className="embedded-var-badge-string"
                 onClick={(e) => {
                   e.stopPropagation();
                   openEditInCascadingDrawer(stringVariable);
@@ -1527,13 +1557,16 @@ export default function ProjectDetailPage() {
           
           if (stringVariable) {
             if (stringVariable.is_conditional_container) {
-              // Conditional variables: Show with orange background containing spawn content
-              const spawnContent = resolveConditionalContent(stringVariable, variableName, depth);
+              // Conditional variables: Show with conditional styling containing spawn content
+              // Conditional on conditional: increment colorDepth, otherwise reset to 0
+              const newColorDepth = colorContext === 'conditional' ? colorDepth + 1 : 0;
+              const spawnContent = resolveConditionalContent(stringVariable, variableName, depth, 'conditional', newColorDepth);
+              const conditionalClass = getEmbeddedVarClass('conditional', newColorDepth);
               
               result.push(
                 <span
                   key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                  className="embedded-var embedded-var-orange"
+                  className={conditionalClass}
                   onClick={(e) => {
                     e.stopPropagation();
                     openEditInCascadingDrawer(stringVariable);
@@ -1549,18 +1582,21 @@ export default function ProjectDetailPage() {
                 // For empty string variables, show as plain text
                 result.push(part);
               } else {
-                // For string variables with content, render with alternating purple background based on depth
-                const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
-                const purpleClass = getPurpleClassForDepth(depth);
+                // For string variables with content, render with string styling
+                // String on string: increment colorDepth, otherwise reset to 0
+                const newColorDepth = colorContext === 'string' ? colorDepth + 1 : 0;
+                const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`, 'string', newColorDepth);
+                const stringClass = getEmbeddedVarClass('string', newColorDepth);
+                
                 result.push(
                   <span
                     key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                    className={purpleClass}
+                    className={stringClass}
                     onClick={(e) => {
                       e.stopPropagation();
                       openEditInCascadingDrawer(stringVariable);
                     }}
-                    title={`Click to edit string variable "${variableName}" (nesting level ${depth})`}
+                    title={`Click to edit string variable "${variableName}" (color depth ${newColorDepth})`}
                   >
                     {nestedParts}
                   </span>

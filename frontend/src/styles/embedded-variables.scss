@@ -3,70 +3,78 @@
 // ============================================================================
 // This file contains all styling for embedded variables as they appear
 // in the string canvas. Edit these styles to customize the appearance of
-// purple string variables and orange conditional variables.
+// string variables and conditional variables.
 // ============================================================================
 
 // ----------------------------------------------------------------------------
-// PURPLE STRING VARIABLES
+// BASE COLORS - Edit these to change the entire color scheme
+// ----------------------------------------------------------------------------
+// String variables (currently purple, but change to any color you want)
+$string-var-color: blue; // Base border color for string variables
+$string-text-color: black;     // Text color for string variables
+
+// Conditional variables (currently orange, but change to any color you want)
+$conditional-var-color: gold; // Base border color for conditional variables
+$conditional-text-color: black;     // Text color for conditional variables
+
+// ----------------------------------------------------------------------------
+// TINT/SHADE FUNCTIONS
+// ----------------------------------------------------------------------------
+// Tint/Shade functions using mix() for solid colors (no transparency)
+// Based on: https://css-tricks.com/snippets/sass/tint-shade-functions/
+@function tint($color, $percentage) {
+  @return mix(white, $color, $percentage);
+}
+
+@function shade($color, $percentage) {
+  @return mix(black, $color, $percentage);
+}
+
+// ----------------------------------------------------------------------------
+// STRING VARIABLES
 // ----------------------------------------------------------------------------
 // These styles apply to regular string variables embedded in other strings.
-// The system uses 3 alternating shades based on nesting depth for better
-// visual distinction of nested variables.
+// The system uses progressive tinting based on same-type nesting depth.
+// Tinting only increases when a string variable is nested within another string.
+// When a string variable is nested within a conditional variable, tinting resets to 0.
 // ----------------------------------------------------------------------------
 
-// Depth 0 (shallowest) - Lightest purple
-.embedded-var-purple-0 {
-  //background-color: rgb(250 245 255); // bg-purple-50
-  color: rgb(88 28 135); // text-purple-800
-  border-color: rgb(233 213 255); // border-purple-200
-  padding: 0 0 4px; // px-1 py-0.5
-  
-  &:hover {
-    background-color: rgb(243 232 255); // hover:bg-purple-100
-  }
+// Base styles for all string variables (all depth levels)
+[class*="embedded-var-string-"] {
+  color: $string-text-color;
+  border-color: $string-var-color; // Always base color
+  padding: 0 0 4px;
 }
 
-// Depth 1 (medium) - Medium purple
-.embedded-var-purple-1 {
-  //background-color: rgb(243 232 255); // bg-purple-100
-  color: rgb(59 7 100); // text-purple-900
-  border-color: rgb(216 180 254); // border-purple-300
-  padding: 0 0 4px; // px-1 py-0.5
-  
-  &:hover {
-    background-color: rgb(233 213 255); // hover:bg-purple-200
-  }
-}
-
-// Depth 2 (deepest) - Darkest purple
-.embedded-var-purple-2 {
-  //background-color: rgb(233 213 255); // bg-purple-200
-  color: rgb(46 16 101); // text-purple-950
-  border-color: rgb(192 132 252); // border-purple-400
-  padding: 0 0 4px; // px-1 py-0.5
-  
-  &:hover {
-    background-color: rgb(216 180 254); // hover:bg-purple-300
-  }
-}
+// Depth-specific hover backgrounds only
+.embedded-var-string-0:hover { background-color: tint($string-var-color, 70%); } // Very light
+.embedded-var-string-1:hover { background-color: tint($string-var-color, 60%); } // Slightly darker
+.embedded-var-string-2:hover { background-color: tint($string-var-color, 50%); } // Medium
+.embedded-var-string-3:hover { background-color: tint($string-var-color, 40%); } // Darker
+.embedded-var-string-4:hover { background-color: tint($string-var-color, 30%); } // Darkest
 
 // ----------------------------------------------------------------------------
-// ORANGE CONDITIONAL VARIABLES
+// CONDITIONAL VARIABLES
 // ----------------------------------------------------------------------------
 // These styles apply to conditional variables embedded in other strings.
-// Conditional variables use a consistent orange theme regardless of depth.
+// The system uses progressive tinting based on same-type nesting depth.
+// Tinting only increases when a conditional variable is nested within another conditional.
+// When a conditional variable is nested within a string variable, tinting resets to 0.
 // ----------------------------------------------------------------------------
 
-.embedded-var-orange {
-  //background-color: rgb(255 247 237); // bg-orange-50
-  color: rgb(154 52 18); // text-orange-800
-  border-color: rgb(254 215 170); // border-orange-200
-  padding: 0 8px 4px; // px-1 py-0.5
-  
-  &:hover {
-    background-color: rgb(255 237 213); // hover:bg-orange-100
-  }
+// Base styles for all conditional variables (all depth levels)
+[class*="embedded-var-conditional-"] {
+  color: $conditional-text-color;
+  border-color: $conditional-var-color; // Always base color
+  padding: 0 8px 4px;
 }
+
+// Depth-specific hover backgrounds only
+.embedded-var-conditional-0:hover { background-color: tint($conditional-var-color, 70%); } // Very light
+.embedded-var-conditional-1:hover { background-color: tint($conditional-var-color, 60%); } // Slightly darker
+.embedded-var-conditional-2:hover { background-color: tint($conditional-var-color, 50%); } // Medium
+.embedded-var-conditional-3:hover { background-color: tint($conditional-var-color, 40%); } // Darker
+.embedded-var-conditional-4:hover { background-color: tint($conditional-var-color, 30%); } // Darkest
 
 // ----------------------------------------------------------------------------
 // SHARED BASE STYLES
@@ -82,6 +90,8 @@
   border-style: solid;
   border-radius: 0; // rounded
   box-sizing: border-box;
+  line-height: 24px;
+
   
   // Interaction
   cursor: pointer;
@@ -114,27 +124,27 @@
   font-size: 0.75rem; // text-xs
 }
 
-// Purple badge variant
-.embedded-var-badge-purple {
+// String badge variant
+.embedded-var-badge-string {
   @extend .embedded-var-badge;
-  background-color: rgb(250 245 255); // bg-purple-50
-  color: rgb(107 33 168); // text-purple-700
-  border-color: rgb(233 213 255); // border-purple-200
+  background-color: tint($string-var-color, 80%);
+  color: $string-text-color;
+  border-color: $string-var-color;
   
   &:hover {
-    background-color: rgb(243 232 255);
+    background-color: tint($string-var-color, 70%);
   }
 }
 
-// Orange badge variant
-.embedded-var-badge-orange {
+// Conditional badge variant
+.embedded-var-badge-conditional {
   @extend .embedded-var-badge;
-  background-color: rgb(255 247 237); // bg-orange-50
-  color: rgb(194 65 12); // text-orange-700
-  border-color: rgb(254 215 170); // border-orange-200
+  background-color: tint($conditional-var-color, 80%);
+  color: $conditional-text-color;
+  border-color: $conditional-var-color;
   
   &:hover {
-    background-color: rgb(255 237 213);
+    background-color: tint($conditional-var-color, 70%);
   }
 }
 
@@ -145,15 +155,28 @@
 //
 // 1. Import this SCSS file in your component or global styles
 // 2. Apply the appropriate classes:
-//    - For purple string variables: .embedded-var .embedded-var-purple-{0|1|2}
-//    - For orange conditionals: .embedded-var .embedded-var-orange
-//    - For badge mode: .embedded-var-badge-{purple|orange}
+//    - For string variables: .embedded-var .embedded-var-string-{0-4}
+//    - For conditional variables: .embedded-var .embedded-var-conditional-{0-4}
+//    - For badge mode: .embedded-var-badge-{string|conditional}
 //
 // Example:
-//   <span className="embedded-var embedded-var-purple-0">
+//   <span className="embedded-var embedded-var-string-0">
 //     Variable content here
 //   </span>
 //
-// The depth classes (0, 1, 2) cycle based on nesting level using modulo 3.
+// IMPORTANT: The depth classes (0-4) are based on SAME-TYPE nesting depth:
+// - Depth 0: Base color (no tinting) - used when variable is first of its type
+// - Depth 1-4: Progressive tinting - used when same type is nested within itself
+// - When a string variable is nested in a conditional variable (or vice versa), 
+//   the depth resets to 0 because the type changed
+//
+// Example nesting:
+//   Parent string (no color) >
+//     String var (depth 0) >
+//       Conditional var (depth 0, type changed) >
+//         Conditional var (depth 1, same type) >
+//           String var (depth 0, type changed) >
+//             String var (depth 1, same type) >
+//               String var (depth 2, same type)
 // ----------------------------------------------------------------------------
 

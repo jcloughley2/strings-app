@@ -623,10 +623,105 @@ frontend/src/
 - **`stringOperations.ts`**: Save logic for strings and conditionals
 - **`backend/strings_api/models.py`**: String model with slugify logic
 - **`backend/strings_api/serializers.py`**: API serializers
+- **`frontend/src/styles/embedded-variables.scss`**: Centralized styling for embedded variables
+
+---
+
+## Embedded Variable Styling System
+
+### Overview
+All embedded variable styling is centralized in a single SCSS file for easy customization. The system uses semantic naming (based on what the element is, not how it looks) and progressive tinting for nested variables of the same type.
+
+### File Location
+- **`frontend/src/styles/embedded-variables.scss`**: All embedded variable styles
+- **`frontend/src/styles/README.md`**: Customization guide
+
+### Color Variables (Customizable)
+```scss
+// Edit these to change the entire color scheme
+$string-var-color: blue;              // Border color for string variables
+$string-text-color: black;            // Text color for string variables
+$conditional-var-color: gold;         // Border color for conditional variables
+$conditional-text-color: black;       // Text color for conditional variables
+```
+
+### Semantic Class Names
+- **String Variables**: `.embedded-var-string-{0-4}` (not color-based like "purple")
+- **Conditional Variables**: `.embedded-var-conditional-{0-4}` (not color-based like "orange")
+- **Badge Mode**: `.embedded-var-badge-string`, `.embedded-var-badge-conditional`
+
+### DRY Architecture
+Uses attribute selectors to apply base styles to all depth levels:
+```scss
+// Base styles for ALL string variables
+[class*="embedded-var-string-"] {
+  color: $string-text-color;
+  border-color: $string-var-color;
+  padding: 0 0 4px;
+}
+
+// Only depth-specific hover backgrounds
+.embedded-var-string-0:hover { background-color: tint($string-var-color, 70%); }
+.embedded-var-string-1:hover { background-color: tint($string-var-color, 60%); }
+// ... etc
+```
+
+### Progressive Hover Tinting
+- **Depth 0**: `tint(70%)` - Very light (70% white mixed in)
+- **Depth 1**: `tint(60%)` - Slightly darker
+- **Depth 2**: `tint(50%)` - Medium
+- **Depth 3**: `tint(40%)` - Darker
+- **Depth 4**: `tint(30%)` - Darkest
+
+### Tint/Shade Functions
+Uses SCSS `mix()` function for solid colors (no transparency):
+```scss
+@function tint($color, $percentage) {
+  @return mix(white, $color, $percentage);
+}
+
+@function shade($color, $percentage) {
+  @return mix(black, $color, $percentage);
+}
+```
+
+### Same-Type Nesting Logic
+- **Color context tracking**: Tracks whether parent is 'string' or 'conditional'
+- **Depth resets**: When variable type changes (string→conditional or vice versa), depth resets to 0
+- **Progressive tinting**: Only applies when same type is nested within itself
+
+**Example:**
+```
+Parent string (no color) >
+  String var (depth 0, light hover) >
+    Conditional var (depth 0, type changed!) >
+      Conditional var (depth 1, darker hover) >
+        String var (depth 0, type changed!) >
+          String var (depth 1, darker hover)
+```
+
+### Border Behavior
+- **Always base color**: Border color never changes, regardless of depth or hover state
+- **Consistent identifier**: Acts as stable visual indicator of variable type
+
+### TypeScript Integration
+- Helper function: `getEmbeddedVarClass(type: 'string' | 'conditional', colorDepth: number)`
+- Function signatures: `colorContext: 'string' | 'conditional' | null`
+- Automatically applies correct class based on nesting context
 
 ---
 
 ## Recent Major Updates (2025)
+
+### Embedded Variable Styling System (Latest)
+- **Centralized SCSS file**: All embedded variable styling consolidated into `frontend/src/styles/embedded-variables.scss`
+- **Semantic naming**: Classes use `string`/`conditional` instead of color names (`purple`/`orange`)
+- **DRY architecture**: Attribute selectors for base styles, depth classes only define hover backgrounds
+- **Customizable colors**: Four variables at top of file control entire color scheme
+- **Progressive hover tinting**: Uses SCSS `mix()` function for solid colors (no transparency)
+- **Same-type nesting logic**: Color depth only increments when same type is nested within itself
+- **Consistent borders**: Border color always uses base color, never changes on hover or with depth
+- **Easy customization**: Change entire color scheme by editing 4 variables
 
 ### Inline Embedded Variable Editing (Latest)
 - Edit existing embedded variables' names/content directly within parent string drawer

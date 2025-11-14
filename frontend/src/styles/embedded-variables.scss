@@ -1,0 +1,159 @@
+// ============================================================================
+// EMBEDDED VARIABLES STYLING
+// ============================================================================
+// This file contains all styling for embedded variables as they appear
+// in the string canvas. Edit these styles to customize the appearance of
+// purple string variables and orange conditional variables.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// PURPLE STRING VARIABLES
+// ----------------------------------------------------------------------------
+// These styles apply to regular string variables embedded in other strings.
+// The system uses 3 alternating shades based on nesting depth for better
+// visual distinction of nested variables.
+// ----------------------------------------------------------------------------
+
+// Depth 0 (shallowest) - Lightest purple
+.embedded-var-purple-0 {
+  //background-color: rgb(250 245 255); // bg-purple-50
+  color: rgb(88 28 135); // text-purple-800
+  border-color: rgb(233 213 255); // border-purple-200
+  padding: 0 0 4px; // px-1 py-0.5
+  
+  &:hover {
+    background-color: rgb(243 232 255); // hover:bg-purple-100
+  }
+}
+
+// Depth 1 (medium) - Medium purple
+.embedded-var-purple-1 {
+  //background-color: rgb(243 232 255); // bg-purple-100
+  color: rgb(59 7 100); // text-purple-900
+  border-color: rgb(216 180 254); // border-purple-300
+  padding: 0 0 4px; // px-1 py-0.5
+  
+  &:hover {
+    background-color: rgb(233 213 255); // hover:bg-purple-200
+  }
+}
+
+// Depth 2 (deepest) - Darkest purple
+.embedded-var-purple-2 {
+  //background-color: rgb(233 213 255); // bg-purple-200
+  color: rgb(46 16 101); // text-purple-950
+  border-color: rgb(192 132 252); // border-purple-400
+  padding: 0 0 4px; // px-1 py-0.5
+  
+  &:hover {
+    background-color: rgb(216 180 254); // hover:bg-purple-300
+  }
+}
+
+// ----------------------------------------------------------------------------
+// ORANGE CONDITIONAL VARIABLES
+// ----------------------------------------------------------------------------
+// These styles apply to conditional variables embedded in other strings.
+// Conditional variables use a consistent orange theme regardless of depth.
+// ----------------------------------------------------------------------------
+
+.embedded-var-orange {
+  //background-color: rgb(255 247 237); // bg-orange-50
+  color: rgb(154 52 18); // text-orange-800
+  border-color: rgb(254 215 170); // border-orange-200
+  padding: 0 8px 4px; // px-1 py-0.5
+  
+  &:hover {
+    background-color: rgb(255 237 213); // hover:bg-orange-100
+  }
+}
+
+// ----------------------------------------------------------------------------
+// SHARED BASE STYLES
+// ----------------------------------------------------------------------------
+// Common styles applied to all embedded variables regardless of type
+// ----------------------------------------------------------------------------
+
+.embedded-var {
+  // Layout
+  border-width: 0px 0px 4px;
+  display: inline-block;
+  margin-left: 0px; // ml-1
+  border-style: solid;
+  border-radius: 0; // rounded
+  box-sizing: border-box;
+  
+  // Interaction
+  cursor: pointer;
+  transition-property: color, background-color, border-color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+  
+  // Typography
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+// ----------------------------------------------------------------------------
+// BADGE MODE STYLES
+// ----------------------------------------------------------------------------
+// When "Show Variables" mode is enabled, variables appear as badges
+// instead of showing their resolved content
+// ----------------------------------------------------------------------------
+
+.embedded-var-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem; // gap-1
+  margin-left: 0.25rem; // mx-1
+  margin-right: 0.25rem;
+  
+  // Badge-specific styling
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; // font-mono
+  font-size: 0.75rem; // text-xs
+}
+
+// Purple badge variant
+.embedded-var-badge-purple {
+  @extend .embedded-var-badge;
+  background-color: rgb(250 245 255); // bg-purple-50
+  color: rgb(107 33 168); // text-purple-700
+  border-color: rgb(233 213 255); // border-purple-200
+  
+  &:hover {
+    background-color: rgb(243 232 255);
+  }
+}
+
+// Orange badge variant
+.embedded-var-badge-orange {
+  @extend .embedded-var-badge;
+  background-color: rgb(255 247 237); // bg-orange-50
+  color: rgb(194 65 12); // text-orange-700
+  border-color: rgb(254 215 170); // border-orange-200
+  
+  &:hover {
+    background-color: rgb(255 237 213);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// USAGE NOTES
+// ----------------------------------------------------------------------------
+// To use these styles in your component:
+//
+// 1. Import this SCSS file in your component or global styles
+// 2. Apply the appropriate classes:
+//    - For purple string variables: .embedded-var .embedded-var-purple-{0|1|2}
+//    - For orange conditionals: .embedded-var .embedded-var-orange
+//    - For badge mode: .embedded-var-badge-{purple|orange}
+//
+// Example:
+//   <span className="embedded-var embedded-var-purple-0">
+//     Variable content here
+//   </span>
+//
+// The depth classes (0, 1, 2) cycle based on nesting level using modulo 3.
+// ----------------------------------------------------------------------------
+

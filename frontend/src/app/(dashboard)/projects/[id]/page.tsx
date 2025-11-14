@@ -1085,41 +1085,11 @@ export default function ProjectDetailPage() {
   const isAllSelected = filteredStrings.length > 0 && filteredStrings.every((str: any) => selectedStringIds.has(str.id));
   const isIndeterminate = selectedStringIds.size > 0 && !isAllSelected;
 
-  // Helper function to get alternating purple shades based on nesting depth
-  const getPurpleShadeForDepth = (depth: number) => {
+  // Helper function to get CSS class for purple variables based on nesting depth
+  const getPurpleClassForDepth = (depth: number): string => {
     // Use modulo to cycle through 3 distinct purple shades for better visual distinction
     const shadeIndex = depth % 3;
-    
-    switch (shadeIndex) {
-      case 0:
-        return {
-          background: 'bg-purple-50',
-          text: 'text-purple-800',
-          hover: 'hover:bg-purple-100',
-          border: 'border-purple-200'
-        };
-      case 1:
-        return {
-          background: 'bg-purple-100', 
-          text: 'text-purple-900',
-          hover: 'hover:bg-purple-200',
-          border: 'border-purple-300'
-        };
-      case 2:
-        return {
-          background: 'bg-purple-200',
-          text: 'text-purple-950',
-          hover: 'hover:bg-purple-300', 
-          border: 'border-purple-400'
-        };
-      default:
-        return {
-          background: 'bg-purple-50',
-          text: 'text-purple-800', 
-          hover: 'hover:bg-purple-100',
-          border: 'border-purple-200'
-        };
-    }
+    return `embedded-var embedded-var-purple-${shadeIndex}`;
   };
 
   // Function to resolve conditional content based on conditional spawn selection
@@ -1220,7 +1190,7 @@ export default function ProjectDetailPage() {
             return [
               <span
                 key={`fallback-spawn-${conditionalName}-${spawnName}`}
-                className="cursor-pointer transition-colors bg-orange-50 text-orange-800 px-1 py-0.5 rounded inline-block hover:bg-orange-100 border border-orange-200 ml-1"
+                className="embedded-var embedded-var-orange"
                 onClick={(e) => {
                   e.stopPropagation();
                   openEditInCascadingDrawer(activeSpawn);
@@ -1232,7 +1202,7 @@ export default function ProjectDetailPage() {
             ];
           } else {
             // For string variable spawns, render as purple styled variable with its content
-            const purpleShade = getPurpleShadeForDepth(depth + 1);
+            const purpleClass = getPurpleClassForDepth(depth + 1);
             
             // If the spawn has content, render it recursively; otherwise show the variable name
             let spawnDisplayContent;
@@ -1248,7 +1218,7 @@ export default function ProjectDetailPage() {
             return [
               <span
                 key={`fallback-spawn-${conditionalName}-${spawnName}`}
-                className={`cursor-pointer transition-colors ${purpleShade.background} ${purpleShade.text} px-1 py-0.5 rounded inline-block ${purpleShade.hover} ${purpleShade.border} border ml-1`}
+                className={purpleClass}
                 onClick={(e) => {
                   e.stopPropagation();
                   openEditInCascadingDrawer(activeSpawn);
@@ -1292,7 +1262,7 @@ export default function ProjectDetailPage() {
       return [
         <span
           key={`spawn-${conditionalName}-${spawnName}`}
-          className="cursor-pointer transition-colors bg-orange-50 text-orange-800 px-1 py-0.5 rounded inline-block hover:bg-orange-100 border border-orange-200 ml-1"
+          className="embedded-var embedded-var-orange"
           onClick={(e) => {
             e.stopPropagation();
             // Find the openEditInCascadingDrawer function from the parent scope
@@ -1306,7 +1276,7 @@ export default function ProjectDetailPage() {
       ];
     } else {
       // For string variable spawns, render as purple styled variable with its content
-      const purpleShade = getPurpleShadeForDepth(depth + 1);
+      const purpleClass = getPurpleClassForDepth(depth + 1);
       
       // If the spawn has content, render it recursively; otherwise show the variable name
       let spawnDisplayContent;
@@ -1322,7 +1292,7 @@ export default function ProjectDetailPage() {
       return [
         <span
           key={`spawn-${conditionalName}-${spawnName}`}
-          className={`cursor-pointer transition-colors ${purpleShade.background} ${purpleShade.text} px-1 py-0.5 rounded inline-block ${purpleShade.hover} ${purpleShade.border} border ml-1`}
+          className={purpleClass}
           onClick={(e) => {
             e.stopPropagation();
             openEditInCascadingDrawer(activeSpawn);
@@ -1509,13 +1479,12 @@ export default function ProjectDetailPage() {
               </Badge>
             );
           } else if (stringVariable) {
-            // Purple badge for string variables with alternating shades
-            const purpleShade = getPurpleShadeForDepth(depth);
+            // Purple badge for string variables
             return (
               <Badge
                 key={`${keyPrefix}${depth}-${index}-${variableName}`}
                 variant="outline"
-                className={`mx-1 cursor-pointer transition-colors ${purpleShade.background} ${purpleShade.text} ${purpleShade.border} ${purpleShade.hover} inline-flex items-center gap-1`}
+                className="embedded-var-badge-purple"
                 onClick={(e) => {
                   e.stopPropagation();
                   openEditInCascadingDrawer(stringVariable);
@@ -1564,7 +1533,7 @@ export default function ProjectDetailPage() {
               result.push(
                 <span
                   key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                  className="cursor-pointer transition-colors bg-orange-50 text-orange-800 px-1 py-0.5 rounded inline-block hover:bg-orange-100 border border-orange-200"
+                  className="embedded-var embedded-var-orange"
                   onClick={(e) => {
                     e.stopPropagation();
                     openEditInCascadingDrawer(stringVariable);
@@ -1582,11 +1551,11 @@ export default function ProjectDetailPage() {
               } else {
                 // For string variables with content, render with alternating purple background based on depth
                 const nestedParts = renderContentRecursively(stringVariable.content, depth + 1, `${keyPrefix}${variableName}-`);
-                const purpleShade = getPurpleShadeForDepth(depth);
+                const purpleClass = getPurpleClassForDepth(depth);
                 result.push(
                   <span
                     key={`${keyPrefix}${depth}-${index}-${variableName}`}
-                    className={`cursor-pointer transition-colors ${purpleShade.background} ${purpleShade.text} px-1 py-0.5 rounded inline-block ${purpleShade.hover} border ${purpleShade.border}`}
+                    className={purpleClass}
                     onClick={(e) => {
                       e.stopPropagation();
                       openEditInCascadingDrawer(stringVariable);

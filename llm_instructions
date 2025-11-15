@@ -41,7 +41,9 @@ String: "My favorite color is `{{color-option}}`"
 - **Nested Variable Prevention**: Validation prevents adding nested variables in inline editing contexts
 - **Canvas Display Control**: Hide embedded strings, toggle variable names/hashes, plaintext mode
 - **Conditions-Only Sidebar**: Conditional variables managed exclusively in left sidebar, not shown in canvas
-- **Real-time Variable Detection**: Yellow boxes for new variables, purple for existing
+- **Real-time Variable Detection**: Sparkles icon (✨) for new/pending variables
+- **Unified Variable Hash Badges**: Click-to-copy badges with gradient backgrounds indicating variable type
+- **Minimal UI**: Clean cards with shadow effects, no redundant type icons or badges
 
 ---
 
@@ -619,11 +621,13 @@ frontend/src/
 ### Key Files
 - **`page.tsx`**: Main UI, conditions sidebar, canvas, state management
 - **`StringEditDrawer.tsx`**: Unified drawer for all editing scenarios
+- **`VariableHashBadge.tsx`**: Reusable hash badge component with copy-to-clipboard
 - **`useStringEditDrawer.ts`**: Drawer state and operations
 - **`stringOperations.ts`**: Save logic for strings and conditionals
 - **`backend/strings_api/models.py`**: String model with slugify logic
 - **`backend/strings_api/serializers.py`**: API serializers
-- **`frontend/src/styles/embedded-variables.scss`**: Centralized styling for embedded variables
+- **`frontend/src/styles/embedded-variables.scss`**: Centralized styling for embedded variables and hash badges
+- **`frontend/src/components/ui/tooltip.tsx`**: ShadCN/UI tooltip component
 
 ---
 
@@ -713,7 +717,26 @@ Parent string (no color) >
 
 ## Recent Major Updates (2025)
 
-### Embedded Variable Styling System (Latest)
+### Drawer UI Refinements (Latest)
+- **Unified Variable Hash Badges**: All variable hashes use `VariableHashBadge` component
+  - Click-to-copy functionality throughout app
+  - Gradient backgrounds: String variables (blue/teal → gray), Conditional variables (gold/salmon → gray)
+  - Type-aware styling via `type` prop ('string' | 'conditional' | 'default')
+  - Centralized in SCSS with `$string-var-color` and `$conditional-var-color`
+- **Pending Variable Indicators**: Sparkles icon (✨) with tooltip ("Pending/New") for new variables
+  - Purple color (`$pending-var-color: mediumpurple`) in SCSS
+  - Replaces "New variable!" and "Existing variable" badges
+- **Minimal Card Design**: 
+  - Removed all type indicator icons (Plus, Spool, Folder) from variable cards
+  - Unified shadow-based cards: `shadow-sm hover:shadow-md transition-all`
+  - Clean borders without background colors
+  - Focus on content rather than visual noise
+- **Drawer Header Layout**: Variable hash badge positioned beneath title instead of side-by-side
+- **Conditional Variable Editing**: Removed edit icons and messages for conditional variables in embedded/spawn lists
+  - No misleading paths to edit conditionals from inline contexts
+- **Tooltip Component**: Added ShadCN/UI tooltip component (`@radix-ui/react-tooltip`)
+
+### Embedded Variable Styling System
 - **Centralized SCSS file**: All embedded variable styling consolidated into `frontend/src/styles/embedded-variables.scss`
 - **Semantic naming**: Classes use `string`/`conditional` instead of color names (`purple`/`orange`)
 - **DRY architecture**: Attribute selectors for base styles, depth classes only define hover backgrounds

@@ -19,7 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
+import { VariableHashBadge } from "@/components/VariableHashBadge";
 import { StringEditDrawer } from "@/components/StringEditDrawer";
 import { useStringEditDrawer } from "@/hooks/useStringEditDrawer";
 
@@ -5219,26 +5219,11 @@ export default function ProjectDetailPage() {
                         
                         {/* Variable hash badge - shown when enabled and not in plaintext mode */}
                         {!isPlaintextMode && showVariableHashes && (
-                        <div className="mt-2 flex items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className={`cursor-pointer hover:bg-muted text-xs font-mono flex items-center gap-1 ${
-                              str.is_conditional_container 
-                                ? 'bg-orange-50 text-orange-700 border-orange-200' 
-                                : 'bg-purple-50 text-purple-700 border-purple-200'
-                            }`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const varName = str.effective_variable_name || str.variable_hash;
-                              const copyText = `{{${varName}}}`;
-                              navigator.clipboard.writeText(copyText);
-                              toast.success(`Copied "${copyText}" to clipboard`);
-                            }}
-                            title={`Click to copy variable: {{${str.effective_variable_name || str.variable_hash}}}`}
-                          >
-                            <Copy className="h-3 w-3" />
-                            {`{{${str.effective_variable_name || str.variable_hash}}}`}
-                          </Badge>
+                        <div className="mt-2">
+                          <VariableHashBadge 
+                            hash={str.effective_variable_name || str.variable_hash} 
+                            type={str.is_conditional_container ? 'conditional' : 'string'}
+                          />
                         </div>
                         )}
                       </div>

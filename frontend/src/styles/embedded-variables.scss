@@ -7,27 +7,139 @@
 // ============================================================================
 
 // ----------------------------------------------------------------------------
-// BASE COLORS - Edit these to change the entire color scheme
-// ----------------------------------------------------------------------------
-// String variables (currently purple, but change to any color you want)
-$string-var-color: blue; // Base border color for string variables
-$string-text-color: black;     // Text color for string variables
-
-// Conditional variables (currently orange, but change to any color you want)
-$conditional-var-color: gold; // Base border color for conditional variables
-$conditional-text-color: black;     // Text color for conditional variables
-
-// ----------------------------------------------------------------------------
 // TINT/SHADE FUNCTIONS
 // ----------------------------------------------------------------------------
 // Tint/Shade functions using mix() for solid colors (no transparency)
 // Based on: https://css-tricks.com/snippets/sass/tint-shade-functions/
+// IMPORTANT: Must be defined BEFORE base colors to be used in :root
 @function tint($color, $percentage) {
   @return mix(white, $color, $percentage);
 }
 
 @function shade($color, $percentage) {
   @return mix(black, $color, $percentage);
+}
+
+// ----------------------------------------------------------------------------
+// BASE COLORS - Edit these to change the entire color scheme
+// ----------------------------------------------------------------------------
+// String variables (currently blue, but change to any color you want)
+$string-var-color: lightseagreen; // Base border color for string variables
+$string-text-color: black;     // Text color for string variables
+
+// Conditional variables (currently gold, but change to any color you want)
+$conditional-var-color: lightsalmon; // Base border color for conditional variables
+$conditional-text-color: black;     // Text color for conditional variables
+
+// Pending/New variable indicator color
+$pending-var-color: mediumpurple; // Color for sparkles icon on pending/new variables
+
+// Export colors as CSS custom properties for use throughout the app
+:root {
+  // String variable colors
+  --string-var-color: #{$string-var-color};
+  --string-var-text: #{$string-text-color};
+  --string-var-50: #{tint($string-var-color, 90%)};   // Very light background
+  --string-var-100: #{tint($string-var-color, 80%)};  // Light background
+  --string-var-200: #{tint($string-var-color, 70%)};  // Border
+  --string-var-600: #{shade($string-var-color, 20%)}; // Icons
+  --string-var-700: #{shade($string-var-color, 30%)}; // Text
+  
+  // Conditional variable colors
+  --conditional-var-color: #{$conditional-var-color};
+  --conditional-var-text: #{$conditional-text-color};
+  --conditional-var-50: #{tint($conditional-var-color, 90%)};   // Very light background
+  --conditional-var-100: #{tint($conditional-var-color, 80%)};  // Light background
+  --conditional-var-200: #{tint($conditional-var-color, 70%)};  // Border
+  --conditional-var-600: #{shade($conditional-var-color, 20%)}; // Icons
+  --conditional-var-700: #{shade($conditional-var-color, 30%)}; // Text
+  
+  // Pending/New variable colors
+  --pending-var-color: #{$pending-var-color};
+  --pending-var-50: #{tint($pending-var-color, 90%)};   // Very light background
+  --pending-var-200: #{tint($pending-var-color, 70%)};  // Border
+}
+
+// ----------------------------------------------------------------------------
+// VARIABLE HASH BADGE
+// ----------------------------------------------------------------------------
+// Unified styling for variable hash badges displayed throughout the app
+// Used in: canvas, drawer header, embedded variables, spawn lists, etc.
+// ----------------------------------------------------------------------------
+
+.variable-hash-badge {
+  // Layout
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem; // Space between icon and text
+  padding: 0.25rem 0.5rem;
+  
+  // Typography
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem; // text-xs
+  font-weight: 500;
+  
+  // Colors - Neutral styling (default)
+  background-color: rgb(249 250 251); // bg-gray-50
+  color: rgb(55 65 81); // text-gray-700
+  border: 1px solid rgb(229 231 235); // border-gray-200
+  border-radius: 0.375rem; // rounded-md
+  
+  // Interaction
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  
+  &:hover {
+    background-color: rgb(243 244 246); // hover:bg-gray-100
+    border-color: rgb(209 213 219); // hover:border-gray-300
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  &:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+}
+
+// String variable variant - gradient with string color
+.variable-hash-badge-string {
+  background: linear-gradient(135deg, 
+    tint($string-var-color, 85%) 0%,
+    rgb(249 250 251) 100%
+  );
+  border-color: tint($string-var-color, 60%);
+  
+  &:hover {
+    background: linear-gradient(135deg, 
+      tint($string-var-color, 75%) 0%,
+      rgb(243 244 246) 100%
+    );
+    border-color: tint($string-var-color, 50%);
+  }
+}
+
+// Conditional variable variant - gradient with conditional color
+.variable-hash-badge-conditional {
+  background: linear-gradient(135deg, 
+    tint($conditional-var-color, 85%) 0%,
+    rgb(249 250 251) 100%
+  );
+  border-color: tint($conditional-var-color, 60%);
+  
+  &:hover {
+    background: linear-gradient(135deg, 
+      tint($conditional-var-color, 75%) 0%,
+      rgb(243 244 246) 100%
+    );
+    border-color: tint($conditional-var-color, 50%);
+  }
+}
+
+.variable-hash-badge-icon {
+  width: 0.75rem; // h-3
+  height: 0.75rem; // w-3
+  flex-shrink: 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -42,8 +154,11 @@ $conditional-text-color: black;     // Text color for conditional variables
 // Base styles for all string variables (all depth levels)
 [class*="embedded-var-string-"] {
   color: $string-text-color;
-  border-color: $string-var-color; // Always base color
-  padding: 0 0 4px;
+  border-color: transparent; // Always base color
+  padding: 0px 0 4px;
+  &::before {
+    background-color: $string-var-color; // Always base color
+  }
 }
 
 // Depth-specific hover backgrounds only
@@ -65,8 +180,12 @@ $conditional-text-color: black;     // Text color for conditional variables
 // Base styles for all conditional variables (all depth levels)
 [class*="embedded-var-conditional-"] {
   color: $conditional-text-color;
-  border-color: $conditional-var-color; // Always base color
-  padding: 0 8px 4px;
+  border-color: transparent; // Always base color
+  padding: 0px 8px 4px;
+
+  &::before {
+    background-color: $conditional-var-color; // Always base color
+  }
 }
 
 // Depth-specific hover backgrounds only
@@ -91,6 +210,8 @@ $conditional-text-color: black;     // Text color for conditional variables
   border-radius: 0; // rounded
   box-sizing: border-box;
   line-height: 24px;
+  position: relative;
+  border-radius: 4px;
 
   
   // Interaction
@@ -103,6 +224,19 @@ $conditional-text-color: black;     // Text color for conditional variables
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
+
+  &::before {
+    content: "";
+    height: 4px;
+    width: 100%;
+    left: 0;
+    position: absolute;
+    bottom: -4px;
+    display: inline-block;
+    z-index: 1;
+    border-radius: 4px;
+    border-width: 0;
+  }
 }
 
 // ----------------------------------------------------------------------------

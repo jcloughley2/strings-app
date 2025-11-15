@@ -8,8 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Spool, Folder, ArrowLeft, Search, X, Edit2 } from "lucide-react";
+import { ArrowLeft, Search, X, Sparkles, Folder } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import { VariableHashBadge } from "@/components/VariableHashBadge";
 
 // Simple slugify function for preview
 function slugify(text: string): string {
@@ -239,19 +241,13 @@ export function StringEditDrawer({
       >
         {/* Header */}
         <SheetHeader className="px-6 py-4 border-b bg-background">
-          <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
               {showBackButton && onBack && (
                 <Button variant="ghost" size="sm" onClick={onBack} className="mr-2">
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
               )}
-              <div className="flex items-center gap-2">
-                {isConditional ? (
-                  <Folder className="h-5 w-5 text-orange-600" />
-                ) : (
-                  <Spool className="h-5 w-5 text-purple-600" />
-                )}
+            <div className="flex flex-col gap-2">
                 <SheetTitle className="text-lg font-semibold">
                   {effectiveTitle}
                   {level > 0 && (
@@ -260,22 +256,15 @@ export function StringEditDrawer({
                     </Badge>
                   )}
                 </SheetTitle>
-              </div>
-            </div>
             
-            {/* Variable Name Badge */}
+              {/* Variable Name Badge - beneath title */}
             {variableName && (
-              <Badge 
-                variant="outline" 
-                className={`text-xs font-mono ${
-                  isConditional 
-                    ? 'bg-orange-50 text-orange-700 border-orange-200' 
-                    : 'bg-purple-50 text-purple-700 border-purple-200'
-                }`}
-              >
-                {`{{${variableName}}}`}
-              </Badge>
-            )}
+                <VariableHashBadge 
+                  hash={variableName} 
+                  type={stringData?.is_conditional_container ? 'conditional' : 'string'}
+                />
+              )}
+            </div>
           </div>
           
           {/* Tabs */}
@@ -372,11 +361,11 @@ export function StringEditDrawer({
                               >
                                 <div className="flex items-center gap-2 mb-1">
                                   {variable.isConditional ? (
-                                    <div className="flex items-center gap-1 text-orange-600 bg-orange-50 p-1 rounded border border-orange-200">
+                                    <div className="flex items-center gap-1 text-conditional-600 bg-conditional-50 p-1 rounded border border-conditional-200">
                                       <Folder className="h-3 w-3" />
                                     </div>
                                   ) : (
-                                    <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
+                                    <div className="flex items-center gap-1 text-string-600 bg-string-50 p-1 rounded border border-string-200">
                                       <Spool className="h-3 w-3" />
                                     </div>
                                   )}
@@ -384,8 +373,8 @@ export function StringEditDrawer({
                                     variant="outline" 
                                     className={`text-xs font-mono ${
                                       variable.isConditional 
-                                        ? 'bg-orange-50 text-orange-700 border-orange-200'
-                                        : 'bg-purple-50 text-purple-700 border-purple-200'
+                                        ? 'bg-conditional-50 text-conditional-700 border-conditional-200'
+                                        : 'bg-string-50 text-string-700 border-string-200'
                                     }`}
                                   >
                                     {`{{${variable.name}}}`}
@@ -458,48 +447,30 @@ export function StringEditDrawer({
                         const isConditionalSpawn = spawn.is_conditional_container;
                         const spawnVariableName = spawn.effective_variable_name || spawn.variable_hash || (isTemporary ? 'new_variable' : 'unknown');
                         
-                        // Determine styling based on spawn type
-                        let bgClass, borderClass, iconBgClass, badgeClass, IconComponent;
-                        
-                        if (isTemporary) {
-                          bgClass = 'bg-yellow-50/50 border-yellow-200';
-                          iconBgClass = 'text-yellow-600 bg-yellow-50 border border-yellow-200';
-                          badgeClass = 'bg-yellow-50 text-yellow-700 border-yellow-200';
-                          IconComponent = Plus;
-                        } else if (isExisting && isConditionalSpawn) {
-                          bgClass = 'bg-orange-50/50 border-orange-200';
-                          iconBgClass = 'text-orange-600 bg-orange-50 border border-orange-200';
-                          badgeClass = 'bg-orange-50 text-orange-700 border-orange-200';
-                          IconComponent = Folder;
-                        } else {
-                          bgClass = 'bg-purple-50/50 border-purple-200';
-                          iconBgClass = 'text-purple-600 bg-purple-50 border border-purple-200';
-                          badgeClass = 'bg-purple-50 text-purple-700 border-purple-200';
-                          IconComponent = Spool;
-                        }
-                        
                         return (
                           <div 
                             key={spawn.id || `spawn-${index}`} 
-                            className={`border rounded-lg p-4 transition-colors group relative ${bgClass}`}
+                            className="border rounded-lg p-4 shadow-sm hover:shadow-md transition-all group relative"
                           >
-                            {/* Header with icon and badges */}
+                            {/* Header with badges */}
                             <div className="flex items-center gap-2 mb-3">
-                                <div className={`flex items-center gap-1 p-1 rounded ${iconBgClass}`}>
-                                  <IconComponent className="h-3 w-3" />
-                                </div>
-                                <Badge variant="outline" className={`text-xs font-mono ${badgeClass}`}>
-                                  {`{{${spawnVariableName}}}`}
-                                </Badge>
+                                <VariableHashBadge 
+                                  hash={spawnVariableName} 
+                                  type={isConditionalSpawn ? 'conditional' : 'string'}
+                                />
                                 {isTemporary && (
-                                  <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
-                                    New variable!
-                                  </Badge>
-                                )}
-                                {isExisting && (
-                                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
-                                    Existing variable
-                                  </Badge>
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <div className="cursor-help">
+                                          <Sparkles className="h-5 w-5 text-pending" />
+                                        </div>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Pending/New</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
                                 )}
                               </div>
                             
@@ -537,33 +508,10 @@ export function StringEditDrawer({
                                   />
                                 </div>
                               )}
-                              
-                              {/* Read-only message for conditional spawns */}
-                              {isConditionalSpawn && (
-                                <p className="text-xs text-muted-foreground italic">
-                                  This is a conditional variable. Click the edit icon to modify its spawns.
-                                </p>
-                              )}
                             </div>
                             
                             {/* Action buttons in top-right */}
                             <div className="absolute top-2 right-2 flex items-center gap-1">
-                              {/* Edit button - opens full drawer for conditionals */}
-                              {isConditionalSpawn && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onEditSpawn?.(spawn);
-                                  }}
-                                  title={`Edit conditional variable ${spawnVariableName}`}
-                                >
-                                  <Edit2 className="h-3 w-3" />
-                                </Button>
-                              )}
-                              
                               {/* Remove button */}
                             {onRemoveSpawn && (
                               <Button
@@ -632,38 +580,18 @@ export function StringEditDrawer({
                             ? currentEdits.content 
                             : (stringVar.content || '');
                           
-                          // Determine styling based on variable type
-                          let bgClass, borderClass, iconBgClass, badgeClass, IconComponent;
-                          
-                          if (isConditional) {
-                            bgClass = 'bg-orange-50/50 border-orange-200';
-                            iconBgClass = 'text-orange-600 bg-orange-50 border border-orange-200';
-                            badgeClass = 'bg-orange-50 text-orange-700 border-orange-200';
-                            IconComponent = Folder;
-                          } else {
-                            bgClass = 'bg-purple-50/50 border-purple-200';
-                            iconBgClass = 'text-purple-600 bg-purple-50 border border-purple-200';
-                            badgeClass = 'bg-purple-50 text-purple-700 border-purple-200';
-                            IconComponent = Spool;
-                          }
-                          
                           return (
                             <div 
                               key={stringVar.id} 
-                              className={`border rounded-lg p-4 transition-colors group relative ${bgClass}`}
+                              className="border rounded-lg p-4 shadow-sm hover:shadow-md transition-all group relative"
                             >
-                              {/* Header with icon and badges */}
+                              {/* Header with badges */}
                               <div className="flex items-center gap-2 mb-3">
-                                <div className={`flex items-center gap-1 p-1 rounded ${iconBgClass}`}>
-                                  <IconComponent className="h-3 w-3" />
+                                <VariableHashBadge 
+                                  hash={variableName} 
+                                  type={isConditional ? 'conditional' : 'string'}
+                                />
                                   </div>
-                                <Badge variant="outline" className={`text-xs font-mono ${badgeClass}`}>
-                                  {`{{${variableName}}}`}
-                                </Badge>
-                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
-                                  Existing variable
-                                </Badge>
-                              </div>
                               
                               {/* Inline editing fields */}
                               <div className="space-y-3">
@@ -717,32 +645,6 @@ export function StringEditDrawer({
                                     />
                                   </div>
                                 )}
-                                
-                                {/* Read-only message for conditional variables */}
-                                {isConditional && (
-                                  <p className="text-xs text-muted-foreground italic">
-                                    This is a conditional variable. Click the edit icon to modify its spawns.
-                                  </p>
-                                )}
-                              </div>
-                              
-                              {/* Action buttons in top-right */}
-                              <div className="absolute top-2 right-2 flex items-center gap-1">
-                                {/* Edit button - opens full drawer for conditionals */}
-                                {isConditional && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onEditVariable?.(variableName);
-                                    }}
-                                    title={`Edit conditional variable ${variableName}`}
-                                  >
-                                    <Edit2 className="h-3 w-3" />
-                                  </Button>
-                                )}
                               </div>
                             </div>
                           );
@@ -757,19 +659,26 @@ export function StringEditDrawer({
                           return (
                           <div 
                             key={variableName} 
-                              className="border rounded-lg p-4 transition-colors group relative bg-yellow-50/50 border-yellow-200"
+                              className="border rounded-lg p-4 shadow-sm hover:shadow-md transition-all group relative"
                           >
-                              {/* Header with icon and badges */}
+                              {/* Header with badges */}
                               <div className="flex items-center gap-2 mb-3">
-                              <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 p-1 rounded border border-yellow-200">
-                                <Plus className="h-3 w-3" />
+                              <VariableHashBadge 
+                                hash={variableName} 
+                                type={isConditional ? 'conditional' : 'string'}
+                              />
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="cursor-help">
+                                      <Sparkles className="h-5 w-5 text-pending" />
                               </div>
-                              <Badge variant="outline" className="text-xs font-mono bg-yellow-50 text-yellow-700 border-yellow-200">
-                                {`{{${variableName}}}`}
-                              </Badge>
-                              <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
-                                New variable!
-                              </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Pending/New</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             </div>
                               
                               {/* Inline editing fields */}
@@ -941,7 +850,7 @@ export function StringEditDrawer({
                                   <div key={group.conditionalName}>
                                     {/* Conditional Header */}
                                     <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0 flex items-center gap-2">
-                                      <Folder className="h-3 w-3 text-orange-600" />
+                                      <Folder className="h-3 w-3 text-conditional-600" />
                                       {group.conditionalDisplayName}
                                     </div>
                                     
@@ -1050,13 +959,13 @@ export function StringEditDrawer({
                               className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
                             >
                               <div className="flex items-center gap-3">
-                                <Folder className="h-4 w-4 text-orange-600" />
+                                <Folder className="h-4 w-4 text-conditional-600" />
                                 <div>
                                   <p className="font-medium text-sm">{conditionalDisplayName}</p>
-                                  <p className="text-xs text-muted-foreground font-mono">{`{{${conditionalHash}}}`}</p>
+                                  <VariableHashBadge hash={conditionalHash} type="conditional" className="mt-1" />
                                 </div>
                               </div>
-                              <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                              <Badge variant="outline" className="bg-conditional-50 text-conditional-700 border-conditional-200">
                                 Conditional
                               </Badge>
                             </div>
@@ -1092,8 +1001,11 @@ export function StringEditDrawer({
                   <>
                   <div className="space-y-2">
                       <Label>Variable Hash (Identifier)</Label>
-                      <div className="text-sm font-mono bg-muted px-3 py-2 rounded-md">
-                        {`{{${stringData.effective_variable_name || stringData.variable_hash}}}`}
+                      <div>
+                        <VariableHashBadge 
+                          hash={stringData.effective_variable_name || stringData.variable_hash} 
+                          type={stringData.is_conditional_container ? 'conditional' : 'string'}
+                        />
                       </div>
                       <p className="text-xs text-muted-foreground">
                         Use this identifier to reference this variable in other strings

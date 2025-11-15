@@ -478,6 +478,7 @@ for (const [varName, content] of Object.entries(state.pendingVariableContent)) {
 ### Error Handling
 ```javascript
 // Graceful handling of backend pre-emptive updates
+// Applies to: dimension value deletion, hidden option toggle, spawn sync
 try {
   await apiFetch(`/api/dimension-values/${existingValue.id}/`, {
     method: 'DELETE',
@@ -486,8 +487,24 @@ try {
   const errorStr = deleteError.message || String(deleteError);
   if (errorStr.includes('Not found') || errorStr.includes('404')) {
     console.log(`Already removed by backend signal, continuing...`);
-    } else {
+  } else {
     console.error(`Failed to delete:`, deleteError);
+    // Optionally re-throw for critical operations
+  }
+}
+
+// Same pattern for "Hidden" option toggle
+if (existingHiddenValue) {
+  try {
+    await apiFetch(`/api/dimension-values/${existingHiddenValue.id}/`, {
+      method: 'DELETE',
+    });
+  } catch (deleteError: any) {
+    if (deleteError.message?.includes('Not found') || deleteError.message?.includes('404')) {
+      console.log('"Hidden" dimension value already removed, continuing...');
+    } else {
+      throw deleteError;
+    }
   }
 }
 ```
@@ -587,6 +604,7 @@ Frontend:  selectedConditionalSpawns[conditionalName] = spawnName
 6. **Variable Embedding**: Multi-level A→B→C references work correctly
 7. **Circular Protection**: Self-reference and loops properly blocked
 8. **Canvas Filtering**: Hide embedded strings, toggle names/hashes, plaintext mode
+9. **Hidden Option Toggle**: Enable/disable "Hidden" option for conditional variables → verify no "Not found" errors
 
 ### UI/UX
 1. **Drawer System**: Unified drawer handles create/edit for strings and conditionals
@@ -720,21 +738,35 @@ Parent string (no color) >
 ### Drawer UI Refinements (Latest)
 - **Unified Variable Hash Badges**: All variable hashes use `VariableHashBadge` component
   - Click-to-copy functionality throughout app
-  - Gradient backgrounds: String variables (blue/teal → gray), Conditional variables (gold/salmon → gray)
+  - Gradient backgrounds: String variables (color → gray), Conditional variables (color → gray)
   - Type-aware styling via `type` prop ('string' | 'conditional' | 'default')
   - Centralized in SCSS with `$string-var-color` and `$conditional-var-color`
+  - Border radius: 0.375rem (rounded-md) for consistency
 - **Pending Variable Indicators**: Sparkles icon (✨) with tooltip ("Pending/New") for new variables
   - Purple color (`$pending-var-color: mediumpurple`) in SCSS
   - Replaces "New variable!" and "Existing variable" badges
+  - Standalone icon without box/border, size h-5 w-5
 - **Minimal Card Design**: 
   - Removed all type indicator icons (Plus, Spool, Folder) from variable cards
   - Unified shadow-based cards: `shadow-sm hover:shadow-md transition-all`
   - Clean borders without background colors
   - Focus on content rather than visual noise
+  - Consistent styling for embedded, spawn, and pending variable cards
 - **Drawer Header Layout**: Variable hash badge positioned beneath title instead of side-by-side
 - **Conditional Variable Editing**: Removed edit icons and messages for conditional variables in embedded/spawn lists
   - No misleading paths to edit conditionals from inline contexts
+  - Conditional variables shown as read-only in inline contexts
+- **Spawn Remove Button**: Neutral ghost button styling (no red coloring)
 - **Tooltip Component**: Added ShadCN/UI tooltip component (`@radix-ui/react-tooltip`)
+- **Conditions Sidebar Badge Refinements**:
+  - All selected spawn badges use solid conditional color background (no gradient)
+  - Text always neutral gray (rgb(55 65 81)) - never changes on hover or active state
+  - Font weight: medium (500) - not bold
+  - Border radius: 0.375rem (rounded-md) matching hash badges
+  - Locked/controlled spawns: Lock icon (🔒) prefix + 60% opacity
+  - Removed "(auto)" and "(locked)" text labels
+  - Pencil edit icon always has cursor-pointer, even on disabled badges
+  - Unselected badges stay neutral on hover (no color change)
 
 ### Embedded Variable Styling System
 - **Centralized SCSS file**: All embedded variable styling consolidated into `frontend/src/styles/embedded-variables.scss`

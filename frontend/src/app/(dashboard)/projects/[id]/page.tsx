@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 
 
-import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Settings, EyeOff, Hash } from "lucide-react";
+import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Settings, EyeOff, Hash, Lock } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -5042,24 +5042,25 @@ export default function ProjectDetailPage() {
                     return (
                       <div
                                   key={spawn.id}
-                        className={`group inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors ${
+                        className={`group inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-all ${
                           isControlled 
-                            ? 'bg-green-100 border-green-300 text-green-800' 
-                            : 'bg-blue-100 border-blue-300 text-blue-800'
+                            ? 'opacity-60' 
+                            : 'cursor-pointer'
                         }`}
+                        style={{
+                          backgroundColor: 'var(--conditional-var-100)', // Solid color, not gradient
+                          borderColor: 'var(--conditional-var-200)',
+                          color: 'rgb(55 65 81)' // text-gray-700
+                        }}
                       >
+                                  {isControlled && <Lock className="h-3 w-3" />}
                                   <span>{spawnDisplayName}</span>
-                                  {isControlled && (
-                                    <span className="text-[10px] opacity-70">(auto)</span>
-                                  )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             mainDrawer.openEditDrawer(spawn);
                           }}
-                          className={`ml-1 opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 ${
-                            isControlled ? 'hover:bg-green-200' : 'hover:bg-blue-200'
-                          }`}
+                          className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 hover:bg-conditional-200 cursor-pointer"
                           aria-label="Edit spawn variable"
                         >
                           <Edit2 className="h-3 w-3" />
@@ -5071,11 +5072,16 @@ export default function ProjectDetailPage() {
                     return (
                       <div
                                   key={spawn.id}
-                        className={`group inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors ${
+                        className={`group inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-all ${
                           isDisabled
-                            ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
-                            : 'border-input hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 cursor-pointer'
+                            ? 'opacity-60'
+                            : 'cursor-pointer'
                         }`}
+                        style={{
+                          backgroundColor: 'rgb(249 250 251)', // bg-gray-50 - stays neutral
+                          borderColor: 'rgb(229 231 235)', // border-gray-200
+                          color: 'rgb(55 65 81)' // text-gray-700
+                        }}
                         onClick={() => {
                           if (!isDisabled) {
                             setSelectedConditionalSpawns(prev => ({
@@ -5085,18 +5091,14 @@ export default function ProjectDetailPage() {
                           }
                         }}
                       >
+                                  {isDisabled && <Lock className="h-3 w-3" />}
                                   <span>{spawnDisplayName}</span>
-                                  {isDisabled && (
-                                    <span className="text-[10px] opacity-70">(locked)</span>
-                                  )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             mainDrawer.openEditDrawer(spawn);
                           }}
-                          className={`ml-1 opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 ${
-                            isDisabled ? 'hover:bg-gray-100' : 'hover:bg-blue-100'
-                          }`}
+                          className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 hover:bg-gray-100 cursor-pointer"
                           aria-label="Edit spawn variable"
                         >
                           <Edit2 className="h-3 w-3" />

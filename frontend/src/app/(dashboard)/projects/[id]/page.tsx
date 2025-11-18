@@ -5310,6 +5310,13 @@ export default function ProjectDetailPage() {
         onCancel={mainDrawer.closeDrawer}
         onAddSpawn={mainDrawer.addSpawn}
         onUpdateSpawn={mainDrawer.updateSpawn}
+        onNavigateToVariable={(variableId) => {
+          // Find the variable in the project
+          const variable = project?.strings?.find((s: any) => s.id.toString() === variableId);
+          if (variable) {
+            mainDrawer.openEditDrawer(variable);
+          }
+        }}
         onRemoveSpawn={mainDrawer.removeSpawn}
         onAddExistingVariableAsSpawn={mainDrawer.addExistingVariableAsSpawn}
         onEditSpawn={handleEditSpawn}

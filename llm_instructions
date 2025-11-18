@@ -35,10 +35,7 @@ String: "My favorite color is `{{color-option}}`"
 - **Conditionals**: Convert strings to directories containing multiple variations (spawns)
 - **Spawn Selection**: Users select which spawn variable displays for each conditional variable
 - **Controlling Conditions**: Spawn variables can auto-select based on other spawn selections
-- **Inline Spawn Editing**: Edit spawn names/content directly within conditional drawer
-- **Inline Embedded Variable Editing**: Edit existing embedded variables' names/content directly within parent string drawer
-- **Custom Content for New Variables**: Provide custom content for new embedded variables during creation
-- **Nested Variable Prevention**: Validation prevents adding nested variables in inline editing contexts
+- **Drawer Navigation System**: Visual hierarchy sidebar showing parents, current variable, and children with click-to-navigate
 - **Canvas Display Control**: Hide embedded strings, toggle variable names/hashes, plaintext mode
 - **Conditions-Only Sidebar**: Conditional variables managed exclusively in left sidebar, not shown in canvas
 - **Real-time Variable Detection**: Sparkles icon (✨) for new/pending variables
@@ -143,15 +140,23 @@ String: "My favorite color is `{{color-option}}`"
 - Replaces 4+ legacy drawer systems
 - 60% code reduction, consistent UX across all scenarios
 
+**Drawer Navigation Sidebar**:
+- Visual hierarchy showing variable relationships
+- **Parents** (36px, left-aligned): Variables that embed or spawn the current one
+- **Current** (48px, centered, bold border): Active variable being edited
+- **Children** (36px, right-aligned): Spawns, embedded, and pending variables
+- Click any square to navigate to that variable
+- Hover tooltips show full names and relationships
+- Color-coded: Seagreen for strings, Salmon for conditionals
+- Works for both creating new and editing existing variables
+- Immediate save (no batch operations)
+
 **Three Main Tabs**: Content, Conditions, Advanced
 
 **Content Tab**:
 - Variable Type dropdown: String or Conditional
-- **String Mode**: 
-  - Text content editing + variable detection boxes
-  - Embedded Variables section with inline editing for existing variables
-  - Custom content input for new variables (optional)
-- **Conditional Mode**: Spawn management with inline editing
+- **String Mode**: Text content editing (child variables shown in navigation sidebar)
+- **Conditional Mode**: "Include option to hide" toggle (spawn variables shown in navigation sidebar)
 
 **Conditions Tab**:
 - Shows parent conditional variables (for spawn variables)
@@ -167,48 +172,18 @@ String: "My favorite color is `{{color-option}}`"
 - Variable Name (read-only, auto-generated)
 - Variable Hash (read-only, fallback)
 
-### Conditional Mode Features
+### Spawn Management
 
-**Inline Spawn Editing**:
-- **Variable Name Input**: Always visible for all spawn types (triggers slugify on save)
-- **Content Textarea**: Visible for string variables only (3 rows, resizable)
-- **Conditional Spawns**: Show name input + edit button to open full drawer
-- **Real-time Updates**: Changes reflected immediately in state
-- **Batch Save**: All spawn edits saved together when parent conditional is saved
-- **Conditions Sidebar Sync**: Tags update to show new slugified names after save
-
-**Spawn Management**:
-- Yellow boxes: New/temporary spawns
-- Purple boxes: Existing string variables as spawns
-- Orange boxes: Existing conditional variables as spawns
-- Add New Spawn button
+**Add/Remove Spawns**:
+- Add New Spawn button (creates temporary spawn)
 - Add Existing Variable as Spawn (autocomplete search)
-- Remove spawn button (hover-triggered)
+- Remove spawn button (hover-triggered in navigation or via conditions sidebar)
 - Include Hide Option checkbox
 
-### Inline Embedded Variable Editing
-
-**For Existing Embedded Variables**:
-- Shows all embedded variables detected in parent string content
-- Purple/orange tiles with icon badges
-- **Variable Name Input**: Editable, triggers slugify on save
-- **Content Textarea**: Editable for string variables only
-- **Conditional Variables**: Read-only with edit button to open full drawer
-- Changes saved when parent string is saved
-
-**For New/Pending Embedded Variables**:
-- Yellow tiles for variables detected but not yet created
-- **Variable Name**: Read-only (comes from `{{variableName}}` in content)
-- **Content Input**: Optional custom content field
-- If left blank: Uses default content "Content for {variableName}"
-- If filled: Creates variable with custom content
-- Created automatically when parent string is saved
-
-**Nested Variable Prevention**:
-- Validation prevents `{{...}}` syntax in spawn/embedded variable content
-- Error message guides user to open variable directly for nesting
-- Applies to: spawn content, embedded variable edits, pending variable content
-- Parent string content is not restricted
+**Navigation**:
+- All spawn variables shown in drawer navigation sidebar
+- Click spawn square to navigate and edit
+- Spawns aligned to right side of navigation
 
 ---
 
@@ -639,6 +614,7 @@ frontend/src/
 ### Key Files
 - **`page.tsx`**: Main UI, conditions sidebar, canvas, state management
 - **`StringEditDrawer.tsx`**: Unified drawer for all editing scenarios
+- **`DrawerNavigation.tsx`**: Visual hierarchy sidebar for variable relationships
 - **`VariableHashBadge.tsx`**: Reusable hash badge component with copy-to-clipboard
 - **`useStringEditDrawer.ts`**: Drawer state and operations
 - **`stringOperations.ts`**: Save logic for strings and conditionals
@@ -646,6 +622,7 @@ frontend/src/
 - **`backend/strings_api/serializers.py`**: API serializers
 - **`frontend/src/styles/embedded-variables.scss`**: Centralized styling for embedded variables and hash badges
 - **`frontend/src/components/ui/tooltip.tsx`**: ShadCN/UI tooltip component
+- **`frontend/src/components/ui/sheet.tsx`**: ShadCN/UI sheet component (modified for wider drawer)
 
 ---
 
@@ -735,7 +712,19 @@ Parent string (no color) >
 
 ## Recent Major Updates (2025)
 
-### Drawer UI Refinements (Latest)
+### Drawer Navigation System (Latest)
+- **Visual Hierarchy Sidebar**: Shows parents, current variable, and children as clickable squares
+- **Parent Detection**: Automatically finds variables that embed or spawn the current one
+- **Child Display**: Shows spawns, embedded, and pending variables
+- **Size Differentiation**: Active (48px), Parents/Children (36px)
+- **Alignment**: Parents left, Active center, Children right
+- **Click-to-Navigate**: Immediate navigation to any related variable
+- **Hover Tooltips**: Fixed-position tooltips with variable names and relationships
+- **Color-Coded**: Seagreen for strings, Salmon for conditionals
+- **Simplified Content Tab**: Removed inline editing sections (now handled via navigation)
+- **Component Architecture**: Separate `NavigationNodeItem` component to comply with Rules of Hooks
+
+### Drawer UI Refinements
 - **Unified Variable Hash Badges**: All variable hashes use `VariableHashBadge` component
   - Click-to-copy functionality throughout app
   - Gradient backgrounds: String variables (color → gray), Conditional variables (color → gray)

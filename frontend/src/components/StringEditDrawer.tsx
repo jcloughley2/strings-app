@@ -13,6 +13,7 @@ import { ArrowLeft, Search, X, Sparkles, Folder, Plus, Spool } from "lucide-reac
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { VariableHashBadge } from "@/components/VariableHashBadge";
+import { DrawerNavigation } from "@/components/DrawerNavigation";
 
 // Simple slugify function for preview
 function slugify(text: string): string {
@@ -89,6 +90,7 @@ export interface StringEditDrawerProps {
   onRemoveSpawn?: (spawn: any, index: number) => void;
   onEditVariable?: (variableName: string) => void;
   onAddExistingVariableAsSpawn?: (variableId: string) => void;
+  onNavigateToVariable?: (variableId: string) => void;
   
   // Display options
   title?: string;
@@ -135,6 +137,7 @@ export function StringEditDrawer({
   onRemoveSpawn,
   onEditVariable,
   onAddExistingVariableAsSpawn,
+  onNavigateToVariable,
   title,
   level = 0,
   showBackButton = false,
@@ -195,6 +198,112 @@ export function StringEditDrawer({
   // Get new variables that don't exist yet
   const pendingVariablesInContent = newVariables;
 
+  // Build navigation nodes for drawer sidebar
+  const buildNavigationNodes = () => {
+    const nodes: any[] = [];
+    
+    const currentVarName = stringData?.effective_variable_name || stringData?.variable_hash || 'new';
+    
+    // Find parent variables (variables that embed or spawn this one)
+    const parents: any[] = [];
+    
+    // Check for embedded parents (variables that embed this one in their content)
+    // Only check if we have an existing variable
+    if (stringData) {
+      project?.strings?.forEach((str: any) => {
+        if (str.id === stringData.id) return;
+        if (str.content) {
+          const variableMatches = str.content.match(/{{([^}]+)}}/g) || [];
+          const embeddedVars = variableMatches.map((match: string) => match.slice(2, -2));
+          if (embeddedVars.includes(currentVarName)) {
+            parents.push({ ...str, relationship: 'parent-embeds' });
+          }
+        }
+      });
+      
+      // Check for spawn parents (conditional variables that have this as a spawn)
+      // A spawn is any non-conditional-container variable that appears in a dimension's values
+      if (!stringData.is_conditional_container) {
+        project?.dimensions?.forEach((dim: any) => {
+          const hasCurrentAsSpawn = dim.values?.some((dv: any) => dv.value === currentVarName);
+          if (hasCurrentAsSpawn) {
+            // Find the conditional variable for this dimension
+            const conditionalVar = project?.strings?.find((s: any) => 
+              s.is_conditional_container && 
+              (s.effective_variable_name || s.variable_hash) === dim.name
+            );
+            if (conditionalVar && conditionalVar.id !== stringData.id) {
+              parents.push({ ...conditionalVar, relationship: 'parent-spawns' });
+            }
+          }
+        });
+      }
+      
+      // Add parent nodes first (at the top)
+      parents.forEach((parent: any) => {
+        nodes.push({
+          id: parent.id.toString(),
+          name: parent.display_name || '',
+          hash: parent.effective_variable_name || parent.variable_hash,
+          type: parent.is_conditional_container ? 'conditional' : 'string',
+          isActive: false,
+          relationship: parent.relationship,
+        });
+      });
+    }
+    
+    // Current variable (in the middle)
+    nodes.push({
+      id: stringData?.id?.toString() || 'new',
+      name: stringData?.display_name || displayName || 'New Variable',
+      hash: stringData?.effective_variable_name || stringData?.variable_hash || 'new',
+      type: stringData?.is_conditional_container || isConditional ? 'conditional' : 'string',
+      isActive: true,
+    });
+    
+    // Add spawn children (if this is a conditional)
+    if ((stringData?.is_conditional_container || isConditional) && conditionalSpawns.length > 0) {
+      conditionalSpawns.forEach((spawn: any) => {
+        nodes.push({
+          id: spawn.id ? spawn.id.toString() : `temp-${spawn.variable_name || spawn.display_name}`,
+          name: spawn.display_name || '',
+          hash: spawn.variable_name || spawn.effective_variable_name || spawn.variable_hash || 'new',
+          type: spawn.is_conditional_container ? 'conditional' : 'string',
+          isActive: false,
+          relationship: 'spawn',
+        });
+      });
+    }
+    
+    // Add embedded children
+    usedStringVariables.forEach((embeddedVar: any) => {
+      nodes.push({
+        id: embeddedVar.id.toString(),
+        name: embeddedVar.display_name || '',
+        hash: embeddedVar.effective_variable_name || embeddedVar.variable_hash,
+        type: embeddedVar.is_conditional_container ? 'conditional' : 'string',
+        isActive: false,
+        relationship: 'embedded',
+      });
+    });
+    
+    // Add pending/new embedded children
+    pendingVariablesInContent.forEach((varName: string) => {
+      nodes.push({
+        id: `pending-${varName}`,
+        name: '',
+        hash: varName,
+        type: 'string', // Assume string for new variables
+        isActive: false,
+        relationship: 'embedded',
+      });
+    });
+    
+    return nodes;
+  };
+  
+  const navigationNodes = buildNavigationNodes();
+
   // Filter available variables for spawn selection (exclude current string and already selected spawns)
   const currentSpawnNames = conditionalSpawns.map(spawn => {
     return spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash;
@@ -237,9 +346,21 @@ export function StringEditDrawer({
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent 
         side="right" 
-        className="w-[800px] max-w-[90vw] flex flex-col p-0 max-h-screen overflow-hidden"
+        className="w-[1100px] max-w-[95vw] flex flex-row p-0 h-screen overflow-hidden"
         style={zIndexStyle}
       >
+        {/* Navigation Sidebar */}
+        <DrawerNavigation 
+          nodes={navigationNodes}
+          onNodeClick={(nodeId) => {
+            if (onNavigateToVariable) {
+              onNavigateToVariable(nodeId);
+            }
+          }}
+        />
+        
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
         <SheetHeader className="px-6 py-4 border-b bg-background">
             <div className="flex items-center gap-2">
@@ -427,115 +548,6 @@ export function StringEditDrawer({
                       onCheckedChange={onHiddenOptionChange}
                     />
                   </div>
-
-                  {/* Spawn Variables */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label>Spawn Variables</Label>
-                      <Badge variant="outline" className="text-xs">
-                        {conditionalSpawns.length} spawn{conditionalSpawns.length !== 1 ? 's' : ''}
-                      </Badge>
-                    </div>
-                    
-                    <div className="grid gap-3">
-                      {conditionalSpawns.map((spawn: any, index: number) => {
-                        const isTemporary = spawn._isTemporary || 
-                                           spawn.id.toString().startsWith('temp-') || 
-                                           (typeof spawn.id === 'number' && spawn.id > 1000000000000);
-                        const isExisting = spawn._isExisting;
-                        const isConditionalSpawn = spawn.is_conditional_container;
-                        const spawnVariableName = spawn.effective_variable_name || spawn.variable_hash || (isTemporary ? 'new_variable' : 'unknown');
-                        
-                        return (
-                          <div 
-                            key={spawn.id || `spawn-${index}`} 
-                            className="border rounded-lg p-4 shadow-sm hover:shadow-md transition-all group relative"
-                          >
-                            {/* Header with badges */}
-                            <div className="flex items-center gap-2 mb-3">
-                                <VariableHashBadge 
-                                  hash={spawnVariableName} 
-                                  type={isConditionalSpawn ? 'conditional' : 'string'}
-                                />
-                                {isTemporary && (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <div className="cursor-help">
-                                          <Sparkles className="h-5 w-5 text-pending" />
-                                        </div>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>Pending/New</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                )}
-                              </div>
-                            
-                            {/* Inline editing fields */}
-                            <div className="space-y-3">
-                              {/* Display Name field - always shown */}
-                              <div className="space-y-1">
-                                <Label htmlFor={`spawn-name-${index}`} className="text-xs">
-                                  Variable Name
-                                </Label>
-                                <Input
-                                  id={`spawn-name-${index}`}
-                                  value={spawn.display_name || ''}
-                                  onChange={(e) => onUpdateSpawn?.(index, { ...spawn, display_name: e.target.value })}
-                                  placeholder="Enter variable name"
-                                  className="h-8 text-sm"
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              </div>
-                              
-                              {/* Content display - read-only for string variables */}
-                              {!isConditionalSpawn && (
-                                <div className="space-y-1">
-                                  <Label className="text-xs text-muted-foreground">
-                                    Content
-                                  </Label>
-                                  <div className="text-sm text-muted-foreground italic p-2 bg-muted/30 rounded border">
-                                    {spawn.content || 'No content'}
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">
-                                    Open this variable directly to edit its content
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                            
-                            {/* Action buttons in top-right */}
-                            <div className="absolute top-2 right-2 flex items-center gap-1">
-                              {/* Remove button */}
-                            {onRemoveSpawn && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onRemoveSpawn(spawn, index);
-                                }}
-                                title={`Remove spawn variable ${spawnVariableName}`}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    
-                    {conditionalSpawns.length === 0 && (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <p className="text-sm">No spawn variables yet</p>
-                        <p className="text-xs">Click "Add Spawn" to create the first spawn</p>
-                      </div>
-                    )}
-                  </div>
                 </div>
               ) : (
                 /* String Mode Content */
@@ -550,160 +562,6 @@ export function StringEditDrawer({
                       rows={4}
                     />
                   </div>
-
-                  {/* Embedded Variables - Inline Editing */}
-                  {(usedStringVariables.length > 0 || pendingVariablesInContent.length > 0) && (
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
-                        <span>Embedded Variables</span>
-                        <Badge variant="secondary" className="text-xs">
-                          {usedStringVariables.length + pendingVariablesInContent.length}
-                        </Badge>
-                      </h4>
-                      
-                      <div className="grid gap-3">
-                        {/* Existing Variables - Inline Editing */}
-                        {usedStringVariables.map((stringVar: any) => {
-                          const variableName = stringVar.effective_variable_name || stringVar.variable_hash;
-                          const isConditional = stringVar.is_conditional_container;
-                          
-                          // Get current edit state (local edits take precedence)
-                          const currentEdits = embeddedVariableEdits[stringVar.id] || {};
-                          const currentDisplayName = currentEdits.display_name !== undefined 
-                            ? currentEdits.display_name 
-                            : (stringVar.display_name || '');
-                          const currentContent = currentEdits.content !== undefined 
-                            ? currentEdits.content 
-                            : (stringVar.content || '');
-                          
-                          return (
-                            <div 
-                              key={stringVar.id} 
-                              className="border rounded-lg p-4 shadow-sm hover:shadow-md transition-all group relative"
-                            >
-                              {/* Header with badges */}
-                              <div className="flex items-center gap-2 mb-3">
-                                <VariableHashBadge 
-                                  hash={variableName} 
-                                  type={isConditional ? 'conditional' : 'string'}
-                                />
-                                  </div>
-                              
-                              {/* Inline editing fields */}
-                              <div className="space-y-3">
-                                {/* Display Name field - always shown */}
-                                <div className="space-y-1">
-                                  <Label htmlFor={`embedded-name-${stringVar.id}`} className="text-xs">
-                                    Variable Name
-                                  </Label>
-                                  <Input
-                                    id={`embedded-name-${stringVar.id}`}
-                                    value={currentDisplayName}
-                                    onChange={(e) => {
-                                      const newEdits = {
-                                        ...embeddedVariableEdits,
-                                        [stringVar.id]: {
-                                          ...currentEdits,
-                                          display_name: e.target.value
-                                        }
-                                      };
-                                      onEmbeddedVariableEditsChange(newEdits);
-                                    }}
-                                    placeholder="Enter variable name"
-                                    className="h-8 text-sm"
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                </div>
-                                
-                                {/* Content display - read-only for string variables */}
-                                {!isConditional && (
-                                  <div className="space-y-1">
-                                    <Label className="text-xs text-muted-foreground">
-                                      Content
-                                    </Label>
-                                    <div className="text-sm text-muted-foreground italic p-2 bg-muted/30 rounded border">
-                                      {currentContent || 'No content'}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                      Open this variable directly to edit its content
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                        {/* Pending Variables - Inline Editing */}
-                        {pendingVariablesInContent.map((variableName) => {
-                          // Get pending variable data if it exists
-                          const pendingData = pendingStringVariables[variableName];
-                          const isConditional = pendingData?.is_conditional || false;
-                          
-                          return (
-                          <div 
-                            key={variableName} 
-                              className="border rounded-lg p-4 shadow-sm hover:shadow-md transition-all group relative"
-                          >
-                              {/* Header with badges */}
-                              <div className="flex items-center gap-2 mb-3">
-                              <VariableHashBadge 
-                                hash={variableName} 
-                                type={isConditional ? 'conditional' : 'string'}
-                              />
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="cursor-help">
-                                      <Sparkles className="h-5 w-5 text-pending" />
-                              </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Pending/New</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </div>
-                              
-                              {/* Inline editing fields */}
-                              <div className="space-y-3">
-                                {/* Display Name field - pre-filled with detected name */}
-                                <div className="space-y-1">
-                                  <Label htmlFor={`pending-name-${variableName}`} className="text-xs">
-                                    Variable Name
-                                  </Label>
-                                  <Input
-                                    id={`pending-name-${variableName}`}
-                                    value={variableName}
-                                    disabled
-                                    className="h-8 text-sm bg-muted"
-                                    title="Name is detected from content - edit in content field to change"
-                                  />
-                                  <p className="text-xs text-muted-foreground">
-                                    This name comes from your content. Edit the {`{{${variableName}}}`} reference to change it.
-                                  </p>
-                          </div>
-                                
-                                {/* Info message for pending string variables */}
-                                {!isConditional && (
-                                  <p className="text-xs text-muted-foreground italic">
-                                    This variable will be created with default content when you save. Open it afterwards to edit its content.
-                                  </p>
-                                )}
-                                
-                                {/* Info message for conditional pending variables */}
-                                {isConditional && (
-                                  <p className="text-xs text-muted-foreground italic">
-                                    This conditional variable will be created when you save.
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </TabsContent>
@@ -1007,6 +865,7 @@ export function StringEditDrawer({
             </Button>
           </div>
         </SheetFooter>
+        </div> {/* Close Main Content */}
       </SheetContent>
     </Sheet>
   );

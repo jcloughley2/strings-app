@@ -267,16 +267,14 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
       return; // No edits to save
     }
     
-    // Save each edited embedded variable
+    // Save each edited embedded variable (display_name only - content is not editable inline)
     const savePromises = Object.entries(state.embeddedVariableEdits).map(async ([variableId, edits]) => {
       try {
         const payload: any = {};
         if (edits.display_name !== undefined) {
           payload.display_name = edits.display_name?.trim() || null;
         }
-        if (edits.content !== undefined) {
-          payload.content = edits.content?.trim() || 'Default content';
-        }
+        // Note: Content editing is disabled for embedded variables to prevent nested variable issues
         
         await apiFetch(`/api/strings/${variableId}/`, {
           method: 'PATCH',
@@ -360,11 +358,8 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
       try {
         console.log(`Creating new variable: ${varName}`);
         
-        // Use custom content if provided, otherwise use default
-        const customContent = state.pendingVariableContent[varName];
-        const content = customContent && customContent.trim() 
-          ? customContent.trim() 
-          : `Content for ${varName}`; // Default content
+        // Always use default content (custom content editing is disabled to prevent nested variable issues)
+        const content = `Content for ${varName}`;
         
         await apiFetch('/api/strings/', {
           method: 'POST',
@@ -382,56 +377,13 @@ export function useStringEditDrawer(options: UseStringEditDrawerOptions = {}) {
         // Continue creating other variables even if one fails
       }
     }
-  }, [project, pendingStringVariables, state.pendingVariableContent]);
+  }, [project, pendingStringVariables]);
 
   // Save function
   const save = useCallback(async () => {
     setState(prev => ({ ...prev, isSaving: true }));
     
     try {
-      // Validation: Check for nested variables in spawn content
-      if (state.isConditional && state.conditionalSpawns.length > 0) {
-        for (const spawn of state.conditionalSpawns) {
-          if (spawn.content && spawn.content.includes('{{')) {
-            setState(prev => ({ ...prev, isSaving: false }));
-            throw new Error(
-              `Spawn variable "${spawn.display_name || spawn.effective_variable_name || 'Unnamed'}" contains embedded variables ({{...}}). ` +
-              `Nested variables cannot be added in this view. Please open the variable directly to add embedded variables.`
-            );
-          }
-        }
-      }
-      
-      // Validation: Check for nested variables in embedded variable edits
-      if (Object.keys(state.embeddedVariableEdits).length > 0) {
-        for (const [variableId, edits] of Object.entries(state.embeddedVariableEdits)) {
-          if (edits.content && edits.content.includes('{{')) {
-            // Find the variable to get its name for the error message
-            const variable = project?.strings?.find((str: any) => str.id === parseInt(variableId));
-            const varName = variable?.display_name || variable?.effective_variable_name || 'Unnamed';
-            
-            setState(prev => ({ ...prev, isSaving: false }));
-            throw new Error(
-              `Embedded variable "${varName}" contains nested variables ({{...}}). ` +
-              `Nested variables cannot be added in this view. Please open the variable directly to add embedded variables.`
-            );
-          }
-        }
-      }
-      
-      // Validation: Check for nested variables in pending variable content
-      if (Object.keys(state.pendingVariableContent).length > 0) {
-        for (const [varName, content] of Object.entries(state.pendingVariableContent)) {
-          if (content && content.includes('{{')) {
-            setState(prev => ({ ...prev, isSaving: false }));
-            throw new Error(
-              `New variable "${varName}" contains embedded variables ({{...}}). ` +
-              `Nested variables cannot be added in this view. Please open the variable directly after creation to add embedded variables.`
-            );
-          }
-        }
-      }
-      
       const saveOptions: SaveStringOptions = {
         stringData: state.stringData,
         content: state.content,

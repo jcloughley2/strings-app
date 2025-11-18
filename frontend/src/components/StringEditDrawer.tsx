@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Search, X, Sparkles, Folder, Plus } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { ArrowLeft, Search, X, Sparkles, Folder, Plus, Spool } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { VariableHashBadge } from "@/components/VariableHashBadge";
@@ -412,21 +413,19 @@ export function StringEditDrawer({
                     </div>
                   </div>
 
-                  {/* Include Hidden Option Checkbox */}
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
+                  {/* Include Hidden Option Switch */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1 flex-1">
+                      <Label htmlFor={`includeHiddenOption-${level}`}>Include option to hide</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Adds a "Hidden" option that makes this conditional invisible when selected
+                      </p>
+                    </div>
+                    <Switch
                       id={`includeHiddenOption-${level}`}
                       checked={includeHiddenOption}
-                      onChange={(e) => onHiddenOptionChange(e.target.checked)}
-                      className="rounded border-gray-300"
+                      onCheckedChange={onHiddenOptionChange}
                     />
-                    <Label htmlFor={`includeHiddenOption-${level}`} className="text-sm font-medium">
-                      Include option to hide
-                    </Label>
-                    <p className="text-xs text-muted-foreground ml-2">
-                      Adds a "Hidden" option that makes this conditional invisible when selected
-                    </p>
                   </div>
 
                   {/* Spawn Variables */}
@@ -491,21 +490,18 @@ export function StringEditDrawer({
                                 />
                               </div>
                               
-                              {/* Content field - only for string variables (not conditionals) */}
+                              {/* Content display - read-only for string variables */}
                               {!isConditionalSpawn && (
                                 <div className="space-y-1">
-                                  <Label htmlFor={`spawn-content-${index}`} className="text-xs">
+                                  <Label className="text-xs text-muted-foreground">
                                     Content
                                   </Label>
-                                  <Textarea
-                                    id={`spawn-content-${index}`}
-                                    value={spawn.content || ''}
-                                    onChange={(e) => onUpdateSpawn?.(index, { ...spawn, content: e.target.value })}
-                                    placeholder="Enter spawn content"
-                                    rows={3}
-                                    className="text-sm resize-none"
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
+                                  <div className="text-sm text-muted-foreground italic p-2 bg-muted/30 rounded border">
+                                    {spawn.content || 'No content'}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    Open this variable directly to edit its content
+                                  </p>
                                 </div>
                               )}
                             </div>
@@ -619,30 +615,18 @@ export function StringEditDrawer({
                                   />
                                 </div>
                                 
-                                {/* Content field - only for string variables (not conditionals) */}
+                                {/* Content display - read-only for string variables */}
                                 {!isConditional && (
                                   <div className="space-y-1">
-                                    <Label htmlFor={`embedded-content-${stringVar.id}`} className="text-xs">
+                                    <Label className="text-xs text-muted-foreground">
                                       Content
                                     </Label>
-                                    <Textarea
-                                      id={`embedded-content-${stringVar.id}`}
-                                      value={currentContent}
-                                      onChange={(e) => {
-                                        const newEdits = {
-                                          ...embeddedVariableEdits,
-                                          [stringVar.id]: {
-                                            ...currentEdits,
-                                            content: e.target.value
-                                          }
-                                        };
-                                        onEmbeddedVariableEditsChange(newEdits);
-                                      }}
-                                      placeholder="Enter variable content"
-                                      rows={3}
-                                      className="text-sm resize-none"
-                                      onClick={(e) => e.stopPropagation()}
-                                    />
+                                    <div className="text-sm text-muted-foreground italic p-2 bg-muted/30 rounded border">
+                                      {currentContent || 'No content'}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                      Open this variable directly to edit its content
+                                    </p>
                                   </div>
                                 )}
                               </div>
@@ -700,31 +684,11 @@ export function StringEditDrawer({
                                   </p>
                           </div>
                                 
-                                {/* Content field - only for string variables */}
+                                {/* Info message for pending string variables */}
                                 {!isConditional && (
-                                  <div className="space-y-1">
-                                    <Label htmlFor={`pending-content-${variableName}`} className="text-xs">
-                                      Content (Optional)
-                                    </Label>
-                                    <Textarea
-                                      id={`pending-content-${variableName}`}
-                                      value={pendingVariableContent[variableName] || ''}
-                                      onChange={(e) => {
-                                        const newContent = {
-                                          ...pendingVariableContent,
-                                          [variableName]: e.target.value
-                                        };
-                                        onPendingVariableContentChange(newContent);
-                                      }}
-                                      placeholder="Enter content or leave blank for default"
-                                      rows={3}
-                                      className="text-sm resize-none"
-                                      onClick={(e) => e.stopPropagation()}
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                      Leave blank to use default content. You can edit it later.
-                                    </p>
-                                  </div>
+                                  <p className="text-xs text-muted-foreground italic">
+                                    This variable will be created with default content when you save. Open it afterwards to edit its content.
+                                  </p>
                                 )}
                                 
                                 {/* Info message for conditional pending variables */}

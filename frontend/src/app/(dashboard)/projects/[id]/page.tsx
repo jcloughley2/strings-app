@@ -11,6 +11,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 
 
 import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Settings, EyeOff, Hash, Lock } from "lucide-react";
@@ -1492,49 +1493,49 @@ export default function ProjectDetailPage() {
           );
           
           if (stringVariable?.is_conditional_container) {
-            // Orange badge for conditional variables
+            // Conditional variable badge with gradient
+            const displayName = stringVariable.display_name || stringVariable.effective_variable_name || stringVariable.variable_hash;
             return (
               <Badge
                 key={`${keyPrefix}${depth}-${index}-${variableName}`}
                 variant="outline"
-                className="mx-1 cursor-pointer transition-colors bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 inline-flex items-center gap-1"
+                className="variable-hash-badge variable-hash-badge-conditional mx-1"
                 onClick={(e) => {
                   e.stopPropagation();
                   openEditInCascadingDrawer(stringVariable);
                 }}
-                title={`Click to edit conditional "${variableName}"`}
+                title={`Click to edit conditional "${displayName}"`}
               >
-                <Folder className="h-3 w-3" />
-                {part}
+                {displayName}
               </Badge>
             );
           } else if (stringVariable) {
-            // Badge for string variables
+            // String variable badge with gradient
+            const displayName = stringVariable.display_name || stringVariable.effective_variable_name || stringVariable.variable_hash;
             return (
               <Badge
                 key={`${keyPrefix}${depth}-${index}-${variableName}`}
                 variant="outline"
-                className="embedded-var-badge-string"
+                className="variable-hash-badge variable-hash-badge-string mx-1"
                 onClick={(e) => {
                   e.stopPropagation();
                   openEditInCascadingDrawer(stringVariable);
                 }}
-                title={`Click to edit string variable "${variableName}" (nesting level ${depth})`}
+                title={`Click to edit string variable "${displayName}"`}
               >
-                <Spool className="h-3 w-3" />
-                {part}
+                {displayName}
               </Badge>
             );
           } else {
-            // Variable not found, show as gray badge
+            // Variable not found, show as neutral badge
             return (
               <Badge
                 key={`${keyPrefix}${depth}-${index}-${variableName}`}
                 variant="outline"
-                className="mx-1 bg-gray-50 text-gray-700 border-gray-200"
+                className="variable-hash-badge mx-1"
                 title={`Variable "${variableName}" not found`}
               >
-                {part}
+                {variableName}
               </Badge>
             );
           }
@@ -7553,128 +7554,78 @@ export default function ProjectDetailPage() {
                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Display Mode</h3>
                 
                 {/* Plaintext Toggle */}
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Type className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">Plaintext Mode</span>
-                    </div>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1 flex-1">
+                    <Label htmlFor="plaintext-mode">Plaintext Mode</Label>
                     <p className="text-sm text-muted-foreground">
                       Show resolved content without styling or conditional variables
                     </p>
                   </div>
-                  <Button
-                    variant={isPlaintextMode ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setIsPlaintextMode(!isPlaintextMode)}
-                    className={`ml-4 ${
-                      isPlaintextMode 
-                        ? 'bg-yellow-500 hover:bg-yellow-600 text-white' 
-                        : 'hover:bg-muted'
-                    }`}
-                  >
-                    {isPlaintextMode ? 'On' : 'Off'}
-                  </Button>
+                  <Switch
+                    id="plaintext-mode"
+                    checked={isPlaintextMode}
+                    onCheckedChange={setIsPlaintextMode}
+                  />
                 </div>
 
                 {/* Show Variables Toggle */}
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Folder className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">Show Variables</span>
-                    </div>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1 flex-1">
+                    <Label htmlFor="show-variables">Show Variables</Label>
                     <p className="text-sm text-muted-foreground">
                       Display variable names as badges instead of resolved content
                     </p>
                   </div>
-                  <Button
-                    variant={showVariableBadges ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setShowVariableBadges(!showVariableBadges)}
-                    className={`ml-4 ${
-                      showVariableBadges 
-                        ? 'bg-orange-500 hover:bg-orange-600 text-white' 
-                        : 'hover:bg-muted'
-                    }`}
-                  >
-                    {showVariableBadges ? 'On' : 'Off'}
-                  </Button>
+                  <Switch
+                    id="show-variables"
+                    checked={showVariableBadges}
+                    onCheckedChange={setShowVariableBadges}
+                  />
                 </div>
 
                 {/* Hide Embedded Strings Toggle */}
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">Hide Embedded Strings</span>
-                    </div>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1 flex-1">
+                    <Label htmlFor="hide-embedded">Hide Embedded Strings</Label>
                     <p className="text-sm text-muted-foreground">
                       Hide strings that are used as variables or spawn variables in other strings
                     </p>
                   </div>
-                  <Button
-                    variant={hideEmbeddedStrings ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setHideEmbeddedStrings(!hideEmbeddedStrings)}
-                    className={`ml-4 ${
-                      hideEmbeddedStrings 
-                        ? 'bg-blue-500 hover:bg-blue-600 text-white' 
-                        : 'hover:bg-muted'
-                    }`}
-                  >
-                    {hideEmbeddedStrings ? 'On' : 'Off'}
-                  </Button>
+                  <Switch
+                    id="hide-embedded"
+                    checked={hideEmbeddedStrings}
+                    onCheckedChange={setHideEmbeddedStrings}
+                  />
                 </div>
 
                 {/* Show Variable Names Toggle */}
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Type className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">Show Variable Names</span>
-                    </div>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1 flex-1">
+                    <Label htmlFor="show-names">Show Variable Names</Label>
                     <p className="text-sm text-muted-foreground">
                       Display the variable name (title) on each string card
                     </p>
                   </div>
-                  <Button
-                    variant={showVariableNames ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setShowVariableNames(!showVariableNames)}
-                    className={`ml-4 ${
-                      showVariableNames 
-                        ? 'bg-green-500 hover:bg-green-600 text-white' 
-                        : 'hover:bg-muted'
-                    }`}
-                  >
-                    {showVariableNames ? 'On' : 'Off'}
-                  </Button>
+                  <Switch
+                    id="show-names"
+                    checked={showVariableNames}
+                    onCheckedChange={setShowVariableNames}
+                  />
                 </div>
 
                 {/* Show Variable Hashes Toggle */}
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Hash className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">Show Variable Hashes</span>
-                    </div>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1 flex-1">
+                    <Label htmlFor="show-hashes">Show Variable Hashes</Label>
                     <p className="text-sm text-muted-foreground">
                       Display the copiable variable hash badge on each string card
                     </p>
                   </div>
-                  <Button
-                    variant={showVariableHashes ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setShowVariableHashes(!showVariableHashes)}
-                    className={`ml-4 ${
-                      showVariableHashes 
-                        ? 'bg-purple-500 hover:bg-purple-600 text-white' 
-                        : 'hover:bg-muted'
-                    }`}
-                  >
-                    {showVariableHashes ? 'On' : 'Off'}
-                  </Button>
+                  <Switch
+                    id="show-hashes"
+                    checked={showVariableHashes}
+                    onCheckedChange={setShowVariableHashes}
+                  />
                 </div>
               </div>
 

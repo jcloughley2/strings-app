@@ -22,7 +22,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { VariableHashBadge } from "@/components/VariableHashBadge";
 import { StringEditDrawer } from "@/components/StringEditDrawer";
-import { useStringEditDrawer } from "@/hooks/useStringEditDrawer";
+import { useSessionDrawer } from "@/hooks/useSessionDrawer";
+import { toast } from "sonner";
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
@@ -137,20 +138,24 @@ export default function ProjectDetailPage() {
     return [];
   };
 
+  // Function to refresh project data from the backend
+  const refreshProject = useCallback(async () => {
+    try {
+      const updatedProject = await apiFetch(`/api/projects/${id}/`);
+      setProject(sortProjectStrings(updatedProject));
+    } catch (err) {
+      console.error('Failed to refresh project:', err);
+    }
+  }, [id]);
+
   // UNIFIED DRAWER SYSTEM - Replaces multiple old drawer systems
-  const mainDrawer = useStringEditDrawer({
+  const mainDrawer = useSessionDrawer({
     project,
     selectedDimensionValues,
     pendingStringVariables,
-    findSpawnsForConditional,
-    onProjectUpdate: (updatedProject) => {
-      setProject(sortProjectStrings(updatedProject));
-    },
-    onSuccess: () => {
+    onSuccess: async () => {
       console.log('Main drawer saved successfully');
-    },
-    onCancel: () => {
-      console.log('Main drawer cancelled');
+      await refreshProject(); // Refresh project data after save
     },
   });
   
@@ -5311,12 +5316,11 @@ export default function ProjectDetailPage() {
         onAddSpawn={mainDrawer.addSpawn}
         onUpdateSpawn={mainDrawer.updateSpawn}
         onNavigateToVariable={(variableId) => {
-          // Find the variable in the project
-          const variable = project?.strings?.find((s: any) => s.id.toString() === variableId);
-          if (variable) {
-            mainDrawer.openEditDrawer(variable);
-          }
+          mainDrawer.navigateToVariable(variableId);
         }}
+        dirtyVariableIds={mainDrawer.dirtyVariableIds}
+        sessionEdits={mainDrawer.sessionEdits}
+        activeVariableId={mainDrawer.activeVariableId}
         onRemoveSpawn={mainDrawer.removeSpawn}
         onAddExistingVariableAsSpawn={mainDrawer.addExistingVariableAsSpawn}
         onEditSpawn={handleEditSpawn}

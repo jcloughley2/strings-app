@@ -425,6 +425,11 @@ async function syncDimensionValuesForSpawns(dimension: any, spawns: any[], condi
   for (const spawn of spawns) {
     const spawnName = spawn.effective_variable_name || spawn.variable_hash;
     
+    if (!spawnName) {
+      console.error('Spawn has no effective_variable_name or variable_hash, skipping:', spawn);
+      continue;
+    }
+    
     try {
       // Check if dimension value already exists
       let dimensionValue = existingDimensionValues.find((dv: any) => dv.value === spawnName);

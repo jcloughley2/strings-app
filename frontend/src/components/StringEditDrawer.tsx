@@ -100,6 +100,11 @@ export interface StringEditDrawerProps {
   
   // Loading states
   isSaving?: boolean;
+  
+  // Session state
+  dirtyVariableIds?: Set<string>; // IDs of variables with unsaved changes
+  sessionEdits?: Map<string, any>; // All variables in the current editing session
+  activeVariableId?: string; // The ID of the currently active variable in the session
 }
 
 export function StringEditDrawer({
@@ -143,6 +148,9 @@ export function StringEditDrawer({
   showBackButton = false,
   onBack,
   isSaving = false,
+  dirtyVariableIds,
+  sessionEdits,
+  activeVariableId,
 }: StringEditDrawerProps) {
   
   // State for adding existing variables as spawns
@@ -202,12 +210,14 @@ export function StringEditDrawer({
   const buildNavigationNodes = () => {
     const nodes: any[] = [];
     
-    const currentVarName = stringData?.effective_variable_name || stringData?.variable_hash || 'new';
+    const currentVarName = stringData?.effective_variable_name || stringData?.variable_hash || displayName || 'new';
+    // Use activeVariableId from session if available, otherwise fall back to stringData.id
+    const currentId = activeVariableId || stringData?.id?.toString() || 'new';
     
     // Find parent variables (variables that embed or spawn this one)
     const parents: any[] = [];
     
-    // Check for embedded parents (variables that embed this one in their content)
+    // Check for embedded parents in saved variables (variables that embed this one in their content)
     // Only check if we have an existing variable
     if (stringData) {
       project?.strings?.forEach((str: any) => {
@@ -220,84 +230,198 @@ export function StringEditDrawer({
           }
         }
       });
-      
-      // Check for spawn parents (conditional variables that have this as a spawn)
-      // A spawn is any non-conditional-container variable that appears in a dimension's values
-      if (!stringData.is_conditional_container) {
-        project?.dimensions?.forEach((dim: any) => {
-          const hasCurrentAsSpawn = dim.values?.some((dv: any) => dv.value === currentVarName);
-          if (hasCurrentAsSpawn) {
-            // Find the conditional variable for this dimension
-            const conditionalVar = project?.strings?.find((s: any) => 
-              s.is_conditional_container && 
-              (s.effective_variable_name || s.variable_hash) === dim.name
-            );
-            if (conditionalVar && conditionalVar.id !== stringData.id) {
-              parents.push({ ...conditionalVar, relationship: 'parent-spawns' });
-            }
+    }
+    
+    // ALSO check for embedded parents in the session (pending variables that embed this one)
+    if (sessionEdits) {
+      sessionEdits.forEach((edit, editId) => {
+        // Skip the current variable itself
+        if (editId === currentId) return;
+        
+        // Check if this session variable embeds the current one
+        if (edit.content) {
+          const variableMatches = edit.content.match(/{{([^}]+)}}/g) || [];
+          const embeddedVars = variableMatches.map((match: string) => match.slice(2, -2));
+          
+          // For pending variables, check against the display name
+          const targetName = currentId.startsWith('pending-') ? currentId.replace('pending-', '') : currentVarName;
+          
+          if (embeddedVars.includes(targetName)) {
+            // Create a pseudo-variable object for the parent
+            parents.push({
+              id: editId,
+              display_name: edit.displayName || '',
+              effective_variable_name: edit.displayName || editId,
+              variable_hash: editId,
+              is_conditional_container: edit.isConditional,
+              relationship: 'parent-embeds',
+              _isPending: true,
+            });
           }
-        });
-      }
-      
-      // Add parent nodes first (at the top)
-      parents.forEach((parent: any) => {
-        nodes.push({
-          id: parent.id.toString(),
-          name: parent.display_name || '',
-          hash: parent.effective_variable_name || parent.variable_hash,
-          type: parent.is_conditional_container ? 'conditional' : 'string',
-          isActive: false,
-          relationship: parent.relationship,
-        });
+        }
       });
     }
     
+    // Check for spawn parents (conditional variables that have this as a spawn)
+    // First check saved variables in dimensions
+    if (stringData && !stringData.is_conditional_container) {
+      project?.dimensions?.forEach((dim: any) => {
+        const hasCurrentAsSpawn = dim.values?.some((dv: any) => dv.value === currentVarName);
+        if (hasCurrentAsSpawn) {
+          // Find the conditional variable for this dimension
+          const conditionalVar = project?.strings?.find((s: any) => 
+            s.is_conditional_container && 
+            (s.effective_variable_name || s.variable_hash) === dim.name
+          );
+          if (conditionalVar && conditionalVar.id !== stringData.id) {
+            parents.push({ ...conditionalVar, relationship: 'parent-spawns' });
+          }
+        }
+      });
+    }
+    
+    // ALSO check for spawn parents in the session (pending conditionals that have this as a spawn)
+    if (sessionEdits) {
+      sessionEdits.forEach((edit, editId) => {
+        // Skip the current variable itself
+        if (editId === currentId) return;
+        
+        // Check if this is a conditional variable with spawns
+        if (edit.isConditional && edit.conditionalSpawns && edit.conditionalSpawns.length > 0) {
+          // Check if the current variable is in this conditional's spawns
+          const isSpawnOfThis = edit.conditionalSpawns.some((spawn: any) => {
+            // For temp spawns, check the temp ID
+            if (currentId.startsWith('temp-')) {
+              return spawn.id === currentId || spawn.id?.toString() === currentId;
+            }
+            // For pending spawns, check the display name
+            if (currentId.startsWith('pending-')) {
+              const targetName = currentId.replace('pending-', '');
+              return spawn.display_name === targetName || spawn.variable_name === targetName;
+            }
+            // For existing spawns, check the ID
+            return spawn.id?.toString() === currentId;
+          });
+          
+          if (isSpawnOfThis) {
+            // Create a pseudo-variable object for the parent
+            parents.push({
+              id: editId,
+              display_name: edit.displayName || '',
+              effective_variable_name: edit.displayName || editId,
+              variable_hash: editId,
+              is_conditional_container: true,
+              relationship: 'parent-spawns',
+              _isPending: true,
+            });
+          }
+        }
+      });
+    }
+    
+    // Add parent nodes first (at the top) - deduplicate by ID
+    const addedParentIds = new Set<string>();
+    parents.forEach((parent: any) => {
+      const parentId = parent.id.toString();
+      if (addedParentIds.has(parentId)) return; // Skip duplicates
+      addedParentIds.add(parentId);
+      
+      nodes.push({
+        id: parentId,
+        name: parent.display_name || '',
+        hash: parent.effective_variable_name || parent.variable_hash,
+        type: parent.is_conditional_container ? 'conditional' : 'string',
+        isActive: false,
+        relationship: parent.relationship,
+      });
+    });
+    
     // Current variable (in the middle)
+    // Use currentId (which includes activeVariableId) for consistency with deduplication
+    // For the name, try multiple sources: display_name, then effective_variable_name/hash
+    // This handles spawns that have no display_name but do have a variable hash
+    const currentNodeName = stringData?.display_name || displayName || 
+                            stringData?.effective_variable_name || stringData?.variable_hash || 
+                            'New Variable';
     nodes.push({
-      id: stringData?.id?.toString() || 'new',
-      name: stringData?.display_name || displayName || 'New Variable',
+      id: currentId,
+      name: currentNodeName,
       hash: stringData?.effective_variable_name || stringData?.variable_hash || 'new',
       type: stringData?.is_conditional_container || isConditional ? 'conditional' : 'string',
       isActive: true,
     });
     
+    // Get IDs of nodes already added (parents + current)
+    const existingNodeIds = new Set(nodes.map(n => n.id));
+    
     // Add spawn children (if this is a conditional)
     if ((stringData?.is_conditional_container || isConditional) && conditionalSpawns.length > 0) {
       conditionalSpawns.forEach((spawn: any) => {
-        nodes.push({
-          id: spawn.id ? spawn.id.toString() : `temp-${spawn.variable_name || spawn.display_name}`,
-          name: spawn.display_name || '',
-          hash: spawn.variable_name || spawn.effective_variable_name || spawn.variable_hash || 'new',
-          type: spawn.is_conditional_container ? 'conditional' : 'string',
-          isActive: false,
-          relationship: 'spawn',
-        });
+        const spawnId = spawn.id ? spawn.id.toString() : `temp-${spawn.variable_name || spawn.display_name}`;
+        
+        // Check if there's an edit state for this spawn in the session
+        let spawnDisplayName = spawn.display_name || '';
+        let spawnVariableName = spawn.variable_name || spawn.effective_variable_name || spawn.variable_hash || 'new';
+        
+        if (sessionEdits) {
+          const spawnEdit = sessionEdits.get(spawnId);
+          if (spawnEdit) {
+            // Use the edited values from the session
+            spawnDisplayName = spawnEdit.displayName || spawnDisplayName;
+            // For new spawns, variable_name hasn't been generated yet, so keep using display_name
+          }
+        }
+        
+        // Skip if already in nodes (e.g., as parent or current)
+        if (!existingNodeIds.has(spawnId)) {
+          nodes.push({
+            id: spawnId,
+            name: spawnDisplayName,
+            hash: spawnVariableName,
+            type: spawn.is_conditional_container ? 'conditional' : 'string',
+            isActive: false,
+            relationship: 'spawn',
+          });
+          existingNodeIds.add(spawnId);
+        }
       });
     }
     
-    // Add embedded children
-    usedStringVariables.forEach((embeddedVar: any) => {
-      nodes.push({
-        id: embeddedVar.id.toString(),
-        name: embeddedVar.display_name || '',
-        hash: embeddedVar.effective_variable_name || embeddedVar.variable_hash,
-        type: embeddedVar.is_conditional_container ? 'conditional' : 'string',
-        isActive: false,
-        relationship: 'embedded',
+    // Add embedded children (only for string variables, not conditionals)
+    if (!isConditional && !(stringData?.is_conditional_container)) {
+      usedStringVariables.forEach((embeddedVar: any) => {
+        const embeddedId = embeddedVar.id.toString();
+        // Skip if already in nodes (e.g., as parent or current)
+        if (!existingNodeIds.has(embeddedId)) {
+          nodes.push({
+            id: embeddedId,
+            name: embeddedVar.display_name || '',
+            hash: embeddedVar.effective_variable_name || embeddedVar.variable_hash,
+            type: embeddedVar.is_conditional_container ? 'conditional' : 'string',
+            isActive: false,
+            relationship: 'embedded',
+          });
+          existingNodeIds.add(embeddedId);
+        }
       });
-    });
-    
-    // Add pending/new embedded children
-    pendingVariablesInContent.forEach((varName: string) => {
-      nodes.push({
-        id: `pending-${varName}`,
-        name: '',
-        hash: varName,
-        type: 'string', // Assume string for new variables
-        isActive: false,
-        relationship: 'embedded',
+      
+      // Add pending/new embedded children
+      pendingVariablesInContent.forEach((varName: string) => {
+        const pendingId = `pending-${varName}`;
+        // Skip if already in nodes
+        if (!existingNodeIds.has(pendingId)) {
+          nodes.push({
+            id: pendingId,
+            name: '',
+            hash: varName,
+            type: 'string', // Assume string for new variables
+            isActive: false,
+            relationship: 'embedded',
+          });
+          existingNodeIds.add(pendingId);
+        }
       });
-    });
+    }
     
     return nodes;
   };
@@ -357,6 +481,7 @@ export function StringEditDrawer({
               onNavigateToVariable(nodeId);
             }
           }}
+          dirtyVariableIds={dirtyVariableIds}
         />
         
         {/* Main Content */}
@@ -776,7 +901,7 @@ export function StringEditDrawer({
                           const conditionalHash = conditional.effective_variable_name || conditional.variable_hash;
                           
                           return (
-                            <div
+                            <div 
                               key={conditional.id}
                               className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
                             >
@@ -785,7 +910,7 @@ export function StringEditDrawer({
                                 <div>
                                   <p className="font-medium text-sm">{conditionalDisplayName}</p>
                                   <VariableHashBadge hash={conditionalHash} type="conditional" className="mt-1" />
-                                </div>
+                                  </div>
                               </div>
                               <Badge variant="outline" className="bg-conditional-50 text-conditional-700 border-conditional-200">
                                 Conditional

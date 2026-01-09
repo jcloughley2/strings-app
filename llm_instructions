@@ -140,14 +140,19 @@ String: "My favorite color is `{{color-option}}`"
 - Replaces 4+ legacy drawer systems
 - 60% code reduction, consistent UX across all scenarios
 
-**Drawer Navigation Sidebar**:
-- Visual hierarchy showing variable relationships
-- **Parents** (36px, left-aligned): Variables that embed or spawn the current one
-- **Current** (48px, centered, bold border): Active variable being edited
-- **Children** (36px, right-aligned): Spawns, embedded, and pending variables
+**Drawer Navigation Sidebar (Mini-Nav)**:
+- Fixed 120px width with 16px horizontal padding to accommodate full tree layout
+- Visual hierarchy showing variable relationships with branching tree connectors
+- **Parents** (36px, left of vertical line): Variables that embed or spawn the current one
+  - Horizontal connectors from parent's right edge to vertical line
+- **Current** (48px, centered): Active variable being edited
+  - Vertical line descends from center-bottom to children, ascends from center-top to parents
+- **Children** (36px, right of vertical line): Spawns, embedded, and pending variables
+  - Horizontal connectors from vertical line to child's left edge
+- All tiles have 1px border stroke (consistent for active and inactive)
 - Click any square to navigate to that variable
 - Hover tooltips show full names and relationships
-- Color-coded: Seagreen for strings, Salmon for conditionals
+- Color-coded: Teal for strings (`--string-var-color`), Orange for conditionals (`--conditional-var-color`)
 - Works for both creating new and editing existing variables
 - Immediate save (no batch operations)
 
@@ -598,6 +603,23 @@ Frontend:  selectedConditionalSpawns[conditionalName] = spawnName
 - Only make the requested code changes and let the user handle git operations when ready
 - User prefers to control their own commit timing and messages
 
+### Development Servers
+**Auto-Start Configuration**: The project has `.vscode/tasks.json` configured to automatically start both servers when the workspace opens:
+- **Backend Server**: Green terminal, server icon, runs `python manage.py runserver` (port 8000)
+- **Frontend Server**: Blue terminal, browser icon, runs `npm run dev` (port 3000)
+
+**Manual Start**: If servers need to be restarted manually:
+- **Start each server in a separate Cursor/VS Code terminal window**
+- **Backend**: `cd backend && source env/bin/activate && python manage.py runserver`
+- **Frontend**: `cd frontend && npm run dev`
+- Run each as a background process so they persist
+
+**VS Code Tasks Available**:
+- "Backend Server" - Starts Django backend
+- "Frontend Server" - Starts Next.js frontend  
+- "Start All Servers" - Starts both together
+- Access via `Cmd+Shift+P` → "Tasks: Run Task"
+
 ### File Structure
 ```
 frontend/src/
@@ -716,13 +738,17 @@ Parent string (no color) >
 - **Visual Hierarchy Sidebar**: Shows parents, current variable, and children as clickable squares
 - **Parent Detection**: Automatically finds variables that embed or spawn the current one
 - **Child Display**: Shows spawns, embedded, and pending variables
-- **Size Differentiation**: Active (48px), Parents/Children (36px)
-- **Alignment**: Parents left, Active center, Children right
+- **Size Differentiation**: Active (48px centered), Parents/Children (36px)
+- **Branching Tree Structure**: 
+  - **Parents Section**: Vertical line descends from horizontal center of active tile's top; horizontal connectors branch LEFT from vertical line to each parent tile's right edge (at vertical center)
+  - **Children Section**: Vertical line descends from horizontal center of active tile's bottom; horizontal connectors branch RIGHT from vertical line to each child tile's left edge (at vertical center)
+- **Consistent Layout**: Mini-nav sidebar width (120px) accommodates full parent + active + child layout with 16px horizontal padding
+- **1px Border Stroke**: All tiles (active and inactive) use 1px border for consistency
 - **Click-to-Navigate**: Immediate navigation to any related variable
 - **Hover Tooltips**: Fixed-position tooltips with variable names and relationships
-- **Color-Coded**: Seagreen for strings, Salmon for conditionals
+- **Color-Coded**: Teal for strings, Orange for conditionals (uses CSS variables `--string-var-color` and `--conditional-var-color`)
 - **Simplified Content Tab**: Removed inline editing sections (now handled via navigation)
-- **Component Architecture**: Separate `NavigationNodeItem` component to comply with Rules of Hooks
+- **Component Architecture**: Separate `NodeSquare` component with consistent sizing and styling
 
 ### Drawer UI Refinements
 - **Unified Variable Hash Badges**: All variable hashes use `VariableHashBadge` component

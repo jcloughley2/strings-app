@@ -13,14 +13,8 @@ from django.template.loader import render_to_string
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.db import models
 from django.db.models.signals import post_save
-from .models import Project, String, Dimension, DimensionValue, StringDimensionValue
-from .serializers import (
-    ProjectSerializer,
-    StringSerializer,
-    DimensionSerializer,
-    DimensionValueSerializer,
-    StringDimensionValueSerializer
-)
+from .models import Project, String
+from .serializers import ProjectSerializer, StringSerializer
 from rest_framework import serializers
 import logging
 import csv
@@ -463,45 +457,6 @@ class StringViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-
-class DimensionViewSet(viewsets.ModelViewSet):
-    serializer_class = DimensionSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return Dimension.objects.filter(project__user=self.request.user)
-
-    def perform_create(self, serializer):
-        project_id = self.request.data.get('project')
-        project = Project.objects.filter(id=project_id, user=self.request.user).first()
-        if not project:
-            raise serializers.ValidationError({'project': 'Project not found or you do not have permission to add dimensions to it.'})
-        serializer.save(project=project)
-
-class DimensionValueViewSet(viewsets.ModelViewSet):
-    serializer_class = DimensionValueSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return DimensionValue.objects.filter(dimension__project__user=self.request.user)
-
-    def perform_create(self, serializer):
-        dimension_id = self.request.data.get('dimension')
-        dimension = Dimension.objects.filter(id=dimension_id, project__user=self.request.user).first()
-        if not dimension:
-            raise serializers.ValidationError({'dimension': 'Dimension not found or you do not have permission to add values to it.'})
-        serializer.save()
-
-class StringDimensionValueViewSet(viewsets.ModelViewSet):
-    serializer_class = StringDimensionValueSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        queryset = StringDimensionValue.objects.filter(string__project__user=self.request.user)
-        
-        # Filter by string if provided
-        string_id = self.request.query_params.get('string', None)
-        if string_id is not None:
-            queryset = queryset.filter(string=string_id)
-            
-        return queryset
+# Note: DimensionViewSet, DimensionValueViewSet, and StringDimensionValueViewSet
+# have been removed as dimensions are now legacy/deprecated.
+# The models still exist for data compatibility but API endpoints are no longer needed.

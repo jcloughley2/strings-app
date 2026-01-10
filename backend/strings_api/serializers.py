@@ -84,9 +84,6 @@ class StringSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         string = String.objects.create(**validated_data)
-        
-        # Automatically assign dimension values based on variables in content
-        string.update_dimension_values_from_variables()
         return string
 
     def update(self, instance, validated_data):
@@ -94,9 +91,6 @@ class StringSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-        
-        # Automatically update dimension values based on variables in content
-        instance.update_dimension_values_from_variables()
         return instance
 
 

@@ -6,10 +6,8 @@ router = DefaultRouter()
 router.register(r'projects', views.ProjectViewSet, basename='project')
 router.register(r'strings', views.StringViewSet, basename='string')
 
-
-router.register(r'dimensions', views.DimensionViewSet, basename='dimension')
-router.register(r'dimension-values', views.DimensionValueViewSet, basename='dimension-value')
-router.register(r'string-dimension-values', views.StringDimensionValueViewSet, basename='string-dimension-value')
+# Note: Dimension API endpoints removed - dimensions are now legacy/deprecated
+# The models still exist for data compatibility but are no longer actively used
 
 urlpatterns = [
     path('', include(router.urls)),

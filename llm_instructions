@@ -81,12 +81,15 @@ String: "My favorite color is `{{color-option}}`"
    - **Spawn Variables**: Individual variations within a conditional variable
    - **Controlled By Spawn**: Optional ForeignKey to another spawn variable that controls this spawn's selection
 
-3. **Dimension** (Legacy/Compatibility): Links conditional variables to their spawn options
-   - Automatically managed by backend signals
-   - Frontend now works directly with conditional/spawn variables
+3. **Dimension** (Deprecated): Previously used to link conditional variables to spawn options
+   - Model still exists in database for data compatibility
+   - No longer actively managed or used by frontend/backend
+   - API endpoints removed
 
-4. **DimensionValue** (Legacy/Compatibility): Individual spawn options for a dimension
-   - Automatically synced when spawns are created/updated/deleted
+4. **DimensionValue** (Deprecated): Previously held individual spawn options
+   - Model still exists in database for data compatibility
+   - No longer actively managed or used by frontend/backend
+   - API endpoints removed
 
 ### Key Relationships
 - Strings reference other strings via `{{variableName}}` embedding
@@ -169,7 +172,8 @@ String: "My favorite color is `{{color-option}}`"
   - Toggle to enable/disable
   - Dropdown to select controller spawn
   - Grouped list by parent conditional
-  - Type-ahead search filtering
+  - Type-ahead search filtering (searches ID/hash AND content)
+  - Content preview shown below each spawn option (resolved to plaintext, truncated to 60 chars)
   - Auto-selection when controller is selected
 
 **Advanced Tab**:
@@ -228,10 +232,11 @@ String: "My favorite color is `{{color-option}}`"
 // If no display_name provided, uses random 6-char hash
 ```
 
-### Dimensions (Auto-managed)
-- Backend signals automatically create/update/delete dimensions and dimension values
-- Frontend works directly with conditional/spawn variables
-- Dimensions maintained for backward compatibility
+### Dimensions (Removed)
+- Dimension API endpoints have been removed from the backend
+- `/api/dimensions/`, `/api/dimension-values/`, `/api/string-dimension-values/` no longer exist
+- Frontend works directly with conditional/spawn variables via the String API
+- Dimension models still exist in database for data compatibility but are no longer actively managed
 
 ---
 
@@ -457,34 +462,18 @@ for (const [varName, content] of Object.entries(state.pendingVariableContent)) {
 
 ### Error Handling
 ```javascript
-// Graceful handling of backend pre-emptive updates
-// Applies to: dimension value deletion, hidden option toggle, spawn sync
+// Graceful handling of API errors
 try {
-  await apiFetch(`/api/dimension-values/${existingValue.id}/`, {
+  await apiFetch(`/api/strings/${stringId}/`, {
     method: 'DELETE',
   });
 } catch (deleteError: any) {
   const errorStr = deleteError.message || String(deleteError);
   if (errorStr.includes('Not found') || errorStr.includes('404')) {
-    console.log(`Already removed by backend signal, continuing...`);
+    console.log(`Already removed, continuing...`);
   } else {
     console.error(`Failed to delete:`, deleteError);
     // Optionally re-throw for critical operations
-  }
-}
-
-// Same pattern for "Hidden" option toggle
-if (existingHiddenValue) {
-  try {
-    await apiFetch(`/api/dimension-values/${existingHiddenValue.id}/`, {
-      method: 'DELETE',
-    });
-  } catch (deleteError: any) {
-    if (deleteError.message?.includes('Not found') || deleteError.message?.includes('404')) {
-      console.log('"Hidden" dimension value already removed, continuing...');
-    } else {
-      throw deleteError;
-    }
   }
 }
 ```
@@ -505,21 +494,24 @@ Frontend:  selectedDimensionValues[dimensionId] = dimensionValueName
 **New Architecture**:
 ```
 User sees: Conditional Variables → Spawn Variables (direct)
-Backend:   Conditional Variable → Spawn Variables (dimensions still exist for compatibility)
+Backend:   Conditional Variable → Spawn Variables (no dimension layer)
 Frontend:  selectedConditionalSpawns[conditionalName] = spawnName
 ```
 
 **Key Changes**:
 - Conditions sidebar shows actual conditional/spawn variable names
 - Direct spawn selection without dimension ID lookups
-- Automatic migration from old dimension state to new conditional state
-- Backward compatible via fallback logic
+- Dimension API endpoints removed from backend
+- Backend dimension signals and helper methods removed
+- Frontend dimension-related API calls removed from `stringOperations.ts`
+- Dimension models remain in database for data preservation
 
 **Benefits**:
 - Simplified mental model (what you see = actual data structure)
 - Reduced complexity (eliminated abstraction layer)
 - Better performance (direct name lookups)
 - Clearer UI ("Conditions" instead of "Dimensions")
+- Smaller codebase (removed dimension ViewSets, serializers, signals)
 
 ### Unified Drawer System (January 2025)
 
@@ -565,11 +557,12 @@ Frontend:  selectedConditionalSpawns[conditionalName] = spawnName
 ### Technical
 - ✅ Idempotent operations throughout
 - ✅ Comprehensive content validation (including nested variable prevention)
-- ✅ Django signals for auto-inheritance and dimension sync
+- ✅ Django signals for variable name tracking
 - ✅ Frontend/backend validation alignment
 - ✅ Slugify-based variable naming
 - ✅ Local state management for inline editing
 - ✅ Graceful error handling for race conditions
+- ✅ Dimension layer removed (simplified architecture)
 
 ---
 
@@ -734,7 +727,28 @@ Parent string (no color) >
 
 ## Recent Major Updates (2025)
 
-### Drawer Navigation System (Latest)
+### Dimension Layer Removal (Latest - January 2025)
+- **Backend**: Removed dimension-related signals, helper methods, and API ViewSets
+  - Removed `DimensionViewSet`, `DimensionValueViewSet`, `StringDimensionValueViewSet` from `views.py`
+  - Removed router registrations for dimension endpoints from `urls.py`
+  - Removed `update_dimension_values_from_variables()` method from `String` model
+  - Removed dimension-related signals (`update_dependent_strings_when_string_variable_changes`, etc.)
+  - Removed calls to dimension methods from `StringSerializer`
+- **Frontend**: Removed dimension API calls from `stringOperations.ts`
+  - Conditional variables now saved using only `is_conditional_container` flag
+  - Spawn variables linked via `controlled_by_spawn_id` field
+  - No more `/api/dimensions/`, `/api/dimension-values/` calls
+- **Data Preservation**: Dimension models (`Dimension`, `DimensionValue`, `StringDimensionValue`) still exist in database for historical data
+
+### Controlling Spawn Selector Enhancement (Latest - January 2025)
+- **Content Preview**: Each spawn option in the controlling condition dropdown now shows a content preview
+  - Content resolved to plaintext based on current conditional selections
+  - Truncated to 60 characters with ellipsis for long content
+- **Enhanced Search**: Type-ahead search now filters by both ID/hash AND content
+  - Makes it easier to find correct spawn when many exist with similar names
+  - Search matches on `display_name`, `effective_variable_name`, `variable_hash`, and `content`
+
+### Drawer Navigation System
 - **Visual Hierarchy Sidebar**: Shows parents, current variable, and children as clickable squares
 - **Parent Detection**: Automatically finds variables that embed or spawn the current one
 - **Child Display**: Shows spawns, embedded, and pending variables
@@ -828,6 +842,11 @@ Parent string (no color) >
 - Visual indicators: green "(auto)" for controlled, grey "(locked)" for disabled
 - Edit icons still work on disabled spawns
 - Prevents infinite loops with hasChanges check
+- **Enhanced Spawn Selector** (Latest):
+  - Content preview shown below each spawn option (resolved to plaintext using current conditional settings)
+  - Content truncated to 60 characters with ellipsis
+  - Type-ahead search filters by ID/hash AND content
+  - Makes it easier to identify correct spawn when many exist
 
 ### Canvas Display Controls
 - Hide Embedded Strings (ON by default)
@@ -843,11 +862,13 @@ Parent string (no color) >
 - Frontend shows live preview of generated slug
 - Conditions sidebar displays slugified names
 
-### Dimensions Elimination
+### Dimensions Elimination (Complete)
 - Frontend UI simplified to work directly with conditional/spawn variables
 - Eliminated abstract "dimensions" layer from user interface
-- Backend dimensions still exist for compatibility
-- Automatic migration from old state to new state
+- Backend dimension API endpoints removed (`/api/dimensions/`, `/api/dimension-values/`, `/api/string-dimension-values/`)
+- Backend dimension signals and helper methods removed from `models.py`
+- Frontend dimension-related API calls removed from `stringOperations.ts`
+- Dimension models remain in database for data preservation (no migration needed)
 - Improved performance and clarity
 
 ---

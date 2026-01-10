@@ -105,6 +105,9 @@ export interface StringEditDrawerProps {
   dirtyVariableIds?: Set<string>; // IDs of variables with unsaved changes
   sessionEdits?: Map<string, any>; // All variables in the current editing session
   activeVariableId?: string; // The ID of the currently active variable in the session
+  
+  // Content resolution
+  resolveContentToPlaintext?: (content: string) => string; // Resolve variables to plaintext based on selected conditional spawns
 }
 
 export function StringEditDrawer({
@@ -737,12 +740,16 @@ export function StringEditDrawer({
                     }
                   });
                   
-                  // Filter by search
+                  // Filter by search (matches on ID/hash/display_name AND content)
                   const filteredGroups = groupedSpawns.map(group => ({
                     ...group,
                     spawns: group.spawns.filter(spawn => {
+                      const searchTerm = controllingSpawnSearch.toLowerCase();
                       const spawnDisplayName = spawn.display_name || spawn.effective_variable_name || spawn.variable_hash;
-                      return spawnDisplayName.toLowerCase().includes(controllingSpawnSearch.toLowerCase());
+                      const spawnContent = spawn.content || '';
+                      // Match on either the name/hash OR the content
+                      return spawnDisplayName.toLowerCase().includes(searchTerm) || 
+                             spawnContent.toLowerCase().includes(searchTerm);
                     })
                   })).filter(group => group.spawns.length > 0);
 
@@ -806,6 +813,10 @@ export function StringEditDrawer({
                                       const spawnDisplayName = spawn.display_name || spawn.effective_variable_name || spawn.variable_hash;
                                       const isCurrentSpawn = spawn.id === currentStringId;
                                       const isSelected = controlledBySpawnId === spawn.id;
+                                      // Truncate content to show a preview
+                                      const contentPreview = spawn.content 
+                                        ? (spawn.content.length > 60 ? spawn.content.substring(0, 60) + '...' : spawn.content)
+                                        : '';
                                       
                                       return (
                                         <button
@@ -824,15 +835,22 @@ export function StringEditDrawer({
                                               : 'hover:bg-muted/50'
                                           }`}
                                         >
-                                          <div className="flex items-center gap-2">
-                                            <Spool className="h-3 w-3" />
-                                            <span>{spawnDisplayName}</span>
+                                          <div className="flex flex-col items-start gap-0.5 flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                              <Spool className="h-3 w-3 flex-shrink-0" />
+                                              <span className="font-medium">{spawnDisplayName}</span>
+                                            </div>
+                                            {contentPreview && (
+                                              <span className="text-xs text-muted-foreground pl-5 truncate w-full">
+                                                {contentPreview}
+                                              </span>
+                                            )}
                                           </div>
                                           {isCurrentSpawn && (
-                                            <span className="text-xs text-muted-foreground">(current)</span>
+                                            <span className="text-xs text-muted-foreground flex-shrink-0">(current)</span>
                                           )}
                                           {isSelected && !isCurrentSpawn && (
-                                            <span className="text-xs text-blue-600">✓ Selected</span>
+                                            <span className="text-xs text-blue-600 flex-shrink-0">✓ Selected</span>
                                           )}
                                         </button>
                                       );

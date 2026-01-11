@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,11 +9,146 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Search, X, Sparkles, Folder, Plus, Spool } from "lucide-react";
+import { ArrowLeft, Search, X, Sparkles, Folder, Plus, Spool, Trash2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { VariableHashBadge } from "@/components/VariableHashBadge";
 import { DrawerNavigation } from "@/components/DrawerNavigation";
+
+// Reusable Variable Search/Select Component
+interface VariableSearchSelectProps {
+  label: string;
+  helperText: string;
+  placeholder?: string;
+  searchValue: string;
+  onSearchChange: (value: string) => void;
+  showResults: boolean;
+  onShowResultsChange: (show: boolean) => void;
+  availableVariables: {
+    id: string | number;
+    name: string;
+    content: string;
+    type: string;
+    isConditional: boolean;
+    isSpawn?: boolean; // Spawn variables are visible but not selectable
+    parentConditionalName?: string; // Name of parent conditional if this is a spawn
+  }[];
+  onSelect: (variable: any) => void;
+  maxResults?: number;
+}
+
+function VariableSearchSelect({
+  label,
+  helperText,
+  placeholder = "Type to search for existing variables...",
+  searchValue,
+  onSearchChange,
+  showResults,
+  onShowResultsChange,
+  availableVariables,
+  onSelect,
+  maxResults = 8,
+}: VariableSearchSelectProps) {
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <Label className="text-sm font-medium flex items-center gap-2">
+        <Search className="h-4 w-4" />
+        {label}
+      </Label>
+      <div className="space-y-2">
+        <div className="relative">
+          <Input
+            value={searchValue}
+            onChange={(e) => {
+              onSearchChange(e.target.value);
+              onShowResultsChange(true); // Always show results when typing
+            }}
+            placeholder={placeholder}
+            className="w-full"
+            onFocus={() => onShowResultsChange(true)} // Show results on focus (even without typing)
+            onBlur={() => {
+              // Delay hiding to allow clicks on results
+              setTimeout(() => onShowResultsChange(false), 200);
+            }}
+          />
+          
+          {/* Search Results Dropdown */}
+          {showResults && availableVariables.length > 0 && (
+            <div className="absolute top-full left-0 w-full mt-1 bg-background border rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
+              {availableVariables.slice(0, maxResults).map((variable) => {
+                const isSpawn = variable.isSpawn;
+                return (
+                  <div
+                    key={variable.id}
+                    className={`p-3 border-b last:border-b-0 ${
+                      isSpawn 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : 'hover:bg-muted cursor-pointer'
+                    }`}
+                    onClick={() => !isSpawn && onSelect(variable)}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      {variable.isConditional ? (
+                        <div className="flex items-center gap-1 text-conditional-600 bg-conditional-50 p-1 rounded border border-conditional-200">
+                          <Folder className="h-3 w-3" />
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-string-600 bg-string-50 p-1 rounded border border-string-200">
+                          <Spool className="h-3 w-3" />
+                        </div>
+                      )}
+                      <Badge 
+                        variant="outline" 
+                        className={`text-xs font-mono ${
+                          variable.isConditional 
+                            ? 'bg-conditional-50 text-conditional-700 border-conditional-200'
+                            : 'bg-string-50 text-string-700 border-string-200'
+                        }`}
+                      >
+                        {`{{${variable.name}}}`}
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        {variable.type}
+                      </Badge>
+                      {isSpawn && (
+                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                          spawn
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-1">
+                      {isSpawn && variable.parentConditionalName 
+                        ? `Spawn of ${variable.parentConditionalName}` 
+                        : (variable.content || "No content")}
+                    </p>
+                  </div>
+                );
+              })}
+              {availableVariables.length > maxResults && (
+                <div className="p-2 text-xs text-muted-foreground text-center border-t">
+                  Showing first {maxResults} results. Type more to filter further.
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* No Results Message */}
+          {showResults && searchValue.length > 0 && availableVariables.length === 0 && (
+            <div className="absolute top-full left-0 w-full mt-1 bg-background border rounded-md shadow-lg z-50 p-3">
+              <p className="text-sm text-muted-foreground text-center">
+                No variables found matching "{searchValue}"
+              </p>
+            </div>
+          )}
+        </div>
+        
+        <p className="text-xs text-muted-foreground">
+          {helperText}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 // Simple slugify function for preview
 function slugify(text: string): string {
@@ -107,7 +242,10 @@ export interface StringEditDrawerProps {
   activeVariableId?: string; // The ID of the currently active variable in the session
   
   // Content resolution
-  resolveContentToPlaintext?: (content: string) => string; // Resolve variables to plaintext based on selected conditional spawns
+  resolveContentToPlaintext?: (content: string, excludeStringId?: string | number) => string; // Resolve variables to plaintext based on selected conditional spawns
+  
+  // Delete handler
+  onDelete?: (variable: any) => void; // Called when user wants to delete the variable
 }
 
 export function StringEditDrawer({
@@ -154,15 +292,35 @@ export function StringEditDrawer({
   dirtyVariableIds,
   sessionEdits,
   activeVariableId,
+  resolveContentToPlaintext,
+  onDelete,
 }: StringEditDrawerProps) {
+  
+  // Ref for content textarea to enable auto-focus
+  const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
   
   // State for adding existing variables as spawns
   const [existingVariableSearch, setExistingVariableSearch] = useState("");
   const [showExistingVariableResults, setShowExistingVariableResults] = useState(false);
   
+  // State for embedding existing variables in string content
+  const [embedVariableSearch, setEmbedVariableSearch] = useState("");
+  const [showEmbedVariableResults, setShowEmbedVariableResults] = useState(false);
+  
   // State for controlling spawn selector
   const [controllingSpawnSearch, setControllingSpawnSearch] = useState("");
   const [isControllingConditionEnabled, setIsControllingConditionEnabled] = useState(false);
+  
+  // Auto-focus content textarea when creating a new string (no existing stringData.id)
+  useEffect(() => {
+    if (isOpen && !stringData?.id && !isConditional && activeTab === 'content') {
+      // Small delay to ensure the sheet animation completes and textarea is rendered
+      const timer = setTimeout(() => {
+        contentTextareaRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, stringData?.id, isConditional, activeTab]);
   
   // Detect variables in content for display
   const detectVariables = (content: string) => {
@@ -436,19 +594,54 @@ export function StringEditDrawer({
     return spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash;
   });
   
-  const availableVariablesForSpawn = project?.strings?.filter((str: any) => {
+  // Helper to get parent conditional name for a spawn variable
+  const getParentConditionalName = (str: any): string | undefined => {
+    if (!str.controlled_by_spawn_id) return undefined;
+    const parent = project?.strings?.find((s: any) => s.id === str.controlled_by_spawn_id);
+    return parent?.effective_variable_name || parent?.variable_name || parent?.variable_hash;
+  };
+
+  // Sort strings by most recently created (using id as proxy, higher id = more recent)
+  const sortedStrings = [...(project?.strings || [])].sort((a: any, b: any) => b.id - a.id);
+  
+  const availableVariablesForSpawn = sortedStrings.filter((str: any) => {
     const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
+    const matchesSearch = !existingVariableSearch || 
+      effectiveName.toLowerCase().includes(existingVariableSearch.toLowerCase()) ||
+      (str.content || "").toLowerCase().includes(existingVariableSearch.toLowerCase());
     return effectiveName && 
            str.id !== stringData?.id && // Exclude current string being edited
            !currentSpawnNames.includes(effectiveName) && // Exclude already selected spawns
-           effectiveName.toLowerCase().includes(existingVariableSearch.toLowerCase()); // Filter by search
+           matchesSearch; // Filter by search (or show all if no search)
   }).map((str: any) => ({
     id: str.id,
     name: str.effective_variable_name || str.variable_name || str.variable_hash,
     content: str.content || "",
     type: str.is_conditional_container ? 'conditional' : 'string',
-    isConditional: str.is_conditional_container || false
-  })) || [];
+    isConditional: str.is_conditional_container || false,
+    isSpawn: !!str.controlled_by_spawn_id,
+    parentConditionalName: getParentConditionalName(str),
+  }));
+
+  // Filter available variables for embedding in string content
+  // Includes spawn variables (visible but not selectable)
+  const availableVariablesForEmbed = sortedStrings.filter((str: any) => {
+    const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
+    const matchesSearch = !embedVariableSearch || 
+      effectiveName.toLowerCase().includes(embedVariableSearch.toLowerCase()) ||
+      (str.content || "").toLowerCase().includes(embedVariableSearch.toLowerCase());
+    return effectiveName && 
+           str.id !== stringData?.id && // Exclude current string being edited
+           matchesSearch; // Filter by search (or show all if no search)
+  }).map((str: any) => ({
+    id: str.id,
+    name: str.effective_variable_name || str.variable_name || str.variable_hash,
+    content: str.content || "",
+    type: str.is_conditional_container ? 'conditional' : 'string',
+    isConditional: str.is_conditional_container || false,
+    isSpawn: !!str.controlled_by_spawn_id,
+    parentConditionalName: getParentConditionalName(str),
+  }));
 
   const handleSave = async () => {
     try {
@@ -464,6 +657,27 @@ export function StringEditDrawer({
       setExistingVariableSearch("");
       setShowExistingVariableResults(false);
     }
+  };
+
+  // Handle embedding a variable into string content
+  const handleEmbedVariable = (variableName: string) => {
+    // Insert {{variableName}} at the end of content (or cursor position if we had a ref)
+    const variableRef = `{{${variableName}}}`;
+    const newContent = content ? `${content}${variableRef}` : variableRef;
+    onContentChange(newContent);
+    setEmbedVariableSearch("");
+    setShowEmbedVariableResults(false);
+    toast.success(`Added ${variableRef} to content`);
+    
+    // Return focus to content textarea so user can continue typing
+    setTimeout(() => {
+      if (contentTextareaRef.current) {
+        contentTextareaRef.current.focus();
+        // Move cursor to end of content
+        const length = newContent.length;
+        contentTextareaRef.current.setSelectionRange(length, length);
+      }
+    }, 50);
   };
 
   const effectiveTitle = title || (stringData ? 'Edit Variable' : 'Create Variable');
@@ -578,89 +792,16 @@ export function StringEditDrawer({
                   </div>
 
                   {/* Add Existing Variable as Spawn */}
-                  <div className="space-y-3 border-t pt-4">
-                    <Label className="text-sm font-medium flex items-center gap-2">
-                      <Search className="h-4 w-4" />
-                      Add Existing Variable as Spawn
-                    </Label>
-                    <div className="space-y-2">
-                      <div className="relative">
-                        <Input
-                          value={existingVariableSearch}
-                          onChange={(e) => {
-                            setExistingVariableSearch(e.target.value);
-                            setShowExistingVariableResults(e.target.value.length > 0);
-                          }}
-                          placeholder="Type to search for existing variables..."
-                          className="w-full"
-                          onFocus={() => setShowExistingVariableResults(existingVariableSearch.length > 0)}
-                          onBlur={() => {
-                            // Delay hiding to allow clicks on results
-                            setTimeout(() => setShowExistingVariableResults(false), 200);
-                          }}
-                        />
-                        
-                        {/* Search Results Dropdown */}
-                        {showExistingVariableResults && availableVariablesForSpawn.length > 0 && (
-                          <div className="absolute top-full left-0 w-full mt-1 bg-background border rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
-                            {availableVariablesForSpawn.slice(0, 8).map((variable: any) => (
-                              <div
-                                key={variable.id}
-                                className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"
-                                onClick={() => handleAddExistingVariable(variable.id)}
-                              >
-                                <div className="flex items-center gap-2 mb-1">
-                                  {variable.isConditional ? (
-                                    <div className="flex items-center gap-1 text-conditional-600 bg-conditional-50 p-1 rounded border border-conditional-200">
-                                      <Folder className="h-3 w-3" />
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-1 text-string-600 bg-string-50 p-1 rounded border border-string-200">
-                                      <Spool className="h-3 w-3" />
-                                    </div>
-                                  )}
-                                  <Badge 
-                                    variant="outline" 
-                                    className={`text-xs font-mono ${
-                                      variable.isConditional 
-                                        ? 'bg-conditional-50 text-conditional-700 border-conditional-200'
-                                        : 'bg-string-50 text-string-700 border-string-200'
-                                    }`}
-                                  >
-                                    {`{{${variable.name}}}`}
-                                  </Badge>
-                                  <Badge variant="secondary" className="text-xs">
-                                    {variable.type}
-                                  </Badge>
-                                </div>
-                                <p className="text-xs text-muted-foreground line-clamp-1">
-                                  {variable.content || "No content"}
-                                </p>
-                              </div>
-                            ))}
-                            {availableVariablesForSpawn.length > 8 && (
-                              <div className="p-2 text-xs text-muted-foreground text-center border-t">
-                                Showing first 8 results. Type more to filter further.
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        
-                        {/* No Results Message */}
-                        {showExistingVariableResults && existingVariableSearch.length > 0 && availableVariablesForSpawn.length === 0 && (
-                          <div className="absolute top-full left-0 w-full mt-1 bg-background border rounded-md shadow-lg z-50 p-3">
-                            <p className="text-sm text-muted-foreground text-center">
-                              No variables found matching "{existingVariableSearch}"
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <p className="text-xs text-muted-foreground">
-                        Search and select an existing variable to add it as a spawn for this conditional
-                      </p>
-                    </div>
-                  </div>
+                  <VariableSearchSelect
+                    label="Add Existing Variable as Spawn"
+                    helperText="Search and select an existing variable to add it as a spawn for this conditional"
+                    searchValue={existingVariableSearch}
+                    onSearchChange={setExistingVariableSearch}
+                    showResults={showExistingVariableResults}
+                    onShowResultsChange={setShowExistingVariableResults}
+                    availableVariables={availableVariablesForSpawn}
+                    onSelect={(variable) => handleAddExistingVariable(variable.id)}
+                  />
 
                   {/* Include Hidden Option Switch */}
                   <div className="flex items-start justify-between gap-4">
@@ -683,6 +824,7 @@ export function StringEditDrawer({
                   <div className="space-y-2">
                     <Label htmlFor="content">Content</Label>
                     <Textarea
+                      ref={contentTextareaRef}
                       id="content"
                       value={content}
                       onChange={(e) => onContentChange(e.target.value)}
@@ -690,6 +832,18 @@ export function StringEditDrawer({
                       rows={4}
                     />
                   </div>
+
+                  {/* Embed Existing Variable */}
+                  <VariableSearchSelect
+                    label="Embed Existing Variable"
+                    helperText="Search and select an existing variable to embed it as {{variableName}} in your content"
+                    searchValue={embedVariableSearch}
+                    onSearchChange={setEmbedVariableSearch}
+                    showResults={showEmbedVariableResults}
+                    onShowResultsChange={setShowEmbedVariableResults}
+                    availableVariables={availableVariablesForEmbed}
+                    onSelect={(variable) => handleEmbedVariable(variable.name)}
+                  />
                 </div>
               )}
             </TabsContent>
@@ -752,8 +906,8 @@ export function StringEditDrawer({
                              spawnContent.toLowerCase().includes(searchTerm);
                     })
                   })).filter(group => group.spawns.length > 0);
-
-                  return (
+                        
+                        return (
                     <div className="space-y-4 p-4 rounded-lg border bg-card">
                       <div className="flex items-center justify-between">
                         <div className="space-y-1">
@@ -761,10 +915,10 @@ export function StringEditDrawer({
                           <p className="text-xs text-muted-foreground">
                             Link this spawn to another spawn variable. When the controlling spawn is selected, this spawn will also show.
                           </p>
-                        </div>
-                        <Button
+                            </div>
+                              <Button
                           variant={isControllingConditionEnabled ? "default" : "outline"}
-                          size="sm"
+                                size="sm"
                           onClick={() => {
                             setIsControllingConditionEnabled(!isControllingConditionEnabled);
                             if (isControllingConditionEnabled) {
@@ -774,8 +928,8 @@ export function StringEditDrawer({
                           }}
                         >
                           {isControllingConditionEnabled ? 'Enabled' : 'Enable'}
-                        </Button>
-                      </div>
+                              </Button>
+                          </div>
 
                       {/* Controlling Spawn Selector */}
                       {isControllingConditionEnabled && (
@@ -790,15 +944,15 @@ export function StringEditDrawer({
                               onChange={(e) => setControllingSpawnSearch(e.target.value)}
                             />
                             <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          </div>
-                          
+                    </div>
+                    
                           {/* Grouped spawn list */}
                           <div className="max-h-[300px] overflow-y-auto border rounded-md bg-background">
                             {filteredGroups.length === 0 ? (
                               <div className="p-4 text-center text-sm text-muted-foreground">
                                 No spawn variables found
-                              </div>
-                            ) : (
+                </div>
+              ) : (
                               <div className="py-1">
                                 {filteredGroups.map((group) => (
                                   <div key={group.conditionalName}>
@@ -806,8 +960,8 @@ export function StringEditDrawer({
                                     <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0 flex items-center gap-2">
                                       <Folder className="h-3 w-3 text-conditional-600" />
                                       {group.conditionalDisplayName}
-                                    </div>
-                                    
+                  </div>
+
                                     {/* Spawns */}
                                     {group.spawns.map((spawn) => {
                                       const spawnDisplayName = spawn.display_name || spawn.effective_variable_name || spawn.variable_hash;
@@ -818,7 +972,7 @@ export function StringEditDrawer({
                                         ? (spawn.content.length > 60 ? spawn.content.substring(0, 60) + '...' : spawn.content)
                                         : '';
                                       
-                                      return (
+                          return (
                                         <button
                                           key={spawn.id}
                                           disabled={isCurrentSpawn}
@@ -836,16 +990,16 @@ export function StringEditDrawer({
                                           }`}
                                         >
                                           <div className="flex flex-col items-start gap-0.5 flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2">
                                               <Spool className="h-3 w-3 flex-shrink-0" />
                                               <span className="font-medium">{spawnDisplayName}</span>
-                                            </div>
+                              </div>
                                             {contentPreview && (
                                               <span className="text-xs text-muted-foreground pl-5 truncate w-full">
                                                 {contentPreview}
                                               </span>
                                             )}
-                                          </div>
+                            </div>
                                           {isCurrentSpawn && (
                                             <span className="text-xs text-muted-foreground flex-shrink-0">(current)</span>
                                           )}
@@ -855,13 +1009,13 @@ export function StringEditDrawer({
                                         </button>
                                       );
                                     })}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
                           </div>
-                        </div>
-                      )}
+                        ))}
+                    </div>
+                  )}
+                          </div>
+                </div>
+              )}
                     </div>
                   );
                 })()}
@@ -882,8 +1036,8 @@ export function StringEditDrawer({
                     return (
               <div className="text-center py-8 text-muted-foreground">
                         <p className="text-sm">No parent conditional variables found</p>
-                      </div>
-                    );
+                            </div>
+                          );
                   }
 
                   // Find parent conditionals by checking dimension values
@@ -928,7 +1082,7 @@ export function StringEditDrawer({
                                 <div>
                                   <p className="font-medium text-sm">{conditionalDisplayName}</p>
                                   <VariableHashBadge hash={conditionalHash} type="conditional" className="mt-1" />
-                                  </div>
+                              </div>
                               </div>
                               <Badge variant="outline" className="bg-conditional-50 text-conditional-700 border-conditional-200">
                                 Conditional
@@ -936,8 +1090,8 @@ export function StringEditDrawer({
                             </div>
                           );
                         })}
+                          </div>
                       </div>
-                    </div>
                   );
                 })()}
               </div>
@@ -997,15 +1151,30 @@ export function StringEditDrawer({
         <SheetFooter className="px-6 py-4 border-t bg-background">
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
+              {/* Delete button - only show when editing an existing variable */}
+              {stringData?.id && onDelete && (
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => onDelete(stringData)}
+                  disabled={isSaving}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete
+                </Button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
               {onCancel && (
                 <Button variant="outline" onClick={onCancel} disabled={isSaving}>
                   Cancel
                 </Button>
               )}
-            </div>
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? 'Saving...' : 'Save'}
             </Button>
+            </div>
           </div>
         </SheetFooter>
         </div> {/* Close Main Content */}

@@ -43,6 +43,9 @@ export default function ProjectDetailPage() {
   // Conditions sidebar state - migrated from dimensions to direct conditional variable selection
   const [selectedConditionalSpawns, setSelectedConditionalSpawns] = useState<{[conditionalVariableName: string]: string | null}>({});
   
+  // Hide controlled variables in conditions sidebar (enabled by default)
+  const [hideControlledVariables, setHideControlledVariables] = useState(true);
+  
   // Legacy dimension state for backward compatibility during migration
   const [selectedDimensionValues, setSelectedDimensionValues] = useState<{[dimensionId: number]: string | null}>({});
   
@@ -253,6 +256,75 @@ export default function ProjectDetailPage() {
     }
   }, [project?.id]); // Only depend on project ID to run once per project load
 
+  // Helper function to resolve content to plaintext (always resolves, regardless of showVariableBadges)
+  // Used for content previews in conditions sidebar and controlling spawn selector
+  const resolveContentToPlaintext = useCallback((content: string, excludeStringId?: string | number): string => {
+    if (!content) return '';
+    
+    let processedContent = content;
+    const variableMatches = content.match(/{{([^}]+)}}/g) || [];
+    const visited = new Set<string>();
+    
+    const resolveRecursively = (text: string, depth: number = 0): string => {
+      if (depth > 10) return text; // Prevent infinite recursion
+      
+      let result = text;
+      const matches = text.match(/{{([^}]+)}}/g) || [];
+      
+      for (const match of matches) {
+        const variableName = match.slice(2, -2);
+        if (visited.has(variableName)) continue;
+        visited.add(variableName);
+        
+        // Check if this is a conditional variable
+        const conditionalVariable = project?.strings?.find((str: any) => 
+          str.is_conditional_container && 
+          (str.effective_variable_name === variableName || 
+           str.variable_name === variableName || 
+           str.variable_hash === variableName)
+        );
+        
+        if (conditionalVariable) {
+          const conditionalName = conditionalVariable.effective_variable_name || conditionalVariable.variable_hash;
+          const selectedSpawnName = selectedConditionalSpawns[conditionalName];
+          
+          if (selectedSpawnName === "Hidden") {
+            result = result.replace(new RegExp(`{{${variableName}}}`, 'g'), '');
+          } else if (selectedSpawnName) {
+            const spawnVariable = project?.strings?.find((str: any) =>
+              str.effective_variable_name === selectedSpawnName ||
+              str.variable_name === selectedSpawnName ||
+              str.variable_hash === selectedSpawnName
+            );
+            if (spawnVariable) {
+              const spawnContent = resolveRecursively(spawnVariable.content || '', depth + 1);
+              result = result.replace(new RegExp(`{{${variableName}}}`, 'g'), spawnContent);
+            }
+          }
+        } else {
+          // Regular embedded variable - resolve it too
+          const embeddedVar = project?.strings?.find((str: any) =>
+            !str.is_conditional_container &&
+            (str.effective_variable_name === variableName ||
+             str.variable_name === variableName ||
+             str.variable_hash === variableName) &&
+            str.id !== excludeStringId
+          );
+          if (embeddedVar) {
+            const embeddedContent = resolveRecursively(embeddedVar.content || '', depth + 1);
+            result = result.replace(new RegExp(`{{${variableName}}}`, 'g'), embeddedContent);
+          }
+        }
+        
+        visited.delete(variableName);
+      }
+      
+      return result;
+    };
+    
+    return resolveRecursively(processedContent);
+  }, [project?.strings, selectedConditionalSpawns]);
+
   // Function to process conditional variables based on selected conditional spawns
   const processConditionalVariables = (content: string): string => {
     if (!content || showVariableBadges) {
@@ -327,6 +399,106 @@ export default function ProjectDetailPage() {
     return processedContent;
   };
 
+  
+  // Helper function to copy variable reference to clipboard
+  // Matches the UX of VariableHashBadge component
+  const copyVariableToClipboard = useCallback((hash: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const copyText = `{{${hash}}}`;
+    navigator.clipboard.writeText(copyText);
+    toast.success(`Copied "${copyText}" to clipboard`);
+  }, []);
+  
+  // Helper function to check if a variable is in use (embedded or spawn)
+  // Returns { isInUse: boolean, usageType: 'embedded' | 'spawn' | 'both' | null, usedBy: string[] }
+  const checkVariableUsage = useCallback((variableId: number | string): { 
+    isInUse: boolean; 
+    usageType: 'embedded' | 'spawn' | 'both' | null;
+    embeddedIn: string[];
+    spawnOf: string[];
+  } => {
+    if (!project?.strings) return { isInUse: false, usageType: null, embeddedIn: [], spawnOf: [] };
+    
+    const variable = project.strings.find((s: any) => s.id === variableId || s.id === Number(variableId));
+    if (!variable) return { isInUse: false, usageType: null, embeddedIn: [], spawnOf: [] };
+    
+    const variableName = variable.effective_variable_name || variable.variable_name || variable.variable_hash;
+    const variableHash = variable.variable_hash;
+    
+    // Check if embedded in other variables
+    const embeddedIn: string[] = [];
+    project.strings.forEach((str: any) => {
+      if (str.id === variable.id) return; // Skip self
+      if (!str.content) return;
+      
+      // Check if this variable is referenced in the content
+      const patterns = [
+        `{{${variableName}}}`,
+        `{{${variableHash}}}`,
+      ];
+      if (variable.variable_name && variable.variable_name !== variableName) {
+        patterns.push(`{{${variable.variable_name}}}`);
+      }
+      
+      for (const pattern of patterns) {
+        if (str.content.includes(pattern)) {
+          const parentName = str.display_name || str.effective_variable_name || str.variable_hash;
+          if (!embeddedIn.includes(parentName)) {
+            embeddedIn.push(parentName);
+          }
+          break;
+        }
+      }
+    });
+    
+    // Check if acting as a spawn variable (controlled by another variable or part of a conditional)
+    const spawnOf: string[] = [];
+    
+    // Method 1: Check controlled_by_spawn relationship
+    if (variable.controlled_by_spawn_id) {
+      const controller = project.strings.find((s: any) => s.id === variable.controlled_by_spawn_id);
+      if (controller) {
+        const controllerName = controller.display_name || controller.effective_variable_name || controller.variable_hash;
+        spawnOf.push(`Controlled by: ${controllerName}`);
+      }
+    }
+    
+    // Method 2: Check if this variable is a spawn of a conditional (via dimension values)
+    project.strings.forEach((str: any) => {
+      if (!str.is_conditional_container) return;
+      
+      const conditionalName = str.effective_variable_name || str.variable_hash;
+      const dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
+      
+      if (dimension) {
+        // Check if this variable's name appears in dimension values
+        const isSpawn = dimension.values?.some((dv: any) => 
+          dv.value === variableName || dv.value === variableHash
+        );
+        if (isSpawn) {
+          const parentName = str.display_name || str.effective_variable_name || str.variable_hash;
+          if (!spawnOf.some(s => s.includes(parentName))) {
+            spawnOf.push(`Spawn of: ${parentName}`);
+          }
+        }
+      }
+    });
+    
+    const isEmbedded = embeddedIn.length > 0;
+    const isSpawn = spawnOf.length > 0;
+    
+    let usageType: 'embedded' | 'spawn' | 'both' | null = null;
+    if (isEmbedded && isSpawn) usageType = 'both';
+    else if (isEmbedded) usageType = 'embedded';
+    else if (isSpawn) usageType = 'spawn';
+    
+    return {
+      isInUse: isEmbedded || isSpawn,
+      usageType,
+      embeddedIn,
+      spawnOf,
+    };
+  }, [project?.strings, project?.dimensions]);
   
   // Legacy functions - stubbed (removed duplicates that are now active)
   const setIncludeHiddenOption = (val: boolean) => console.warn('Legacy setIncludeHiddenOption called');
@@ -1988,7 +2160,7 @@ export default function ProjectDetailPage() {
       
       // Call the duplicate endpoint
       const duplicatedString = await apiFetch(`/api/strings/${str.id}/duplicate/`, {
-        method: 'POST',
+              method: 'POST',
       });
 
       // Refresh project data to show the new string
@@ -1999,7 +2171,7 @@ export default function ProjectDetailPage() {
 
       toast.dismiss();
       toast.success('String duplicated successfully!');
-    } catch (err: any) {
+     } catch (err: any) {
       console.error('Failed to duplicate string:', err);
       toast.dismiss();
       toast.error(err.message || 'Failed to duplicate string');
@@ -2141,6 +2313,17 @@ export default function ProjectDetailPage() {
                       });
                     }
                     
+                    // Check if all real spawns (excluding Hidden) have controlling conditions
+                    const realSpawns = spawnOptions.filter((s: any) => s.id !== 'hidden');
+                    const allSpawnsControlled = realSpawns.length > 0 && realSpawns.every((spawn: any) => 
+                      spawn.controlled_by_spawn_id && spawn.controlled_by_spawn_id !== conditionalVar.id
+                    );
+                    
+                    // If hideControlledVariables is enabled and all spawns are controlled, hide this entire conditional
+                    if (hideControlledVariables && allSpawnsControlled) {
+                      return null;
+                    }
+                    
                     // Ensure there's always a default selection if spawns exist
                     const currentSelection = selectedConditionalSpawns[conditionalName];
                     if (spawnOptions.length > 0 && !currentSelection) {
@@ -2165,12 +2348,12 @@ export default function ProjectDetailPage() {
                   className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1 cursor-pointer"
                             onClick={() => mainDrawer.openEditDrawer(conditionalVar)}
                 >
-                            <h3 className="font-medium text-sm">{conditionalDisplayName}</h3>
-                  <div className="flex items-center gap-2">
+                            <h3 className="font-medium text-sm flex-1">{conditionalDisplayName}</h3>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                      className="h-6 w-6 p-0"
                       onClick={(e) => {
                         e.stopPropagation();
                                   mainDrawer.openEditDrawer(conditionalVar);
@@ -2178,29 +2361,86 @@ export default function ProjectDetailPage() {
                     >
                       <Edit2 className="h-3 w-3" />
                     </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreHorizontal className="h-3 w-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDuplicateString(conditionalVar);
+                          }}
+                        >
+                          <Copy className="h-4 w-4 mr-2" />
+                          Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDeleteStringDialog(conditionalVar);
+                          }}
+                          className="text-red-600 focus:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </div>
                         
                         {/* Spawn Variables (Children) */}
-              <div className="flex flex-wrap gap-2">
-                          {spawnOptions.map((spawn: any) => {
+                        {(() => {
+                          const controllingMap = getControllingSpawnMap();
+                          
+                          // Filter spawns based on hideControlledVariables setting
+                          const visibleSpawnOptions = hideControlledVariables 
+                            ? spawnOptions.filter((spawn: any) => {
+                                // Always show Hidden option
+                                if (spawn.id === 'hidden') return true;
+                                // Hide spawns that have a controlling condition set to a different conditional
+                                return !spawn.controlled_by_spawn_id || spawn.controlled_by_spawn_id === conditionalVar.id;
+                              })
+                            : spawnOptions; // Show all spawns when setting is disabled
+                          
+                          // Helper to render a spawn card
+                          const renderSpawnCard = (spawn: any) => {
                             const spawnHash = spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash;
                             const spawnDisplayName = spawn.display_name || spawnHash;
                             const isSelected = selectedConditionalSpawns[conditionalName] === spawnHash;
                             
                             // Check if this spawn should be disabled due to controlling logic
-                            const controllingMap = getControllingSpawnMap();
                             const isControlled = shouldAutoSelectSpawn(spawn.id, controllingMap);
                             const isDisabled = shouldDisableSpawn(spawn.id, conditionalName, controllingMap);
+                            
+                            // Check if this spawn has a controlling condition (for visual indicator)
+                            const hasControllingCondition = spawn.controlled_by_spawn_id && spawn.controlled_by_spawn_id !== conditionalVar.id;
+                            
+                            // Get resolved content preview (skip for "Hidden" option)
+                            const contentPreview = spawn.id !== 'hidden' && spawn.content 
+                              ? resolveContentToPlaintext(spawn.content, spawn.id)
+                              : '';
+                            const truncatedContent = contentPreview.length > 60 
+                              ? contentPreview.slice(0, 60) + '...' 
+                              : contentPreview;
                   
                   if (isSelected) {
-                              // Selected spawn badge with edit icon
+                              // Selected spawn badge with content first, hash below, action buttons
                     return (
                       <div
                                   key={spawn.id}
-                        className={`group inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-all ${
-                          isControlled 
+                        className={`group rounded-md border px-2 py-1.5 transition-all ${
+                          (isControlled || hasControllingCondition)
                             ? 'opacity-60' 
                             : 'cursor-pointer'
                         }`}
@@ -2210,29 +2450,88 @@ export default function ProjectDetailPage() {
                           color: 'rgb(55 65 81)' // text-gray-700
                         }}
                       >
-                                  {isControlled && <Lock className="h-3 w-3" />}
-                                  <span>{spawnDisplayName}</span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            mainDrawer.openEditDrawer(spawn);
-                          }}
-                          className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 hover:bg-conditional-200 cursor-pointer"
-                          aria-label="Edit spawn variable"
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </button>
+                        {/* Content preview (primary) */}
+                        <div className="flex items-start gap-1">
+                          {(isControlled || hasControllingCondition) && <Lock className="h-3 w-3 flex-shrink-0 mt-0.5" />}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs leading-tight">
+                              {truncatedContent || <span className="text-muted-foreground italic">No content</span>}
+                            </div>
+                          </div>
+                          {/* Action buttons */}
+                          {spawn.id !== 'hidden' && (
+                            <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  mainDrawer.openEditDrawer(spawn);
+                                }}
+                                className="rounded p-0.5 hover:bg-conditional-200 cursor-pointer"
+                                aria-label="Edit spawn variable"
+                                title="Edit"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="rounded p-0.5 hover:bg-conditional-200 cursor-pointer"
+                                    aria-label="More options"
+                                  >
+                                    <MoreHorizontal className="h-3 w-3" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      copyVariableToClipboard(spawnHash);
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    Copy reference
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDuplicateString(spawn);
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    Duplicate
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDeleteStringDialog(spawn);
+                                    }}
+                                    className="text-red-600 focus:text-red-600"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          )}
+                        </div>
+                        {/* Hash/ID (secondary) */}
+                        <div className="text-[10px] text-muted-foreground mt-1 leading-tight font-mono">
+                          {spawnDisplayName}
+                        </div>
                       </div>
                     );
                   } else {
-                              // Unselected spawn badge with edit icon
+                              // Unselected spawn badge with content first, hash below, edit and copy buttons
                     return (
                       <div
                                   key={spawn.id}
-                        className={`group inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-all ${
-                          isDisabled
+                        className={`group rounded-md border px-2 py-1.5 transition-all ${
+                          (isDisabled || hasControllingCondition)
                             ? 'opacity-60'
-                            : 'cursor-pointer'
+                            : 'cursor-pointer hover:bg-gray-100'
                         }`}
                         style={{
                           backgroundColor: 'rgb(249 250 251)', // bg-gray-50 - stays neutral
@@ -2240,7 +2539,7 @@ export default function ProjectDetailPage() {
                           color: 'rgb(55 65 81)' // text-gray-700
                         }}
                         onClick={() => {
-                          if (!isDisabled) {
+                          if (!isDisabled && !hasControllingCondition) {
                             setSelectedConditionalSpawns(prev => ({
                           ...prev,
                               [conditionalName]: spawnHash
@@ -2248,24 +2547,89 @@ export default function ProjectDetailPage() {
                           }
                         }}
                       >
-                                  {isDisabled && <Lock className="h-3 w-3" />}
-                                  <span>{spawnDisplayName}</span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            mainDrawer.openEditDrawer(spawn);
-                          }}
-                          className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 hover:bg-gray-100 cursor-pointer"
-                          aria-label="Edit spawn variable"
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </button>
+                        {/* Content preview (primary) */}
+                        <div className="flex items-start gap-1">
+                          {(isDisabled || hasControllingCondition) && <Lock className="h-3 w-3 flex-shrink-0 mt-0.5" />}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs leading-tight">
+                              {truncatedContent || <span className="text-muted-foreground italic">No content</span>}
+                            </div>
+                          </div>
+                          {/* Action buttons */}
+                          {spawn.id !== 'hidden' && (
+                            <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  mainDrawer.openEditDrawer(spawn);
+                                }}
+                                className="rounded p-0.5 hover:bg-gray-200 cursor-pointer"
+                                aria-label="Edit spawn variable"
+                                title="Edit"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="rounded p-0.5 hover:bg-gray-200 cursor-pointer"
+                                    aria-label="More options"
+                                  >
+                                    <MoreHorizontal className="h-3 w-3" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      copyVariableToClipboard(spawnHash);
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    Copy reference
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDuplicateString(spawn);
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    Duplicate
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDeleteStringDialog(spawn);
+                                    }}
+                                    className="text-red-600 focus:text-red-600"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          )}
+                        </div>
+                        {/* Hash/ID (secondary) */}
+                        <div className="text-[10px] text-muted-foreground mt-1 leading-tight font-mono">
+                          {spawnDisplayName}
+                        </div>
                       </div>
                     );
                   }
-                })}
-              </div>
-            </div>
+                          };
+                          
+                          return (
+                            <div className="flex flex-col gap-2">
+                              {visibleSpawnOptions.map(renderSpawnCard)}
+                            </div>
+                          );
+                        })()}
+                    </div>
                     );
                   })}
               </div>
@@ -2480,6 +2844,12 @@ export default function ProjectDetailPage() {
         level={mainDrawer.level}
         showBackButton={mainDrawer.showBackButton}
         isSaving={mainDrawer.isSaving}
+        resolveContentToPlaintext={resolveContentToPlaintext}
+        onDelete={(variable) => {
+          // Close the drawer first, then open the delete dialog
+          mainDrawer.closeDrawer();
+          openDeleteStringDialog(variable);
+        }}
       />
       
       {/* OLD SYSTEM TO BE REMOVED - keeping placeholder for now */}
@@ -3986,22 +4356,98 @@ export default function ProjectDetailPage() {
 
       {/* Bulk Delete Confirmation Dialog */}
       <Dialog open={bulkDeleteDialog} onOpenChange={v => !v && closeBulkDeleteDialog()}>
-        <DialogContent className="max-w-md">
-          <DialogTitle>Delete {selectedStringIds.size} Strings</DialogTitle>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Are you sure you want to delete {selectedStringIds.size} selected strings? This action cannot be undone.
-            </p>
+        <DialogContent className="max-w-lg">
+          {(() => {
+            // Check which selected variables are in use
+            const inUseVariables: { id: string; name: string; usage: ReturnType<typeof checkVariableUsage> }[] = [];
+            const deletableVariables: string[] = [];
             
-            <div className="flex justify-end gap-2">
+            Array.from(selectedStringIds).forEach(id => {
+              const usage = checkVariableUsage(id);
+              const variable = project?.strings?.find((s: any) => s.id === Number(id));
+              const name = variable?.display_name || variable?.effective_variable_name || variable?.variable_hash || id;
+              
+              if (usage.isInUse) {
+                inUseVariables.push({ id, name, usage });
+              } else {
+                deletableVariables.push(name);
+              }
+            });
+            
+            const hasInUseVariables = inUseVariables.length > 0;
+            const allInUse = inUseVariables.length === selectedStringIds.size;
+            
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>
+                    {allInUse ? 'Cannot Delete Selected Variables' : `Delete ${selectedStringIds.size} Variables`}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {allInUse 
+                      ? 'All selected variables are currently in use and cannot be deleted.'
+                      : hasInUseVariables
+                      ? `${inUseVariables.length} of ${selectedStringIds.size} selected variables are in use and will be skipped.`
+                      : `Are you sure you want to delete ${selectedStringIds.size} selected variables? This action cannot be undone.`
+                    }
+                  </DialogDescription>
+                </DialogHeader>
+          <div className="space-y-4">
+                  {hasInUseVariables && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-md max-h-40 overflow-y-auto">
+                      <p className="text-sm font-medium text-amber-800 mb-2">
+                        ⚠️ Variables in use (will be skipped):
+                      </p>
+                      <ul className="text-sm text-amber-700 list-disc list-inside space-y-1">
+                        {inUseVariables.slice(0, 10).map(({ name, usage }) => (
+                          <li key={name}>
+                            <span className="font-medium">{name}</span>
+                            <span className="text-amber-600 ml-1">
+                              ({usage.usageType === 'both' ? 'embedded & spawn' : usage.usageType})
+                            </span>
+                          </li>
+                        ))}
+                        {inUseVariables.length > 10 && (
+                          <li className="text-amber-600">...and {inUseVariables.length - 10} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {deletableVariables.length > 0 && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                      <p className="text-sm font-medium text-red-800">
+                        {deletableVariables.length} variable{deletableVariables.length > 1 ? 's' : ''} will be permanently deleted
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
               <Button variant="outline" onClick={closeBulkDeleteDialog}>
-                Cancel
+                    {allInUse ? 'Close' : 'Cancel'}
               </Button>
-              <Button variant="destructive" onClick={handleBulkDelete}>
-                Delete {selectedStringIds.size} strings
+                  {!allInUse && (
+                    <Button 
+                      variant="destructive" 
+                      onClick={() => {
+                        // Only delete variables that are not in use
+                        const inUseIds = new Set(inUseVariables.map(v => v.id));
+                        const toDelete = Array.from(selectedStringIds).filter(id => !inUseIds.has(id));
+                        
+                        // Update selection to only include deletable items
+                        setSelectedStringIds(new Set(toDelete));
+                        
+                        // Then trigger the delete
+                        setTimeout(() => handleBulkDelete(), 0);
+                      }}
+                    >
+                      Delete {deletableVariables.length} variable{deletableVariables.length > 1 ? 's' : ''}
               </Button>
-            </div>
-          </div>
+                  )}
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -4623,7 +5069,7 @@ export default function ProjectDetailPage() {
                     checked={isPlaintextMode}
                     onCheckedChange={setIsPlaintextMode}
                   />
-                </div>
+            </div>
 
                 {/* Show Variables Toggle */}
                 <div className="flex items-start justify-between gap-4">
@@ -4638,7 +5084,7 @@ export default function ProjectDetailPage() {
                     checked={showVariableBadges}
                     onCheckedChange={setShowVariableBadges}
                   />
-                </div>
+              </div>
 
                 {/* Hide Embedded Strings Toggle */}
                 <div className="flex items-start justify-between gap-4">
@@ -4653,13 +5099,13 @@ export default function ProjectDetailPage() {
                     checked={hideEmbeddedStrings}
                     onCheckedChange={setHideEmbeddedStrings}
                   />
-                </div>
+                    </div>
 
                 {/* Show Variable Names Toggle */}
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1 flex-1">
                     <Label htmlFor="show-names">Show Variable Names</Label>
-                    <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                       Display the variable name (title) on each string card
                     </p>
                   </div>
@@ -4668,8 +5114,8 @@ export default function ProjectDetailPage() {
                     checked={showVariableNames}
                     onCheckedChange={setShowVariableNames}
                   />
-                </div>
-
+            </div>
+            
                 {/* Show Variable Hashes Toggle */}
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1 flex-1">
@@ -4684,13 +5130,25 @@ export default function ProjectDetailPage() {
                     onCheckedChange={setShowVariableHashes}
                   />
                 </div>
-              </div>
-
-              {/* Future Settings Placeholder */}
+          </div>
+          
+              {/* Conditions Sidebar Section */}
               <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">More Settings</h3>
-                <div className="text-sm text-muted-foreground italic">
-                  Additional canvas settings will be added here in future updates.
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Conditions Sidebar</h3>
+                
+                {/* Hide Controlled Variables Toggle */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1 flex-1">
+                    <Label htmlFor="hide-controlled">Hide Controlled Variables</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Hide spawn variables that have a controlling condition set. If all spawns of a conditional are hidden, the conditional itself is also hidden.
+                    </p>
+                  </div>
+                  <Switch
+                    id="hide-controlled"
+                    checked={hideControlledVariables}
+                    onCheckedChange={setHideControlledVariables}
+                  />
                 </div>
               </div>
             </div>
@@ -4992,33 +5450,89 @@ export default function ProjectDetailPage() {
         }}
       >
         <DialogContent className="max-w-md">
+          {(() => {
+            const usage = deleteStringDialog?.id ? checkVariableUsage(deleteStringDialog.id) : { isInUse: false, usageType: null, embeddedIn: [], spawnOf: [] };
+            const variableName = deleteStringDialog?.display_name || deleteStringDialog?.effective_variable_name || deleteStringDialog?.variable_hash;
+            
+            return (
+              <>
           <DialogHeader>
-            <DialogTitle>Delete String</DialogTitle>
+                  <DialogTitle>
+                    {usage.isInUse ? 'Cannot Delete Variable' : 'Delete Variable'}
+                  </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete the string "{deleteStringDialog?.effective_variable_name || deleteStringDialog?.variable_hash}"?
+                    {usage.isInUse 
+                      ? `The variable "${variableName}" is currently in use and cannot be deleted.`
+                      : `Are you sure you want to delete the variable "${variableName}"?`
+                    }
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+                  {usage.isInUse ? (
+                    <>
+                      {usage.embeddedIn.length > 0 && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-md">
+                          <p className="text-sm font-medium text-amber-800 mb-2">
+                            📎 Embedded in {usage.embeddedIn.length} variable{usage.embeddedIn.length > 1 ? 's' : ''}:
+                          </p>
+                          <ul className="text-sm text-amber-700 list-disc list-inside">
+                            {usage.embeddedIn.slice(0, 5).map((name, i) => (
+                              <li key={i}>{name}</li>
+                            ))}
+                            {usage.embeddedIn.length > 5 && (
+                              <li className="text-amber-600">...and {usage.embeddedIn.length - 5} more</li>
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                      {usage.spawnOf.length > 0 && (
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                          <p className="text-sm font-medium text-blue-800 mb-2">
+                            🔗 Used as a spawn variable:
+                          </p>
+                          <ul className="text-sm text-blue-700 list-disc list-inside">
+                            {usage.spawnOf.slice(0, 5).map((name, i) => (
+                              <li key={i}>{name}</li>
+                            ))}
+                            {usage.spawnOf.length > 5 && (
+                              <li className="text-blue-600">...and {usage.spawnOf.length - 5} more</li>
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-md">
+                        <p className="text-sm text-gray-700">
+                          To delete this variable, first remove it from the variables listed above.
+                        </p>
+                      </div>
+                    </>
+                  ) : (
             <div className="p-3 bg-red-50 border border-red-200 rounded-md">
               <p className="text-sm font-medium text-red-800">
                 ⚠️ Warning: This action cannot be undone
               </p>
             </div>
+                  )}
           </div>
           <DialogFooter>
             <Button 
               variant="outline" 
               onClick={() => setDeleteStringDialog(null)}
             >
-              Cancel
+                    {usage.isInUse ? 'Close' : 'Cancel'}
             </Button>
+                  {!usage.isInUse && (
             <Button 
               variant="destructive" 
               onClick={handleDeleteString}
             >
-              Delete String
+                      Delete Variable
             </Button>
+                  )}
           </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

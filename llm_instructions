@@ -129,10 +129,14 @@ String: "My favorite color is `{{color-option}}`"
 - **Show Variable Names** (ON by default): Display the variable name (title/display_name) on each string card
 - **Show Variable Hashes** (OFF by default): Display the copiable variable hash badge on each string card
 
+**Conditions Sidebar Section**:
+- **Hide Controlled Variables** (ON by default): Hide spawn variables that have a controlling condition set to a different conditional. If all spawns of a conditional are hidden, the conditional itself is also hidden from the sidebar.
+
 **Key Features**:
-- Real-time updates: Canvas updates instantly
-- Smart detection: Automatically identifies embedded strings
+- Real-time updates: Canvas and sidebar update instantly
+- Smart detection: Automatically identifies embedded strings and controlled spawns
 - Conditional variables always hidden from canvas (managed in Conditions sidebar)
+- Controlled spawn visibility: When "Hide Controlled Variables" is disabled, controlled spawns show with Lock icon (🔒) and 60% opacity
 
 ### Unified Drawer System
 
@@ -163,8 +167,16 @@ String: "My favorite color is `{{color-option}}`"
 
 **Content Tab**:
 - Variable Type dropdown: String or Conditional
-- **String Mode**: Text content editing (child variables shown in navigation sidebar)
-- **Conditional Mode**: "Include option to hide" toggle (spawn variables shown in navigation sidebar)
+- **String Mode**: 
+  - Text content editing (child variables shown in navigation sidebar)
+  - **Embed Existing Variable**: Search/select component to embed `{{variableName}}` into content
+    - Shows recently created variables by default (sorted by most recently created)
+    - Type-ahead search filters by name/hash AND content
+    - Spawn variables visible but not selectable (shown with "spawn" badge and parent name)
+    - After selection, focus returns to content textarea with cursor at end
+- **Conditional Mode**: 
+  - "Include option to hide" toggle (spawn variables shown in navigation sidebar)
+  - **Add Existing Variable as Spawn**: Search/select component (same styling/behavior as embed search)
 
 **Conditions Tab**:
 - Shows parent conditional variables (for spawn variables)
@@ -185,9 +197,21 @@ String: "My favorite color is `{{color-option}}`"
 
 **Add/Remove Spawns**:
 - Add New Spawn button (creates temporary spawn)
-- Add Existing Variable as Spawn (autocomplete search)
+- Add Existing Variable as Spawn (autocomplete search with VariableSearchSelect)
 - Remove spawn button (hover-triggered in navigation or via conditions sidebar)
 - Include Hide Option checkbox
+
+### Delete Protection
+
+**In-Use Variable Check**:
+- Before deleting a variable, system checks if it's embedded in other strings or used as a spawn
+- If in-use, delete is blocked with explanation of dependencies
+- Delete points with protection:
+  - Single string delete (overflow menu in canvas)
+  - Bulk delete (checkboxes + floating action bar)
+  - Conditional variable delete (overflow menu in conditions sidebar)
+  - Spawn variable delete (overflow menu in conditions sidebar)
+  - Delete button in edit drawer footer
 
 **Navigation**:
 - All spawn variables shown in drawer navigation sidebar
@@ -256,6 +280,7 @@ const [selectedConditionalSpawns, setSelectedConditionalSpawns] = useState<{
 const [hideEmbeddedStrings, setHideEmbeddedStrings] = useState(true);
 const [showVariableNames, setShowVariableNames] = useState(true);
 const [showVariableHashes, setShowVariableHashes] = useState(false);
+const [hideControlledVariables, setHideControlledVariables] = useState(true); // Conditions sidebar
 
 // Unified drawer system
 const mainDrawer = useStringEditDrawer({
@@ -543,6 +568,7 @@ Frontend:  selectedConditionalSpawns[conditionalName] = spawnName
 - ✅ Nested variable prevention validation
 - ✅ Circular reference protection
 - ✅ Canvas display control (hide embedded, toggle names/hashes)
+- ✅ Delete protection for in-use variables (embedded or spawn)
 
 ### UI/UX
 - ✅ Three-panel responsive layout (Conditions sidebar, Canvas, Variables sidebar)
@@ -629,6 +655,7 @@ frontend/src/
 ### Key Files
 - **`page.tsx`**: Main UI, conditions sidebar, canvas, state management
 - **`StringEditDrawer.tsx`**: Unified drawer for all editing scenarios
+  - Contains `VariableSearchSelect` reusable component for embed/spawn variable search
 - **`DrawerNavigation.tsx`**: Visual hierarchy sidebar for variable relationships
 - **`VariableHashBadge.tsx`**: Reusable hash badge component with copy-to-clipboard
 - **`useStringEditDrawer.ts`**: Drawer state and operations
@@ -638,6 +665,18 @@ frontend/src/
 - **`frontend/src/styles/embedded-variables.scss`**: Centralized styling for embedded variables and hash badges
 - **`frontend/src/components/ui/tooltip.tsx`**: ShadCN/UI tooltip component
 - **`frontend/src/components/ui/sheet.tsx`**: ShadCN/UI sheet component (modified for wider drawer)
+
+### Reusable Components
+
+**VariableSearchSelect** (in `StringEditDrawer.tsx`):
+- Shared search/select component for embedding and spawning variables
+- Props: `label`, `helperText`, `searchValue`, `onSearchChange`, `showResults`, `onShowResultsChange`, `availableVariables`, `onSelect`, `maxResults`
+- Features:
+  - Dropdown opens on focus (shows recent variables even before typing)
+  - Type-ahead search filters by name/hash and content
+  - Spawn variables shown with `isSpawn: true` are visible but not selectable
+  - Color-coded: Teal icons for strings, Orange icons for conditionals
+  - Shows content preview and type badges for each result
 
 ---
 
@@ -765,6 +804,7 @@ Parent string (no color) >
 - **Component Architecture**: Separate `NodeSquare` component with consistent sizing and styling
 
 ### Drawer UI Refinements
+- **Auto-focus Content Field**: When creating a new string variable, the content textarea automatically receives focus so users can immediately start typing
 - **Unified Variable Hash Badges**: All variable hashes use `VariableHashBadge` component
   - Click-to-copy functionality throughout app
   - Gradient backgrounds: String variables (color → gray), Conditional variables (color → gray)
@@ -854,6 +894,7 @@ Parent string (no color) >
 - Show Variable Hashes (OFF by default)
 - Plaintext Mode toggle
 - Show Variables toggle
+- Hide Controlled Variables (ON by default) - Hides spawns with controlling conditions from sidebar
 
 ### Slugify-Based Variable Naming
 - Display names automatically converted to URL-friendly identifiers

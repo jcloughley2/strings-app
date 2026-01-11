@@ -32,9 +32,13 @@ interface VariableSearchSelectProps {
     isConditional: boolean;
     isSpawn?: boolean; // Spawn variables are visible but not selectable
     parentConditionalName?: string; // Name of parent conditional if this is a spawn
+    isCurrent?: boolean; // Mark as current variable (not selectable)
+    isSelected?: boolean; // Mark as currently selected
   }[];
   onSelect: (variable: any) => void;
   maxResults?: number;
+  noBorder?: boolean; // Don't show border-t styling (for embedded use)
+  showNoResultsOnEmpty?: boolean; // Show "no results" even when search is empty
 }
 
 function VariableSearchSelect({
@@ -48,9 +52,11 @@ function VariableSearchSelect({
   availableVariables,
   onSelect,
   maxResults = 8,
+  noBorder = false,
+  showNoResultsOnEmpty = false,
 }: VariableSearchSelectProps) {
   return (
-    <div className="space-y-3 border-t pt-4">
+    <div className={`space-y-3 ${noBorder ? '' : 'border-t pt-4'}`}>
       <Label className="text-sm font-medium flex items-center gap-2">
         <Search className="h-4 w-4" />
         {label}
@@ -77,15 +83,21 @@ function VariableSearchSelect({
             <div className="absolute top-full left-0 w-full mt-1 bg-background border rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
               {availableVariables.slice(0, maxResults).map((variable) => {
                 const isSpawn = variable.isSpawn;
+                const isCurrent = variable.isCurrent;
+                const isSelected = variable.isSelected;
+                const isDisabled = isSpawn || isCurrent;
+                
                 return (
                   <div
                     key={variable.id}
                     className={`p-3 border-b last:border-b-0 ${
-                      isSpawn 
+                      isDisabled 
                         ? 'opacity-50 cursor-not-allowed' 
+                        : isSelected
+                        ? 'bg-blue-50 cursor-pointer'
                         : 'hover:bg-muted cursor-pointer'
                     }`}
-                    onClick={() => !isSpawn && onSelect(variable)}
+                    onClick={() => !isDisabled && onSelect(variable)}
                   >
                     <div className="flex items-center gap-2 mb-1">
                       {variable.isConditional ? (
@@ -115,6 +127,16 @@ function VariableSearchSelect({
                           spawn
                         </Badge>
                       )}
+                      {isCurrent && (
+                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                          current
+                        </Badge>
+                      )}
+                      {isSelected && (
+                        <Badge className="text-xs bg-blue-100 text-blue-700 border-blue-200">
+                          ✓ selected
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground line-clamp-1">
                       {isSpawn && variable.parentConditionalName 
@@ -133,10 +155,13 @@ function VariableSearchSelect({
           )}
           
           {/* No Results Message */}
-          {showResults && searchValue.length > 0 && availableVariables.length === 0 && (
+          {showResults && (searchValue.length > 0 || showNoResultsOnEmpty) && availableVariables.length === 0 && (
             <div className="absolute top-full left-0 w-full mt-1 bg-background border rounded-md shadow-lg z-50 p-3">
               <p className="text-sm text-muted-foreground text-center">
-                No variables found matching "{searchValue}"
+                {searchValue.length > 0 
+                  ? `No variables found matching "${searchValue}"`
+                  : "No spawn variables available"
+                }
               </p>
             </div>
           )}
@@ -309,6 +334,7 @@ export function StringEditDrawer({
   
   // State for controlling spawn selector
   const [controllingSpawnSearch, setControllingSpawnSearch] = useState("");
+  const [showControllingSpawnResults, setShowControllingSpawnResults] = useState(false);
   const [isControllingConditionEnabled, setIsControllingConditionEnabled] = useState(false);
   
   // Auto-focus content textarea when creating a new string (no existing stringData.id)
@@ -809,15 +835,15 @@ export function StringEditDrawer({
                       <Label htmlFor={`includeHiddenOption-${level}`}>Include option to hide</Label>
                       <p className="text-sm text-muted-foreground">
                         Adds a "Hidden" option that makes this conditional invisible when selected
-                      </p>
-                    </div>
+                                </p>
+                              </div>
                     <Switch
                       id={`includeHiddenOption-${level}`}
                       checked={includeHiddenOption}
                       onCheckedChange={onHiddenOptionChange}
                     />
-                  </div>
-                </div>
+                              </div>
+                          </div>
               ) : (
                 /* String Mode Content */
                 <div className="space-y-4">
@@ -844,8 +870,8 @@ export function StringEditDrawer({
                     availableVariables={availableVariablesForEmbed}
                     onSelect={(variable) => handleEmbedVariable(variable.name)}
                   />
-                </div>
-              )}
+                          </div>
+                        )}
             </TabsContent>
 
             {/* Conditions Tab */}
@@ -893,29 +919,16 @@ export function StringEditDrawer({
                       });
                     }
                   });
-                  
-                  // Filter by search (matches on ID/hash/display_name AND content)
-                  const filteredGroups = groupedSpawns.map(group => ({
-                    ...group,
-                    spawns: group.spawns.filter(spawn => {
-                      const searchTerm = controllingSpawnSearch.toLowerCase();
-                      const spawnDisplayName = spawn.display_name || spawn.effective_variable_name || spawn.variable_hash;
-                      const spawnContent = spawn.content || '';
-                      // Match on either the name/hash OR the content
-                      return spawnDisplayName.toLowerCase().includes(searchTerm) || 
-                             spawnContent.toLowerCase().includes(searchTerm);
-                    })
-                  })).filter(group => group.spawns.length > 0);
                         
                         return (
                     <div className="space-y-4 p-4 rounded-lg border bg-card">
                       <div className="flex items-center justify-between">
                         <div className="space-y-1">
                           <h3 className="text-sm font-semibold">Controlling Condition</h3>
-                          <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                             Link this spawn to another spawn variable. When the controlling spawn is selected, this spawn will also show.
-                          </p>
-                            </div>
+                      </p>
+                    </div>
                               <Button
                           variant={isControllingConditionEnabled ? "default" : "outline"}
                                 size="sm"
@@ -929,95 +942,95 @@ export function StringEditDrawer({
                         >
                           {isControllingConditionEnabled ? 'Enabled' : 'Enable'}
                               </Button>
-                          </div>
-
-                      {/* Controlling Spawn Selector */}
-                      {isControllingConditionEnabled && (
-                        <div className="space-y-2">
-                          <Label>Select Controlling Spawn</Label>
-                          <div className="relative">
-                            <Input
-                              type="text"
-                              placeholder="Search for a spawn variable..."
-                              className="pr-10"
-                              value={controllingSpawnSearch}
-                              onChange={(e) => setControllingSpawnSearch(e.target.value)}
-                            />
-                            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    </div>
-                    
-                          {/* Grouped spawn list */}
-                          <div className="max-h-[300px] overflow-y-auto border rounded-md bg-background">
-                            {filteredGroups.length === 0 ? (
-                              <div className="p-4 text-center text-sm text-muted-foreground">
-                                No spawn variables found
-                </div>
-              ) : (
-                              <div className="py-1">
-                                {filteredGroups.map((group) => (
-                                  <div key={group.conditionalName}>
-                                    {/* Conditional Header */}
-                                    <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0 flex items-center gap-2">
-                                      <Folder className="h-3 w-3 text-conditional-600" />
-                                      {group.conditionalDisplayName}
                   </div>
 
-                                    {/* Spawns */}
-                                    {group.spawns.map((spawn) => {
-                                      const spawnDisplayName = spawn.display_name || spawn.effective_variable_name || spawn.variable_hash;
-                                      const isCurrentSpawn = spawn.id === currentStringId;
-                                      const isSelected = controlledBySpawnId === spawn.id;
-                                      // Truncate content to show a preview
-                                      const contentPreview = spawn.content 
-                                        ? (spawn.content.length > 60 ? spawn.content.substring(0, 60) + '...' : spawn.content)
-                                        : '';
-                                      
-                          return (
-                                        <button
-                                          key={spawn.id}
-                                          disabled={isCurrentSpawn}
-                                          onClick={() => {
-                                            if (!isCurrentSpawn) {
-                                              onControlledBySpawnIdChange(spawn.id);
-                                            }
-                                          }}
-                                          className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between transition-colors ${
-                                            isCurrentSpawn
-                                              ? 'text-muted-foreground bg-muted/30 cursor-not-allowed'
-                                              : isSelected
-                                              ? 'bg-blue-50 text-blue-900 font-medium'
-                                              : 'hover:bg-muted/50'
-                                          }`}
-                                        >
-                                          <div className="flex flex-col items-start gap-0.5 flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                                              <Spool className="h-3 w-3 flex-shrink-0" />
-                                              <span className="font-medium">{spawnDisplayName}</span>
-                              </div>
-                                            {contentPreview && (
-                                              <span className="text-xs text-muted-foreground pl-5 truncate w-full">
-                                                {contentPreview}
-                                              </span>
-                                            )}
-                            </div>
-                                          {isCurrentSpawn && (
-                                            <span className="text-xs text-muted-foreground flex-shrink-0">(current)</span>
-                                          )}
-                                          {isSelected && !isCurrentSpawn && (
-                                            <span className="text-xs text-blue-600 flex-shrink-0">✓ Selected</span>
-                                          )}
-                                        </button>
-                                      );
-                                    })}
+                      {/* Controlling Spawn Selector */}
+                      {isControllingConditionEnabled && (() => {
+                        // Build flat list of spawns with parent conditional info
+                        const availableControllingSpawns: any[] = [];
+                        
+                        groupedSpawns.forEach(group => {
+                          // Add conditional as a non-selectable header
+                          availableControllingSpawns.push({
+                            id: `conditional-${group.conditionalName}`,
+                            name: group.conditionalName,
+                            content: '',
+                            type: 'conditional',
+                            isConditional: true,
+                            isSpawn: true, // Mark as non-selectable (it's a header)
+                            parentConditionalName: undefined,
+                            isCurrent: false,
+                            isSelected: false,
+                          });
+                          
+                          // Add spawns under this conditional
+                          group.spawns.forEach(spawn => {
+                            const spawnName = spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash;
+                            const spawnContent = spawn.content || '';
+                            // Use resolveContentToPlaintext if available
+                            const resolvedContent = resolveContentToPlaintext 
+                              ? resolveContentToPlaintext(spawnContent, spawn.id)
+                              : spawnContent;
+                            const truncatedContent = resolvedContent.length > 60 
+                              ? resolvedContent.substring(0, 60) + '...' 
+                              : resolvedContent;
+                            
+                            availableControllingSpawns.push({
+                              id: spawn.id,
+                              name: spawnName,
+                              content: truncatedContent,
+                              type: 'spawn',
+                              isConditional: false,
+                              isSpawn: false, // Spawns ARE selectable in this context
+                              parentConditionalName: group.conditionalDisplayName,
+                              isCurrent: spawn.id === currentStringId,
+                              isSelected: controlledBySpawnId === spawn.id,
+                            });
+                          });
+                        });
+                        
+                        // Filter by search
+                        const filteredControllingSpawns = controllingSpawnSearch
+                          ? availableControllingSpawns.filter(v => {
+                              // Always include conditional headers if any of their spawns match
+                              if (v.isConditional) {
+                                // Check if any spawn in this group matches
+                                const groupSpawns = availableControllingSpawns.filter(
+                                  s => s.parentConditionalName === v.name && !s.isConditional
+                                );
+                                return groupSpawns.some(s => 
+                                  s.name.toLowerCase().includes(controllingSpawnSearch.toLowerCase()) ||
+                                  s.content.toLowerCase().includes(controllingSpawnSearch.toLowerCase())
+                                );
+                              }
+                              // Filter spawns by name or content
+                              return v.name.toLowerCase().includes(controllingSpawnSearch.toLowerCase()) ||
+                                     v.content.toLowerCase().includes(controllingSpawnSearch.toLowerCase());
+                            })
+                          : availableControllingSpawns;
+                        
+                        return (
+                          <VariableSearchSelect
+                            label="Select Controlling Spawn"
+                            helperText="When the selected spawn is chosen, this spawn will also be automatically selected"
+                            placeholder="Search for a spawn variable..."
+                            searchValue={controllingSpawnSearch}
+                            onSearchChange={setControllingSpawnSearch}
+                            showResults={showControllingSpawnResults}
+                            onShowResultsChange={setShowControllingSpawnResults}
+                            availableVariables={filteredControllingSpawns}
+                            onSelect={(variable) => {
+                              onControlledBySpawnIdChange(variable.id);
+                              setShowControllingSpawnResults(false);
+                            }}
+                            maxResults={20}
+                            noBorder={true}
+                            showNoResultsOnEmpty={true}
+                          />
+                        );
+                      })()}
                           </div>
-                        ))}
-                    </div>
-                  )}
-                          </div>
-                </div>
-              )}
-                    </div>
-                  );
+                        );
                 })()}
 
                 {/* Helper Text */}
@@ -1025,8 +1038,8 @@ export function StringEditDrawer({
                   <p className="text-sm text-muted-foreground">
                     Below you will find all the conditional variables that this variable serves as a spawn for.
                   </p>
-                </div>
-
+                    </div>
+                    
                 {/* Parent Conditional Variables List */}
                 {(() => {
                   // Find all conditional variables where this string is a spawn
@@ -1034,9 +1047,9 @@ export function StringEditDrawer({
                   
                   if (!currentVarName || !project?.strings) {
                     return (
-              <div className="text-center py-8 text-muted-foreground">
+                      <div className="text-center py-8 text-muted-foreground">
                         <p className="text-sm">No parent conditional variables found</p>
-                            </div>
+                      </div>
                           );
                   }
 
@@ -1058,7 +1071,7 @@ export function StringEditDrawer({
                     return (
               <div className="text-center py-8 text-muted-foreground">
                         <p className="text-sm">This variable is not currently used as a spawn for any conditional variables</p>
-                      </div>
+                  </div>
                     );
                   }
 
@@ -1082,16 +1095,16 @@ export function StringEditDrawer({
                                 <div>
                                   <p className="font-medium text-sm">{conditionalDisplayName}</p>
                                   <VariableHashBadge hash={conditionalHash} type="conditional" className="mt-1" />
-                              </div>
-                              </div>
+                                  </div>
+                                  </div>
                               <Badge variant="outline" className="bg-conditional-50 text-conditional-700 border-conditional-200">
                                 Conditional
-                              </Badge>
+                                </Badge>
                             </div>
                           );
                         })}
-                          </div>
-                      </div>
+                              </div>
+                            </div>
                   );
                 })()}
               </div>

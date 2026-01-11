@@ -168,8 +168,7 @@ async function saveStringVariable({
 
 /**
  * Save a conditional variable with spawns
- * Note: Dimensions are now deprecated - we just save the conditional container and spawns,
- * and link spawns to the conditional via controlled_by_spawn_id
+ * Creates/updates the dimension and dimension values to link spawns to the conditional
  */
 async function saveConditionalVariable({
   stringData,
@@ -179,6 +178,7 @@ async function saveConditionalVariable({
   projectId,
   conditionalSpawns,
   isNewString,
+  project,
 }: {
   stringData?: StringData | null;
   content: string;
@@ -223,48 +223,62 @@ async function saveConditionalVariable({
     });
   }
   
-  // 3. Save all spawns and link them to the conditional container
-  const spawnPromises = conditionalSpawns.map(async (spawn) => {
+  // 3. Get the effective variable name for the conditional (needed for dimension name)
+  const conditionalName = conditionalContainer.effective_variable_name || conditionalContainer.variable_hash;
+  
+  // 4. Create or find the dimension for this conditional
+  let dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
+  
+  if (!dimension) {
+    // Create a new dimension
+    dimension = await apiFetch('/api/dimensions/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: conditionalName,
+        project: projectId,
+      }),
+    });
+  }
+  
+  // 5. Save all spawns and create dimension values to link them
+  const savedSpawns = await Promise.all(conditionalSpawns.map(async (spawn) => {
     try {
-      // If this is an existing variable being added as a spawn, just update its controlled_by_spawn_id
+      let savedSpawn;
+      
+      // If this is an existing variable being added as a spawn, just use it
       if (spawn._isExisting) {
         console.log(`Using existing variable as spawn: ${spawn.effective_variable_name || spawn.variable_hash}`);
-        // Update the spawn to be controlled by this conditional
-        return await apiFetch(`/api/strings/${spawn.id}/`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            controlled_by_spawn_id: conditionalContainer.id,
-          }),
-        });
-      }
-      
-      const spawnPayload = {
-        content: spawn.content?.trim() || 'Default spawn content',
-        display_name: spawn.display_name?.trim() || null,
-        is_conditional: false,
-        is_conditional_container: false,
-        controlled_by_spawn_id: conditionalContainer.id, // Link spawn to conditional
-        project: projectId,
-      };
-      
-      const isNewSpawn = spawn._isTemporary || 
-                        String(spawn.id).startsWith('temp-') || 
-                        (typeof spawn.id === 'number' && spawn.id > 1000000000000);
-      
-      if (isNewSpawn) {
-        return await apiFetch('/api/strings/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(spawnPayload),
-        });
+        savedSpawn = spawn;
       } else {
-        return await apiFetch(`/api/strings/${spawn.id}/`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(spawnPayload),
-        });
+        const spawnPayload = {
+          content: spawn.content?.trim() || 'Default spawn content',
+          display_name: spawn.display_name?.trim() || null,
+          is_conditional: false,
+          is_conditional_container: false,
+          project: projectId,
+        };
+        
+        const isNewSpawn = spawn._isTemporary || 
+                          String(spawn.id).startsWith('temp-') || 
+                          (typeof spawn.id === 'number' && spawn.id > 1000000000000);
+        
+        if (isNewSpawn) {
+          savedSpawn = await apiFetch('/api/strings/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(spawnPayload),
+          });
+        } else {
+          savedSpawn = await apiFetch(`/api/strings/${spawn.id}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(spawnPayload),
+          });
+        }
       }
+      
+      return savedSpawn;
     } catch (spawnError: any) {
       const errorStr = spawnError.message || JSON.stringify(spawnError) || String(spawnError);
       if (errorStr.includes('unique set') || errorStr.includes('must make a unique set')) {
@@ -274,9 +288,54 @@ async function saveConditionalVariable({
         throw spawnError;
       }
     }
-  });
+  }));
   
-  await Promise.all(spawnPromises);
+  // 6. Create dimension values and link spawns to them
+  for (const savedSpawn of savedSpawns) {
+    const spawnName = savedSpawn.effective_variable_name || savedSpawn.variable_name || savedSpawn.variable_hash;
+    
+    // Check if dimension value already exists
+    let dimensionValue = dimension.values?.find((dv: any) => dv.value === spawnName);
+    
+    if (!dimensionValue) {
+      // Create a new dimension value
+      dimensionValue = await apiFetch('/api/dimension-values/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dimension: dimension.id,
+          value: spawnName,
+        }),
+      });
+    }
+    
+    // Link the spawn to the dimension value via StringDimensionValue
+    // First check if the link already exists
+    const existingLinks = savedSpawn.dimension_values || [];
+    const linkExists = existingLinks.some((dv: any) => 
+      dv.dimension_value === dimensionValue.id || 
+      dv.dimension_value_detail?.id === dimensionValue.id
+    );
+    
+    if (!linkExists) {
+      try {
+        await apiFetch('/api/string-dimension-values/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            string: savedSpawn.id,
+            dimension_value: dimensionValue.id,
+          }),
+        });
+      } catch (linkError: any) {
+        // Ignore duplicate link errors
+        const errorStr = linkError.message || String(linkError);
+        if (!errorStr.includes('unique') && !errorStr.includes('already exists')) {
+          console.error('Failed to create string-dimension-value link:', linkError);
+        }
+      }
+    }
+  }
   
   toast.success(isNewString ? 'Conditional variable created successfully!' : 'Conditional variable updated successfully!');
   

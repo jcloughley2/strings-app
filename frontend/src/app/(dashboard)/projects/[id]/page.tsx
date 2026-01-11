@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 
 
-import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Settings, EyeOff, Hash, Lock } from "lucide-react";
+import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Settings, EyeOff, Hash, Lock, PanelBottom } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -45,6 +45,9 @@ export default function ProjectDetailPage() {
   
   // Hide controlled variables in conditions sidebar (enabled by default)
   const [hideControlledVariables, setHideControlledVariables] = useState(true);
+  
+  // Bottom drawer state
+  const [isBottomDrawerOpen, setIsBottomDrawerOpen] = useState(false);
   
   // Legacy dimension state for backward compatibility during migration
   const [selectedDimensionValues, setSelectedDimensionValues] = useState<{[dimensionId: number]: string | null}>({});
@@ -2651,6 +2654,16 @@ export default function ProjectDetailPage() {
           <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background sticky top-0 z-10">
             <h2 className="text-lg font-semibold">Project Strings</h2>
             <div className="flex items-center gap-2">
+              {/* Bottom Drawer Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsBottomDrawerOpen(!isBottomDrawerOpen)}
+                className={`flex items-center gap-2 hover:bg-muted ${isBottomDrawerOpen ? 'bg-muted' : ''}`}
+              >
+                <PanelBottom className="h-4 w-4" />
+                Bottom drawer
+              </Button>
               {/* Canvas Settings Button */}
               <Button
                 variant="outline"
@@ -2794,7 +2807,32 @@ export default function ProjectDetailPage() {
             </ul>
           )}
         </div>
-      </main>
+        </main>
+      </div>
+
+      {/* Bottom Drawer - Push drawer that shrinks content above */}
+      {isBottomDrawerOpen && (
+        <div className="h-[280px] border-t bg-background flex flex-col shrink-0">
+          {/* Bottom Drawer Header */}
+          <div className="flex items-center justify-between px-6 py-3 border-b">
+            <h3 className="text-sm font-medium">Bottom Drawer</h3>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => setIsBottomDrawerOpen(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          {/* Bottom Drawer Content - Scrollable */}
+          <div className="flex-1 overflow-y-auto p-6">
+            <p className="text-muted-foreground text-sm">
+              Bottom drawer content will go here. The main content above shrinks to accommodate this drawer.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* UNIFIED DRAWER SYSTEM */}
       
@@ -4321,8 +4359,6 @@ export default function ProjectDetailPage() {
           </SheetContent>
         </Sheet>
       ))}
-
-      </div>
 
       {/* Floating Action Bar for Bulk Operations */}
       {selectedStringIds.size > 0 && (

@@ -2654,16 +2654,6 @@ export default function ProjectDetailPage() {
           <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background sticky top-0 z-10">
             <h2 className="text-lg font-semibold">Project Strings</h2>
             <div className="flex items-center gap-2">
-              {/* Bottom Drawer Button */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsBottomDrawerOpen(!isBottomDrawerOpen)}
-                className={`flex items-center gap-2 hover:bg-muted ${isBottomDrawerOpen ? 'bg-muted' : ''}`}
-              >
-                <PanelBottom className="h-4 w-4" />
-                Bottom drawer
-              </Button>
               {/* Canvas Settings Button */}
               <Button
                 variant="outline"
@@ -2810,35 +2800,301 @@ export default function ProjectDetailPage() {
         </main>
       </div>
 
-      {/* Bottom Drawer - Push drawer that shrinks content above */}
-      {isBottomDrawerOpen && (
-        <div className="h-[280px] border-t bg-background flex flex-col shrink-0">
-          {/* Bottom Drawer Header */}
-          <div className="flex items-center justify-between px-6 py-3 border-b">
-            <h3 className="text-sm font-medium">Bottom Drawer</h3>
+      {/* Bottom Drawer - Edit Drawer */}
+      {mainDrawer.isOpen && (
+        <div className="h-[340px] border-t bg-background flex flex-col shrink-0">
+          {/* Row 1: Header - Title, Type Selector, Close */}
+          <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
+            {/* Left: Title */}
+            <h3 className="text-sm font-semibold">
+              {mainDrawer.stringData?.id ? 'Edit string' : 'New string'}
+            </h3>
+            
+            {/* Center: Type Selector */}
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground">Type:</Label>
+              <Select
+                value={mainDrawer.isConditional ? 'conditional' : 'string'}
+                onValueChange={(value) => mainDrawer.updateType(value === 'conditional')}
+              >
+                <SelectTrigger className="w-32 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="string">String</SelectItem>
+                  <SelectItem value="conditional">Conditional</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Right: Close button */}
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
-              onClick={() => setIsBottomDrawerOpen(false)}
+              className="h-8 w-8"
+              onClick={mainDrawer.closeDrawer}
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
-          {/* Bottom Drawer Content - Scrollable */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <p className="text-muted-foreground text-sm">
-              Bottom drawer content will go here. The main content above shrinks to accommodate this drawer.
-            </p>
+          
+          {/* Row 2: Sidebar + Content */}
+          <div className="flex flex-1 min-h-0">
+            {/* Vertical Sidebar Tabs */}
+            <div className="w-36 border-r bg-muted/20 flex flex-col py-2">
+              <button
+                onClick={() => mainDrawer.updateTab('content')}
+                className={`px-4 py-2 text-left text-sm font-medium transition-colors ${
+                  mainDrawer.activeTab === 'content' 
+                    ? 'bg-background border-r-2 border-primary text-foreground' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                Content
+              </button>
+              <button
+                onClick={() => mainDrawer.updateTab('conditions')}
+                className={`px-4 py-2 text-left text-sm font-medium transition-colors ${
+                  mainDrawer.activeTab === 'conditions' 
+                    ? 'bg-background border-r-2 border-primary text-foreground' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                Conditions
+              </button>
+              <button
+                onClick={() => mainDrawer.updateTab('advanced')}
+                className={`px-4 py-2 text-left text-sm font-medium transition-colors ${
+                  mainDrawer.activeTab === 'advanced' 
+                    ? 'bg-background border-r-2 border-primary text-foreground' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                Advanced
+              </button>
+            </div>
+            
+            {/* Main Content Area */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {/* Content Tab */}
+              {mainDrawer.activeTab === 'content' && (
+                <div className="space-y-4">
+                  {/* String Content */}
+                  {!mainDrawer.isConditional && (
+                    <div className="space-y-2">
+                      <Label>Content</Label>
+                      <Textarea
+                        value={mainDrawer.content}
+                        onChange={(e) => mainDrawer.updateContent(e.target.value)}
+                        placeholder="Enter string content..."
+                        rows={5}
+                        className="font-mono text-sm"
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Conditional Spawns */}
+                  {mainDrawer.isConditional && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Spawn Variables</Label>
+                        <Button size="sm" variant="outline" onClick={mainDrawer.addSpawn}>
+                          <Plus className="h-3 w-3 mr-1" /> Add Spawn
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        {mainDrawer.conditionalSpawns.map((spawn: any, index: number) => (
+                          <div key={spawn.id || index} className="flex items-center gap-2 p-2 border rounded bg-muted/30">
+                            <Input
+                              value={spawn.display_name || ''}
+                              onChange={(e) => mainDrawer.updateSpawn(index, { ...spawn, display_name: e.target.value })}
+                              placeholder="Spawn name..."
+                              className="flex-1"
+                            />
+                            <Input
+                              value={spawn.content || ''}
+                              onChange={(e) => mainDrawer.updateSpawn(index, { ...spawn, content: e.target.value })}
+                              placeholder="Content..."
+                              className="flex-1"
+                            />
+                          </div>
+                        ))}
+                        {mainDrawer.conditionalSpawns.length === 0 && (
+                          <p className="text-sm text-muted-foreground py-4 text-center">
+                            No spawn variables yet. Click "Add Spawn" to create one.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Conditions Tab */}
+              {mainDrawer.activeTab === 'conditions' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Conditions settings will appear here (controlling conditions, etc.)
+                  </p>
+                </div>
+              )}
+              
+              {/* Advanced Tab */}
+              {mainDrawer.activeTab === 'advanced' && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Display Name</Label>
+                    <Input
+                      value={mainDrawer.displayName}
+                      onChange={(e) => mainDrawer.updateDisplayName(e.target.value)}
+                      placeholder="Enter a display name..."
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      This will be slugified to create the variable name.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Variable Name</Label>
+                    <Input
+                      value={mainDrawer.variableName || '(auto-generated)'}
+                      disabled
+                      className="bg-muted"
+                    />
+                  </div>
+                  
+                  {/* Delete Option - only for existing variables */}
+                  {mainDrawer.stringData?.id && (
+                    <div className="pt-4 border-t">
+                      <Label className="text-sm font-medium text-red-600">Danger Zone</Label>
+                      <div className="mt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
+                          onClick={() => {
+                            // Close drawer and open delete dialog
+                            mainDrawer.closeDrawer();
+                            openDeleteStringDialog(mainDrawer.stringData);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete this variable
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Row 3: Footer - Cancel/Save on left, Mini-nav on right */}
+          <div className="flex items-center justify-between px-4 py-2 border-t bg-muted/20">
+            {/* Left: Cancel and Save */}
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={mainDrawer.closeDrawer}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={mainDrawer.save}>
+                Save
+              </Button>
+            </div>
+            
+            {/* Right: Mini Navigation */}
+            <div className="flex items-center gap-2 overflow-x-auto">
+              {(() => {
+                const nodes: {id: string; name: string; type: 'string' | 'conditional'; isActive: boolean; relationship?: string}[] = [];
+                const currentData = mainDrawer.stringData;
+                
+                // Find parent nodes (variables that embed or spawn the current one)
+                if (currentData?.id) {
+                  const currentName = currentData.effective_variable_name || currentData.variable_hash;
+                  project?.strings?.forEach((str: any) => {
+                    if (str.id === currentData.id) return;
+                    if (str.content?.includes(`{{${currentName}}}`)) {
+                      nodes.push({
+                        id: String(str.id),
+                        name: str.display_name || str.effective_variable_name || str.variable_hash,
+                        type: str.is_conditional_container ? 'conditional' : 'string',
+                        isActive: false,
+                        relationship: 'parent-embeds'
+                      });
+                    }
+                  });
+                }
+                
+                // Add current node
+                if (currentData) {
+                  nodes.push({
+                    id: String(currentData.id || 'new'),
+                    name: mainDrawer.displayName || currentData.effective_variable_name || currentData.variable_hash || 'New Variable',
+                    type: mainDrawer.isConditional ? 'conditional' : 'string',
+                    isActive: true
+                  });
+                } else {
+                  nodes.push({
+                    id: 'new',
+                    name: mainDrawer.displayName || 'New Variable',
+                    type: mainDrawer.isConditional ? 'conditional' : 'string',
+                    isActive: true
+                  });
+                }
+                
+                // Add child nodes (spawns if conditional)
+                if (mainDrawer.isConditional && mainDrawer.conditionalSpawns) {
+                  mainDrawer.conditionalSpawns.forEach((spawn: any, index: number) => {
+                    nodes.push({
+                      id: String(spawn.id || `spawn-${index}`),
+                      name: spawn.display_name || spawn.variable_name || `Spawn ${index + 1}`,
+                      type: 'string',
+                      isActive: false,
+                      relationship: 'spawn'
+                    });
+                  });
+                }
+                
+                return nodes.map((node) => {
+                  const bgColor = node.type === 'conditional' ? 'var(--conditional-var-100)' : 'var(--string-var-100)';
+                  const borderColor = node.type === 'conditional' ? 'var(--conditional-var-color)' : 'var(--string-var-color)';
+                  const activeBg = node.type === 'conditional' ? 'var(--conditional-var-200)' : 'var(--string-var-200)';
+                  const size = node.isActive ? 32 : 28;
+                  
+                  return (
+                    <button
+                      key={node.id}
+                      onClick={() => node.id !== 'new' && !node.isActive && mainDrawer.navigateToVariable?.(node.id)}
+                      className="flex-shrink-0 rounded-md flex items-center justify-center transition-all cursor-pointer"
+                      style={{
+                        width: `${size}px`,
+                        height: `${size}px`,
+                        backgroundColor: node.isActive ? activeBg : bgColor,
+                        border: `1px solid ${borderColor}`,
+                      }}
+                      title={node.name}
+                    >
+                      <span 
+                        className="font-semibold"
+                        style={{ 
+                          color: node.type === 'conditional' ? 'var(--conditional-var-700)' : 'var(--string-var-700)',
+                          fontSize: node.isActive ? '12px' : '10px'
+                        }}
+                      >
+                        {node.name.charAt(0).toUpperCase()}
+                      </span>
+                    </button>
+                  );
+                });
+              })()}
+            </div>
           </div>
         </div>
       )}
 
-      {/* UNIFIED DRAWER SYSTEM */}
+      {/* UNIFIED DRAWER SYSTEM - Old Sheet drawer (disabled, using bottom drawer now) */}
       
-      {/* Main String Edit Drawer */}
+      {/* Main String Edit Drawer - DISABLED: Now using bottom drawer layout above */}
       <StringEditDrawer
-        isOpen={mainDrawer.isOpen}
+        isOpen={false /* mainDrawer.isOpen - disabled */}
         onClose={mainDrawer.closeDrawer}
         stringData={mainDrawer.stringData}
         content={mainDrawer.content}

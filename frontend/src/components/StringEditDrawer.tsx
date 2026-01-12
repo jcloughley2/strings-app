@@ -16,7 +16,7 @@ import { VariableHashBadge } from "@/components/VariableHashBadge";
 import { DrawerNavigation } from "@/components/DrawerNavigation";
 
 // Reusable Variable Search/Select Component
-interface VariableSearchSelectProps {
+export interface VariableSearchSelectProps {
   label: string;
   helperText: string;
   placeholder?: string;
@@ -41,7 +41,7 @@ interface VariableSearchSelectProps {
   showNoResultsOnEmpty?: boolean; // Show "no results" even when search is empty
 }
 
-function VariableSearchSelect({
+export function VariableSearchSelect({
   label,
   helperText,
   placeholder = "Type to search for existing variables...",

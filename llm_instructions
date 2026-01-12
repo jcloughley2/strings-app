@@ -653,12 +653,15 @@ frontend/src/
 ```
 
 ### Key Files
-- **`page.tsx`**: Main UI, conditions sidebar, canvas, state management
-- **`StringEditDrawer.tsx`**: Unified drawer for all editing scenarios
+- **`page.tsx`**: Main UI, conditions sidebar, canvas, bottom drawer, state management
+- **`header.tsx`**: App header with project breadcrumb (uses HeaderContext)
+- **`HeaderContext.tsx`**: Context for passing project info to header from pages
+- **`StringEditDrawer.tsx`**: Unified drawer for all editing scenarios (legacy side sheet)
   - Contains `VariableSearchSelect` reusable component for embed/spawn variable search
 - **`DrawerNavigation.tsx`**: Visual hierarchy sidebar for variable relationships
 - **`VariableHashBadge.tsx`**: Reusable hash badge component with copy-to-clipboard
-- **`useStringEditDrawer.ts`**: Drawer state and operations
+- **`useSessionDrawer.ts`**: Bottom drawer state and operations
+- **`useEditSession.ts`**: Multi-variable editing session management
 - **`stringOperations.ts`**: Save logic for strings and conditionals
 - **`backend/strings_api/models.py`**: String model with slugify logic
 - **`backend/strings_api/serializers.py`**: API serializers
@@ -765,6 +768,73 @@ Parent string (no color) >
 ---
 
 ## Recent Major Updates (2025)
+
+### Bottom Drawer Edit System (Latest - January 2025)
+
+**Push Drawer Architecture**:
+- Variable editing now uses a bottom drawer that pushes content up (not an overlay)
+- Main content area (conditions sidebar + strings canvas) shrinks when drawer opens
+- User can still interact with page content while drawer is open
+- Drop shadow on top edge gives visual separation
+
+**Bottom Drawer Layout**:
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  New/Edit string     [String/Conditional ▼]           [Copy] [X]        │  ← Header
+├─────────────┬───────────────────────────────────────────────────────────┤
+│ ○ Content   │                                                           │
+│ ○ Conditions│           Tab content area                                │  ← Main
+│ ○ Advanced  │           (Delete option in Advanced tab)                 │
+│             │                                                           │
+├─────────────┴───────────────────────────────────────────────────────────┤
+│  [Cancel] [Save]                              [P] → [C] → [S1] [S2]     │  ← Footer
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Features**:
+- Header: Title (New/Edit string), Type selector, Copy reference button, Close button
+- Vertical sidebar tabs on left (Content, Conditions, Advanced)
+- Main content area on right for selected tab
+- Footer: Cancel/Save on left, Mini-navigation tiles on right
+- Delete option moved to Advanced tab (danger zone section)
+- Auto-focus on content textarea when creating new string
+
+### App Header Project Breadcrumb (Latest - January 2025)
+
+**Project bar removed from project page**. Project info now in app header:
+- App header shows: `Strings > Project Name [edit] [overflow menu]`
+- Edit icon opens project edit modal
+- Overflow menu: Import Strings, Download CSV, Duplicate Project, Delete Project
+- Uses `HeaderContext` to pass project info from page to header component
+
+### Global Search (Latest - January 2025)
+
+**Search bar in canvas header** (next to "Project Strings" title):
+- Filters both conditions sidebar AND strings canvas simultaneously
+- Searches by: content, variable name, variable hash, display name
+- Conditionals show if they match OR if any of their spawns match
+- Clear button (X) when search has text
+
+### Copy Reference UX (Latest - January 2025)
+
+**Standalone copy button with tooltip** on all variable tiles:
+- Conditional variables in sidebar: Copy button before Edit button
+- Spawn variables (selected and unselected): Copy button before Edit button
+- Strings in canvas: Copy button before overflow menu
+- Bottom drawer header: Copy button next to Close button
+- All have consistent "Copy reference" tooltip on hover
+- Removed "Copy reference" from overflow menus (now direct button)
+
+### Variable Search/Select Restored (Latest - January 2025)
+
+**VariableSearchSelect component** now used in bottom drawer:
+- **String Content Tab**: "Embed Existing Variable" search below content textarea
+  - Search/select to add `{{variableName}}` to content
+  - Shows toast confirmation when added
+- **Conditional Content Tab**: "Add Existing Variable as Spawn" search near Add Spawn button
+  - Search/select to add existing variable as spawn
+  - Shows toast confirmation when added
+- Component exported from `StringEditDrawer.tsx` for reuse
 
 ### Dimension Layer Removal (Latest - January 2025)
 - **Backend**: Removed dimension-related signals, helper methods, and API ViewSets
@@ -889,7 +959,7 @@ Parent string (no color) >
   - Makes it easier to identify correct spawn when many exist
 
 ### Canvas Display Controls
-- Hide Embedded Strings (ON by default)
+- Hide Embedded Strings (OFF by default) - Shows all strings including embedded/spawn
 - Show Variable Names (ON by default)
 - Show Variable Hashes (OFF by default)
 - Plaintext Mode toggle

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Grand_Hotel } from "next/font/google";
 import "./globals.css";
 import "../styles/embedded-variables.scss";
 import { Header } from "@/components/header";
+import { HeaderProvider } from "@/lib/HeaderContext";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
@@ -36,8 +37,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${grandHotel.variable} antialiased`}
       >
-        <Header />
-        {children}
+        <HeaderProvider>
+          <Header />
+          {children}
+        </HeaderProvider>
         <Toaster />
       </body>
     </html>

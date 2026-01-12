@@ -14,15 +14,17 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 
 
-import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Settings, EyeOff, Hash, Lock, PanelBottom } from "lucide-react";
+import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Settings, EyeOff, Hash, Lock, PanelBottom, Search } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { Textarea } from "@/components/ui/textarea";
 import { VariableHashBadge } from "@/components/VariableHashBadge";
-import { StringEditDrawer } from "@/components/StringEditDrawer";
+import { StringEditDrawer, VariableSearchSelect } from "@/components/StringEditDrawer";
 import { useSessionDrawer } from "@/hooks/useSessionDrawer";
+import { useHeader } from "@/lib/HeaderContext";
 import { toast } from "sonner";
 
 export default function ProjectDetailPage() {
@@ -34,7 +36,7 @@ export default function ProjectDetailPage() {
 
   const [isPlaintextMode, setIsPlaintextMode] = useState(false);
   const [showVariableBadges, setShowVariableBadges] = useState(false);
-  const [hideEmbeddedStrings, setHideEmbeddedStrings] = useState(true);
+  const [hideEmbeddedStrings, setHideEmbeddedStrings] = useState(false);
   const [showVariableNames, setShowVariableNames] = useState(true); // Show display names by default
   const [showVariableHashes, setShowVariableHashes] = useState(false); // Hide copiable hashes by default
   const [isStringDrawerOpen, setIsStringDrawerOpen] = useState(false);
@@ -48,6 +50,15 @@ export default function ProjectDetailPage() {
   
   // Bottom drawer state
   const [isBottomDrawerOpen, setIsBottomDrawerOpen] = useState(false);
+  
+  // Variable search state for bottom drawer
+  const [embedVariableSearch, setEmbedVariableSearch] = useState("");
+  const [showEmbedVariableResults, setShowEmbedVariableResults] = useState(false);
+  const [existingSpawnSearch, setExistingSpawnSearch] = useState("");
+  const [showExistingSpawnResults, setShowExistingSpawnResults] = useState(false);
+  
+  // Global search state - filters conditions sidebar and strings canvas
+  const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   
   // Legacy dimension state for backward compatibility during migration
   const [selectedDimensionValues, setSelectedDimensionValues] = useState<{[dimensionId: number]: string | null}>({});
@@ -199,6 +210,32 @@ export default function ProjectDetailPage() {
   const setStringVariableName = (val: string) => console.warn('Legacy setStringVariableName called');
   const setEditingString = (val: any) => console.warn('Legacy setEditingString called');
   // Note: setPendingStringVariables and setProject are real functions, not stubbed
+
+  // Header context - for project breadcrumb in app header
+  const { setProjectInfo } = useHeader();
+
+  // Set project info in header when project loads
+  useEffect(() => {
+    if (project) {
+      setProjectInfo({
+        name: project.name,
+        onEdit: () => {
+          setEditingProject(project);
+          setProjectName(project.name);
+          setProjectDescription(project.description || "");
+        },
+        onImport: () => setImportDialog(true),
+        onDownload: () => setDownloadDialog(true),
+        onDuplicate: handleDuplicateProject,
+        onDelete: () => setDeleteProjectDialog(true),
+      });
+    }
+    
+    // Clear header when leaving the page
+    return () => {
+      setProjectInfo(null);
+    };
+  }, [project, setProjectInfo]);
 
   // Migration and initialization - run once when project loads
   useEffect(() => {
@@ -1230,6 +1267,21 @@ export default function ProjectDetailPage() {
   
   // Always exclude conditional variables from canvas (they're managed in the Conditions sidebar)
   filteredStrings = filteredStrings.filter((str: any) => !str.is_conditional_container);
+  
+  // Apply global search filter
+  if (globalSearchQuery.trim()) {
+    const query = globalSearchQuery.toLowerCase().trim();
+    filteredStrings = filteredStrings.filter((str: any) => {
+      const content = (str.content || '').toLowerCase();
+      const variableName = (str.effective_variable_name || str.variable_name || '').toLowerCase();
+      const variableHash = (str.variable_hash || '').toLowerCase();
+      const displayName = (str.display_name || '').toLowerCase();
+      return content.includes(query) || 
+             variableName.includes(query) || 
+             variableHash.includes(query) ||
+             displayName.includes(query);
+    });
+  }
 
   // Bulk selection helper functions
   const handleSelectString = (stringId: number, checked: boolean) => {
@@ -2198,54 +2250,6 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
-      {/* Project Header - Sticky */}
-      <div className="flex items-center justify-between px-6 py-4 bg-background border-b sticky top-0 z-10">
-        <h1 className="text-xl font-semibold flex-1 truncate">{project.name}</h1>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={openEditProject}
-          >
-            Edit Project
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 w-8 p-0">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem 
-                onClick={openImportDialog}
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Import Strings
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => setDownloadDialog(true)}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={handleDuplicateProject}
-              >
-                <Copy className="h-4 w-4 mr-2" />
-                Duplicate Project
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem 
-                onClick={() => setDeleteProjectDialog(true)}
-                className="text-red-600 focus:text-red-600"
-              >
-                Delete Project
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
       {/* Main Content Area */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* Conditions Sidebar (left) */}
@@ -2261,7 +2265,42 @@ export default function ProjectDetailPage() {
             {/* Conditional Variable Filters - NEW: Direct conditional variable display */}
             {(() => {
               // Get all conditional variables from the project
-              const conditionalVariables = project?.strings?.filter((str: any) => str.is_conditional_container) || [];
+              let conditionalVariables = project?.strings?.filter((str: any) => str.is_conditional_container) || [];
+              
+              // Apply global search filter to conditionals
+              if (globalSearchQuery.trim()) {
+                const query = globalSearchQuery.toLowerCase().trim();
+                conditionalVariables = conditionalVariables.filter((str: any) => {
+                  const conditionalName = (str.effective_variable_name || str.variable_name || '').toLowerCase();
+                  const conditionalHash = (str.variable_hash || '').toLowerCase();
+                  const displayName = (str.display_name || '').toLowerCase();
+                  
+                  // Check if conditional itself matches
+                  const conditionalMatches = conditionalName.includes(query) || 
+                                             conditionalHash.includes(query) ||
+                                             displayName.includes(query);
+                  
+                  // Also check if any of its spawns match
+                  const dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
+                  const spawns = dimension ? project?.strings?.filter((s: any) => 
+                    !s.is_conditional_container && 
+                    s.dimension_values?.some((dv: any) => dv.dimension === dimension.id)
+                  ) || [] : [];
+                  
+                  const spawnMatches = spawns.some((spawn: any) => {
+                    const spawnContent = (spawn.content || '').toLowerCase();
+                    const spawnName = (spawn.effective_variable_name || spawn.variable_name || '').toLowerCase();
+                    const spawnHash = (spawn.variable_hash || '').toLowerCase();
+                    const spawnDisplayName = (spawn.display_name || '').toLowerCase();
+                    return spawnContent.includes(query) || 
+                           spawnName.includes(query) || 
+                           spawnHash.includes(query) ||
+                           spawnDisplayName.includes(query);
+                  });
+                  
+                  return conditionalMatches || spawnMatches;
+                });
+              }
               
               return conditionalVariables.length > 0 ? (
               <div className="space-y-4">
@@ -2353,6 +2392,27 @@ export default function ProjectDetailPage() {
                 >
                             <h3 className="font-medium text-sm flex-1">{conditionalDisplayName}</h3>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const hash = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
+                              copyVariableToClipboard(hash);
+                            }}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Copy reference</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -2464,6 +2524,25 @@ export default function ProjectDetailPage() {
                           {/* Action buttons */}
                           {spawn.id !== 'hidden' && (
                             <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        copyVariableToClipboard(spawnHash);
+                                      }}
+                                      className="rounded p-0.5 hover:bg-conditional-200 cursor-pointer"
+                                      aria-label="Copy reference"
+                                    >
+                                      <Copy className="h-3 w-3" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Copy reference</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -2486,15 +2565,6 @@ export default function ProjectDetailPage() {
                                   </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      copyVariableToClipboard(spawnHash);
-                                    }}
-                                  >
-                                    <Copy className="h-4 w-4 mr-2" />
-                                    Copy reference
-                                  </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -2561,6 +2631,25 @@ export default function ProjectDetailPage() {
                           {/* Action buttons */}
                           {spawn.id !== 'hidden' && (
                             <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        copyVariableToClipboard(spawnHash);
+                                      }}
+                                      className="rounded p-0.5 hover:bg-gray-200 cursor-pointer"
+                                      aria-label="Copy reference"
+                                    >
+                                      <Copy className="h-3 w-3" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Copy reference</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -2583,15 +2672,6 @@ export default function ProjectDetailPage() {
                                   </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      copyVariableToClipboard(spawnHash);
-                                    }}
-                                  >
-                                    <Copy className="h-4 w-4 mr-2" />
-                                    Copy reference
-                                  </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -2652,7 +2732,27 @@ export default function ProjectDetailPage() {
         <main className="flex-1 flex flex-col items-stretch min-w-0">
           {/* Canvas Header - Sticky */}
           <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background sticky top-0 z-10">
-            <h2 className="text-lg font-semibold">Project Strings</h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-lg font-semibold">Project Strings</h2>
+              {/* Global Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={globalSearchQuery}
+                  onChange={(e) => setGlobalSearchQuery(e.target.value)}
+                  placeholder="Search strings..."
+                  className="pl-9 w-64 h-9"
+                />
+                {globalSearchQuery && (
+                  <button
+                    onClick={() => setGlobalSearchQuery("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               {/* Canvas Settings Button */}
               <Button
@@ -2754,6 +2854,26 @@ export default function ProjectDetailPage() {
                         )}
                       </div>
                       <div className="flex gap-1 shrink-0">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const hash = str.effective_variable_name || str.variable_hash;
+                                  copyVariableToClipboard(hash);
+                                }}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Copy reference</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -2802,7 +2922,7 @@ export default function ProjectDetailPage() {
 
       {/* Bottom Drawer - Edit Drawer */}
       {mainDrawer.isOpen && (
-        <div className="h-[340px] border-t bg-background flex flex-col shrink-0">
+        <div className="h-[340px] border-t bg-background flex flex-col shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
           {/* Row 1: Header - Title, Type Selector, Close */}
           <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
             {/* Left: Title */}
@@ -2827,15 +2947,43 @@ export default function ProjectDetailPage() {
               </Select>
             </div>
             
-            {/* Right: Close button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={mainDrawer.closeDrawer}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            {/* Right: Copy + Close buttons */}
+            <div className="flex items-center gap-1">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => {
+                        const hash = mainDrawer.stringData?.effective_variable_name || 
+                                     mainDrawer.stringData?.variable_hash || 
+                                     mainDrawer.variableName;
+                        if (hash) {
+                          copyVariableToClipboard(hash);
+                        } else {
+                          toast.error('No variable reference available yet');
+                        }
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Copy reference</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={mainDrawer.closeDrawer}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           
           {/* Row 2: Sidebar + Content */}
@@ -2881,27 +3029,111 @@ export default function ProjectDetailPage() {
                 <div className="space-y-4">
                   {/* String Content */}
                   {!mainDrawer.isConditional && (
-                    <div className="space-y-2">
-                      <Label>Content</Label>
-                      <Textarea
-                        value={mainDrawer.content}
-                        onChange={(e) => mainDrawer.updateContent(e.target.value)}
-                        placeholder="Enter string content..."
-                        rows={5}
-                        className="font-mono text-sm"
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Content</Label>
+                        <Textarea
+                          value={mainDrawer.content}
+                          onChange={(e) => mainDrawer.updateContent(e.target.value)}
+                          placeholder="Enter string content..."
+                          rows={4}
+                          className="font-mono text-sm"
+                          autoFocus={!mainDrawer.stringData?.id}
+                        />
+                      </div>
+                      
+                      {/* Embed Existing Variable */}
+                      <VariableSearchSelect
+                        label="Embed Existing Variable"
+                        helperText="Search and select a variable to embed as {{variableName}} in your content"
+                        searchValue={embedVariableSearch}
+                        onSearchChange={setEmbedVariableSearch}
+                        showResults={showEmbedVariableResults}
+                        onShowResultsChange={setShowEmbedVariableResults}
+                        availableVariables={(() => {
+                          const sortedStrings = [...(project?.strings || [])].sort((a: any, b: any) => b.id - a.id);
+                          return sortedStrings.filter((str: any) => {
+                            const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
+                            const matchesSearch = !embedVariableSearch || 
+                              effectiveName.toLowerCase().includes(embedVariableSearch.toLowerCase()) ||
+                              (str.content || "").toLowerCase().includes(embedVariableSearch.toLowerCase());
+                            return effectiveName && 
+                                   str.id !== mainDrawer.stringData?.id && 
+                                   matchesSearch;
+                          }).map((str: any) => ({
+                            id: str.id,
+                            name: str.effective_variable_name || str.variable_name || str.variable_hash,
+                            content: str.content || "",
+                            type: str.is_conditional_container ? 'conditional' : 'string',
+                            isConditional: str.is_conditional_container || false,
+                            isSpawn: !!str.controlled_by_spawn_id,
+                          }));
+                        })()}
+                        onSelect={(variable) => {
+                          const variableRef = `{{${variable.name}}}`;
+                          const newContent = mainDrawer.content ? `${mainDrawer.content}${variableRef}` : variableRef;
+                          mainDrawer.updateContent(newContent);
+                          setEmbedVariableSearch("");
+                          setShowEmbedVariableResults(false);
+                          toast.success(`Added ${variableRef} to content`);
+                        }}
+                        noBorder={true}
                       />
                     </div>
                   )}
                   
                   {/* Conditional Spawns */}
                   {mainDrawer.isConditional && (
-                    <div className="space-y-2">
+                    <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <Label>Spawn Variables</Label>
                         <Button size="sm" variant="outline" onClick={mainDrawer.addSpawn}>
                           <Plus className="h-3 w-3 mr-1" /> Add Spawn
                         </Button>
                       </div>
+                      
+                      {/* Add Existing Variable as Spawn */}
+                      <VariableSearchSelect
+                        label="Add Existing Variable as Spawn"
+                        helperText="Search and select an existing variable to add it as a spawn"
+                        searchValue={existingSpawnSearch}
+                        onSearchChange={setExistingSpawnSearch}
+                        showResults={showExistingSpawnResults}
+                        onShowResultsChange={setShowExistingSpawnResults}
+                        availableVariables={(() => {
+                          const currentSpawnNames = mainDrawer.conditionalSpawns.map((spawn: any) => 
+                            spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash
+                          );
+                          const sortedStrings = [...(project?.strings || [])].sort((a: any, b: any) => b.id - a.id);
+                          return sortedStrings.filter((str: any) => {
+                            const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
+                            const matchesSearch = !existingSpawnSearch || 
+                              effectiveName.toLowerCase().includes(existingSpawnSearch.toLowerCase()) ||
+                              (str.content || "").toLowerCase().includes(existingSpawnSearch.toLowerCase());
+                            return effectiveName && 
+                                   str.id !== mainDrawer.stringData?.id &&
+                                   !currentSpawnNames.includes(effectiveName) &&
+                                   matchesSearch;
+                          }).map((str: any) => ({
+                            id: str.id,
+                            name: str.effective_variable_name || str.variable_name || str.variable_hash,
+                            content: str.content || "",
+                            type: str.is_conditional_container ? 'conditional' : 'string',
+                            isConditional: str.is_conditional_container || false,
+                            isSpawn: !!str.controlled_by_spawn_id,
+                          }));
+                        })()}
+                        onSelect={(variable) => {
+                          if (mainDrawer.addExistingVariableAsSpawn) {
+                            mainDrawer.addExistingVariableAsSpawn(variable.id.toString());
+                            setExistingSpawnSearch("");
+                            setShowExistingSpawnResults(false);
+                            toast.success(`Added ${variable.name} as spawn`);
+                          }
+                        }}
+                        noBorder={true}
+                      />
+                      
                       <div className="space-y-2">
                         {mainDrawer.conditionalSpawns.map((spawn: any, index: number) => (
                           <div key={spawn.id || index} className="flex items-center gap-2 p-2 border rounded bg-muted/30">

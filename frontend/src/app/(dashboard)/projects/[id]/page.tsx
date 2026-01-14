@@ -2923,28 +2923,124 @@ export default function ProjectDetailPage() {
       {/* Bottom Drawer - Edit Drawer */}
       {mainDrawer.isOpen && (
         <div className="h-[340px] border-t bg-background flex flex-col shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
-          {/* Row 1: Header - Title, Type Selector, Close */}
+          {/* Row 1: Header - Title, Mini-nav, Close */}
           <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
-            {/* Left: Title */}
-            <h3 className="text-sm font-semibold">
-              {mainDrawer.stringData?.id ? 'Edit string' : 'New string'}
-            </h3>
+            {/* Left: Title + Type Button Group */}
+            <div className="flex items-center gap-3">
+              <h3 className="text-sm font-semibold">
+                {mainDrawer.stringData?.id ? 'Edit string' : 'New string'}
+              </h3>
+              
+              {/* Type Button Group */}
+              <div className="flex rounded-md border overflow-hidden">
+                <button
+                  onClick={() => mainDrawer.updateType(false)}
+                  className={`px-3 py-1 text-xs font-medium transition-colors ${
+                    !mainDrawer.isConditional
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-background text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  String
+                </button>
+                <button
+                  onClick={() => mainDrawer.updateType(true)}
+                  className={`px-3 py-1 text-xs font-medium transition-colors border-l ${
+                    mainDrawer.isConditional
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-background text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  Conditional
+                </button>
+              </div>
+            </div>
             
-            {/* Center: Type Selector */}
-            <div className="flex items-center gap-2">
-              <Label className="text-xs text-muted-foreground">Type:</Label>
-              <Select
-                value={mainDrawer.isConditional ? 'conditional' : 'string'}
-                onValueChange={(value) => mainDrawer.updateType(value === 'conditional')}
-              >
-                <SelectTrigger className="w-32 h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="string">String</SelectItem>
-                  <SelectItem value="conditional">Conditional</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Center: Mini Navigation */}
+            <div className="flex items-center gap-2 overflow-x-auto">
+              {(() => {
+                const nodes: {id: string; name: string; type: 'string' | 'conditional'; isActive: boolean; relationship?: string}[] = [];
+                const currentData = mainDrawer.stringData;
+                
+                // Find parent nodes (variables that embed or spawn the current one)
+                if (currentData?.id) {
+                  const currentName = currentData.effective_variable_name || currentData.variable_hash;
+                  project?.strings?.forEach((str: any) => {
+                    if (str.id === currentData.id) return;
+                    if (str.content?.includes(`{{${currentName}}}`)) {
+                      nodes.push({
+                        id: String(str.id),
+                        name: str.display_name || str.effective_variable_name || str.variable_hash,
+                        type: str.is_conditional_container ? 'conditional' : 'string',
+                        isActive: false,
+                        relationship: 'parent-embeds'
+                      });
+                    }
+                  });
+                }
+                
+                // Add current node
+                if (currentData) {
+                  nodes.push({
+                    id: String(currentData.id || 'new'),
+                    name: mainDrawer.displayName || currentData.effective_variable_name || currentData.variable_hash || 'New Variable',
+                    type: mainDrawer.isConditional ? 'conditional' : 'string',
+                    isActive: true
+                  });
+                } else {
+                  nodes.push({
+                    id: 'new',
+                    name: mainDrawer.displayName || 'New Variable',
+                    type: mainDrawer.isConditional ? 'conditional' : 'string',
+                    isActive: true
+                  });
+                }
+                
+                // Add child nodes (spawns if conditional)
+                if (mainDrawer.isConditional && mainDrawer.conditionalSpawns) {
+                  mainDrawer.conditionalSpawns.forEach((spawn: any, index: number) => {
+                    nodes.push({
+                      id: String(spawn.id || `spawn-${index}`),
+                      name: spawn.display_name || spawn.variable_name || `Spawn ${index + 1}`,
+                      type: 'string',
+                      isActive: false,
+                      relationship: 'spawn'
+                    });
+                  });
+                }
+                
+                return nodes.map((node) => {
+                  const bgColor = node.type === 'conditional' ? 'var(--conditional-var-100)' : 'var(--string-var-100)';
+                  const borderColor = node.type === 'conditional' ? 'var(--conditional-var-color)' : 'var(--string-var-color)';
+                  const activeBg = node.type === 'conditional' ? 'var(--conditional-var-200)' : 'var(--string-var-200)';
+                  const size = node.isActive ? 32 : 28;
+                  
+                  return (
+                    <button
+                      key={node.id}
+                      onClick={() => node.id !== 'new' && !node.isActive && mainDrawer.navigateToVariable?.(node.id)}
+                      className="flex-shrink-0 rounded-md flex items-center justify-center transition-all cursor-pointer"
+                      style={{
+                        width: `${size}px`,
+                        height: `${size}px`,
+                        backgroundColor: node.isActive ? activeBg : bgColor,
+                        border: `1px solid ${borderColor}`,
+                      }}
+                      title={node.name}
+                    >
+                      <span 
+                        className="font-semibold"
+                        style={{ 
+                          color: node.type === 'conditional' ? 'var(--conditional-var-700)' : 'var(--string-var-700)',
+                          fontSize: node.isActive ? '12px' : '10px'
+                        }}
+                      >
+                        {node.name.charAt(0).toUpperCase()}
+                      </span>
+                    </button>
+                  );
+                });
+              })()}
             </div>
             
             {/* Right: Copy + Close buttons */}
@@ -3220,9 +3316,8 @@ export default function ProjectDetailPage() {
             </div>
           </div>
           
-          {/* Row 3: Footer - Cancel/Save on left, Mini-nav on right */}
-          <div className="flex items-center justify-between px-4 py-2 border-t bg-muted/20">
-            {/* Left: Cancel and Save */}
+          {/* Row 3: Footer - Cancel/Save on right */}
+          <div className="flex items-center justify-end px-4 py-2 border-t bg-muted/20">
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={mainDrawer.closeDrawer}>
                 Cancel
@@ -3230,93 +3325,6 @@ export default function ProjectDetailPage() {
               <Button size="sm" onClick={mainDrawer.save}>
                 Save
               </Button>
-            </div>
-            
-            {/* Right: Mini Navigation */}
-            <div className="flex items-center gap-2 overflow-x-auto">
-              {(() => {
-                const nodes: {id: string; name: string; type: 'string' | 'conditional'; isActive: boolean; relationship?: string}[] = [];
-                const currentData = mainDrawer.stringData;
-                
-                // Find parent nodes (variables that embed or spawn the current one)
-                if (currentData?.id) {
-                  const currentName = currentData.effective_variable_name || currentData.variable_hash;
-                  project?.strings?.forEach((str: any) => {
-                    if (str.id === currentData.id) return;
-                    if (str.content?.includes(`{{${currentName}}}`)) {
-                      nodes.push({
-                        id: String(str.id),
-                        name: str.display_name || str.effective_variable_name || str.variable_hash,
-                        type: str.is_conditional_container ? 'conditional' : 'string',
-                        isActive: false,
-                        relationship: 'parent-embeds'
-                      });
-                    }
-                  });
-                }
-                
-                // Add current node
-                if (currentData) {
-                  nodes.push({
-                    id: String(currentData.id || 'new'),
-                    name: mainDrawer.displayName || currentData.effective_variable_name || currentData.variable_hash || 'New Variable',
-                    type: mainDrawer.isConditional ? 'conditional' : 'string',
-                    isActive: true
-                  });
-                } else {
-                  nodes.push({
-                    id: 'new',
-                    name: mainDrawer.displayName || 'New Variable',
-                    type: mainDrawer.isConditional ? 'conditional' : 'string',
-                    isActive: true
-                  });
-                }
-                
-                // Add child nodes (spawns if conditional)
-                if (mainDrawer.isConditional && mainDrawer.conditionalSpawns) {
-                  mainDrawer.conditionalSpawns.forEach((spawn: any, index: number) => {
-                    nodes.push({
-                      id: String(spawn.id || `spawn-${index}`),
-                      name: spawn.display_name || spawn.variable_name || `Spawn ${index + 1}`,
-                      type: 'string',
-                      isActive: false,
-                      relationship: 'spawn'
-                    });
-                  });
-                }
-                
-                return nodes.map((node) => {
-                  const bgColor = node.type === 'conditional' ? 'var(--conditional-var-100)' : 'var(--string-var-100)';
-                  const borderColor = node.type === 'conditional' ? 'var(--conditional-var-color)' : 'var(--string-var-color)';
-                  const activeBg = node.type === 'conditional' ? 'var(--conditional-var-200)' : 'var(--string-var-200)';
-                  const size = node.isActive ? 32 : 28;
-                  
-                  return (
-                    <button
-                      key={node.id}
-                      onClick={() => node.id !== 'new' && !node.isActive && mainDrawer.navigateToVariable?.(node.id)}
-                      className="flex-shrink-0 rounded-md flex items-center justify-center transition-all cursor-pointer"
-                      style={{
-                        width: `${size}px`,
-                        height: `${size}px`,
-                        backgroundColor: node.isActive ? activeBg : bgColor,
-                        border: `1px solid ${borderColor}`,
-                      }}
-                      title={node.name}
-                    >
-                      <span 
-                        className="font-semibold"
-                        style={{ 
-                          color: node.type === 'conditional' ? 'var(--conditional-var-700)' : 'var(--string-var-700)',
-                          fontSize: node.isActive ? '12px' : '10px'
-                        }}
-                      >
-                        {node.name.charAt(0).toUpperCase()}
-                      </span>
-                    </button>
-                  );
-                });
-              })()}
             </div>
           </div>
         </div>

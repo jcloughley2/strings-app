@@ -780,22 +780,24 @@ Parent string (no color) >
 **Bottom Drawer Layout**:
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  New/Edit string     [String/Conditional ▼]           [Copy] [X]        │  ← Header
+│  New/Edit string [String|Cond]   [P]→[C]→[S1][S2]      [Copy] [X]       │  ← Header
 ├─────────────┬───────────────────────────────────────────────────────────┤
 │ ○ Content   │                                                           │
 │ ○ Conditions│           Tab content area                                │  ← Main
 │ ○ Advanced  │           (Delete option in Advanced tab)                 │
 │             │                                                           │
 ├─────────────┴───────────────────────────────────────────────────────────┤
-│  [Cancel] [Save]                              [P] → [C] → [S1] [S2]     │  ← Footer
+│                                                       [Cancel] [Save]   │  ← Footer
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key Features**:
-- Header: Title (New/Edit string), Type selector, Copy reference button, Close button
+- Header: Title, Type button group (String/Conditional), Mini-nav tiles (centered), Copy + Close buttons
+- Type selector is a button group (not dropdown) next to title
+- Mini-navigation tiles centered in header
 - Vertical sidebar tabs on left (Content, Conditions, Advanced)
 - Main content area on right for selected tab
-- Footer: Cancel/Save on left, Mini-navigation tiles on right
+- Footer: Cancel/Save buttons on right only
 - Delete option moved to Advanced tab (danger zone section)
 - Auto-focus on content textarea when creating new string
 

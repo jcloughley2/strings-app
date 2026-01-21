@@ -18,4 +18,6 @@ urlpatterns = [
     path('auth/password/reset/confirm/', views.reset_password, name='password-reset-confirm'),
     path('auth/me/', views.me, name='me'),
     path('registry/', views.registry, name='registry'),
+    path('settings/openai/', views.openai_settings, name='openai-settings'),
+    path('settings/openai/test/', views.test_openai_connection, name='test-openai-connection'),
 ] 

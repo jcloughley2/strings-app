@@ -13,7 +13,7 @@ from django.template.loader import render_to_string
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.db import models
 from django.db.models.signals import post_save
-from .models import Project, String, Dimension, DimensionValue, StringDimensionValue
+from .models import Project, String, Dimension, DimensionValue, StringDimensionValue, UserProfile
 from .serializers import ProjectSerializer, StringSerializer, DimensionSerializer, DimensionValueSerializer, StringDimensionValueSerializer
 from rest_framework import serializers
 import logging
@@ -21,6 +21,7 @@ import csv
 import io
 from django.http import HttpResponse
 import re
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -531,3 +532,114 @@ def registry(request):
         })
     
     return Response(registry_strings)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([permissions.IsAuthenticated])
+def openai_settings(request):
+    """
+    GET: Check if OpenAI API key is configured (returns masked status, not the actual key)
+    POST: Save the OpenAI API key
+    """
+    # Get or create user profile
+    profile, created = UserProfile.objects.get_or_create(user=request.user)
+    
+    if request.method == 'GET':
+        has_key = bool(profile.openai_api_key)
+        # Return masked key if exists (show last 4 chars)
+        masked_key = None
+        if has_key and len(profile.openai_api_key) > 4:
+            masked_key = '•' * 20 + profile.openai_api_key[-4:]
+        
+        return Response({
+            'has_api_key': has_key,
+            'masked_key': masked_key,
+        })
+    
+    elif request.method == 'POST':
+        api_key = request.data.get('api_key', '').strip()
+        
+        if not api_key:
+            # Clear the API key
+            profile.openai_api_key = None
+            profile.save()
+            return Response({'message': 'API key cleared', 'has_api_key': False})
+        
+        # Validate the key format (should start with sk-)
+        if not api_key.startswith('sk-'):
+            return Response(
+                {'error': 'Invalid API key format. OpenAI API keys start with "sk-"'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Save the key
+        profile.openai_api_key = api_key
+        profile.save()
+        
+        return Response({
+            'message': 'API key saved successfully',
+            'has_api_key': True,
+            'masked_key': '•' * 20 + api_key[-4:],
+        })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def test_openai_connection(request):
+    """
+    Test the OpenAI connection by asking for a one-line joke.
+    Returns the joke if successful, or an error message if not.
+    """
+    # Get user profile
+    try:
+        profile = UserProfile.objects.get(user=request.user)
+    except UserProfile.DoesNotExist:
+        return Response(
+            {'error': 'No API key configured. Please add your OpenAI API key first.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if not profile.openai_api_key:
+        return Response(
+            {'error': 'No API key configured. Please add your OpenAI API key first.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Initialize OpenAI client with user's API key
+        client = OpenAI(api_key=profile.openai_api_key)
+        
+        # Request a one-line joke
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that tells jokes."},
+                {"role": "user", "content": "Tell me a short, clean, one-line joke."}
+            ],
+            max_tokens=100,
+            temperature=0.7
+        )
+        
+        joke = response.choices[0].message.content.strip()
+        
+        return Response({
+            'success': True,
+            'joke': joke,
+            'message': 'Connection successful! Your OpenAI integration is working.'
+        })
+        
+    except Exception as e:
+        error_message = str(e)
+        
+        # Provide user-friendly error messages
+        if 'invalid_api_key' in error_message.lower() or 'incorrect api key' in error_message.lower():
+            error_message = 'Invalid API key. Please check your key and try again.'
+        elif 'rate_limit' in error_message.lower():
+            error_message = 'Rate limit exceeded. Please wait a moment and try again.'
+        elif 'insufficient_quota' in error_message.lower():
+            error_message = 'Insufficient quota. Please check your OpenAI billing settings.'
+        
+        return Response(
+            {'error': error_message, 'success': False},
+            status=status.HTTP_400_BAD_REQUEST
+        )

@@ -43,6 +43,7 @@ String: "My favorite color is `{{color-option}}`"
 - **Minimal UI**: Clean cards with shadow effects, no redundant type icons or badges
 - **Organization Registry**: Publish finalized strings to a central registry for organization-wide visibility and consistency
 - **User Settings**: Dedicated settings page accessible by clicking username in header, with Account and AI Features tabs
+- **OpenAI Integration**: Connect OpenAI API key in settings to enable AI-powered features, with connection test functionality
 
 ---
 
@@ -781,11 +782,20 @@ Parent string (no color) >
 
 **Left Sidebar Navigation**:
 - **Account Tab**: Displays username and email (read-only), password change placeholder
-- **AI Features Tab**: Placeholder for upcoming AI-powered features
+- **AI Features Tab**: OpenAI integration with API key management and connection testing
+
+**OpenAI Integration**:
+- `UserProfile` model stores OpenAI API key per user
+- API endpoints: `GET/POST /api/settings/openai/` for key management, `POST /api/settings/openai/test/` for connection test
+- Connect OpenAI section: API key input, save/update/remove buttons, masked key display
+- Test Connection section: "Tell me a joke" button to verify API connectivity
+- User-friendly error messages for common issues (invalid key, rate limits, insufficient quota)
 
 **Key Files**:
-- `frontend/src/app/(dashboard)/settings/page.tsx` - Main settings page
+- `frontend/src/app/(dashboard)/settings/page.tsx` - Main settings page with OpenAI integration
 - `frontend/src/lib/useAuth.ts` - Updated to expose `email` from auth endpoint
+- `backend/strings_api/models.py` - `UserProfile` model for user settings
+- `backend/strings_api/views.py` - `openai_settings` and `test_openai_connection` endpoints
 
 ### Bottom Drawer Edit System (Latest - January 2025)
 

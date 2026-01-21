@@ -838,6 +838,28 @@ Parent string (no color) >
   - Shows toast confirmation when added
 - Component exported from `StringEditDrawer.tsx` for reuse
 
+### Edit Mode Quick-Add Buttons (Latest - January 2025)
+
+**"+" buttons appear on variable tiles when bottom drawer is open**:
+- Creates an "edit mode" experience for the entire project
+- When drawer is closed, "+" buttons disappear
+
+**Locations**:
+- **String cards in canvas**: Prominent "+" button at left of each card
+- **Conditional variables in sidebar**: "+" button to left of conditional header
+- **NOT on spawn variables**: Spawns don't have this button
+
+**Behavior**:
+- If editing a **string variable**: Clicking "+" embeds `{{variableName}}` at end of content
+- If editing a **conditional variable**: Clicking "+" adds clicked variable as a spawn
+- Toast notifications confirm the action ("Added {{hash}} as spawn" or "Added {{hash}} to content")
+- Works seamlessly with global search to find and add variables quickly
+
+**Styling**:
+- Primary color background/border (`bg-primary/10 border-primary/30`)
+- Primary color icon
+- Tooltip shows action ("Add as spawn" or "Embed in content")
+
 ### Dimension Layer Removal (Latest - January 2025)
 - **Backend**: Removed dimension-related signals, helper methods, and API ViewSets
   - Removed `DimensionViewSet`, `DimensionValueViewSet`, `StringDimensionValueViewSet` from `views.py`

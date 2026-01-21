@@ -2386,6 +2386,42 @@ export default function ProjectDetailPage() {
                       <div key={conditionalVar.id} className="space-y-3">
                         {/* Conditional Variable Header */}
               <div className="flex items-center justify-between group">
+                {/* Add to Active Variable Button - only shown when drawer is open */}
+                {mainDrawer.isOpen && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-6 w-6 shrink-0 mr-2 bg-primary/10 border-primary/30 hover:bg-primary/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const hash = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
+                            if (mainDrawer.isConditional) {
+                              // Add as spawn
+                              if (mainDrawer.addExistingVariableAsSpawn) {
+                                mainDrawer.addExistingVariableAsSpawn(conditionalVar.id.toString());
+                                toast.success(`Added ${hash} as spawn`);
+                              }
+                            } else {
+                              // Embed in content
+                              const variableRef = `{{${hash}}}`;
+                              const newContent = mainDrawer.content ? `${mainDrawer.content}${variableRef}` : variableRef;
+                              mainDrawer.updateContent(newContent);
+                              toast.success(`Added ${variableRef} to content`);
+                            }
+                          }}
+                        >
+                          <Plus className="h-3 w-3 text-primary" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{mainDrawer.isConditional ? 'Add as spawn' : 'Embed in content'}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 <div 
                   className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1 cursor-pointer"
                             onClick={() => mainDrawer.openEditDrawer(conditionalVar)}
@@ -2807,6 +2843,43 @@ export default function ProjectDetailPage() {
                   className="p-4 flex flex-col gap-3 group hover:bg-muted/30 transition-colors"
                 >
                   <div className="flex items-start gap-3">
+                    {/* Add to Active Variable Button - only shown when drawer is open */}
+                    {mainDrawer.isOpen && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 bg-primary/10 border-primary/30 hover:bg-primary/20"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const hash = str.effective_variable_name || str.variable_hash;
+                                if (mainDrawer.isConditional) {
+                                  // Add as spawn
+                                  if (mainDrawer.addExistingVariableAsSpawn) {
+                                    mainDrawer.addExistingVariableAsSpawn(str.id.toString());
+                                    toast.success(`Added ${hash} as spawn`);
+                                  }
+                                } else {
+                                  // Embed in content
+                                  const variableRef = `{{${hash}}}`;
+                                  const newContent = mainDrawer.content ? `${mainDrawer.content}${variableRef}` : variableRef;
+                                  mainDrawer.updateContent(newContent);
+                                  toast.success(`Added ${variableRef} to content`);
+                                }
+                              }}
+                            >
+                              <Plus className="h-4 w-4 text-primary" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{mainDrawer.isConditional ? 'Add as spawn' : 'Embed in content'}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    
                     {/* Checkbox */}
                     <div className="pt-1">
                       <input

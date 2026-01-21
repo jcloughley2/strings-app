@@ -3189,6 +3189,19 @@ export default function ProjectDetailPage() {
               >
                 Advanced
               </button>
+              <button
+                onClick={() => !mainDrawer.isConditional && mainDrawer.updateTab('publishing')}
+                disabled={mainDrawer.isConditional}
+                className={`px-4 py-2 text-left text-sm font-medium transition-colors ${
+                  mainDrawer.isConditional 
+                    ? 'text-muted-foreground/50 cursor-not-allowed'
+                    : mainDrawer.activeTab === 'publishing' 
+                      ? 'bg-background border-r-2 border-primary text-foreground' 
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                Publishing
+              </button>
             </div>
             
             {/* Main Content Area */}
@@ -3386,6 +3399,63 @@ export default function ProjectDetailPage() {
                   )}
                 </div>
               )}
+
+              {/* Publishing Tab - Only for non-conditional strings */}
+              {mainDrawer.activeTab === 'publishing' && (
+                <div className="space-y-4">
+                  {!mainDrawer.isConditional ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-base font-semibold">Publish to Organization Registry</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Publishing this string will make it visible in your organization's registry.
+                        </p>
+                      </div>
+
+                      <div className="p-4 border rounded-lg bg-muted/30">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <p className="font-medium text-sm">
+                              {mainDrawer.isPublished ? "Published" : "Not published"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {mainDrawer.isPublished 
+                                ? "This string is visible in the registry." 
+                                : "Toggle to add to the registry."}
+                            </p>
+                          </div>
+                          <Switch
+                            checked={mainDrawer.isPublished}
+                            onCheckedChange={(checked) => mainDrawer.updateIsPublished(checked)}
+                          />
+                        </div>
+                      </div>
+
+                      {mainDrawer.isPublished && (
+                        <div className="p-3 border border-green-200 rounded-lg bg-green-50">
+                          <p className="text-sm text-green-800">
+                            ✓ This string will appear in the organization registry.
+                          </p>
+                        </div>
+                      )}
+
+                      {!mainDrawer.stringData?.id && (
+                        <div className="p-3 border border-amber-200 rounded-lg bg-amber-50">
+                          <p className="text-sm text-amber-800">
+                            Save this string first to publish it.
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="p-4 border rounded-lg bg-muted/30">
+                      <p className="text-sm text-muted-foreground">
+                        Conditional variables cannot be published. Only regular strings can be published to the registry.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           
@@ -3457,6 +3527,8 @@ export default function ProjectDetailPage() {
           mainDrawer.closeDrawer();
           openDeleteStringDialog(variable);
         }}
+        isPublished={mainDrawer.isPublished}
+        onIsPublishedChange={mainDrawer.updateIsPublished}
       />
       
       {/* OLD SYSTEM TO BE REMOVED - keeping placeholder for now */}
@@ -3505,10 +3577,17 @@ export default function ProjectDetailPage() {
             {/* Main Tabs - show at all levels */}
             <div className="px-6 py-4 border-b">
               <Tabs value={stringDialogTab} onValueChange={setStringDialogTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="content">Content</TabsTrigger>
                   <TabsTrigger value="dimensions">Dimensions</TabsTrigger>
                   <TabsTrigger value="advanced">Advanced</TabsTrigger>
+                  <TabsTrigger 
+                    value="publishing" 
+                    disabled={mainDrawer.isConditional}
+                    className={mainDrawer.isConditional ? "opacity-50 cursor-not-allowed" : ""}
+                  >
+                    Publishing
+                  </TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
@@ -4388,6 +4467,78 @@ export default function ProjectDetailPage() {
                   )}
                 </div>
               )}
+
+              {/* Root Level Publishing Tab - Only for non-conditional strings */}
+              {currentDrawerLevel === 0 && stringDialogTab === "publishing" && !mainDrawer.isConditional && (
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <Label className="text-base font-semibold">Publish to Organization Registry</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Publishing this string will make it visible in your organization's registry. 
+                      Published strings help maintain consistency across your organization by providing 
+                      a reference for tone, vocabulary, and terminology.
+                    </p>
+                  </div>
+
+                  <div className="p-4 border rounded-lg bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="font-medium">
+                          {mainDrawer.isPublished ? "This string is published" : "This string is not published"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {mainDrawer.isPublished 
+                            ? "This string is visible in the organization registry." 
+                            : "Publish this string to add it to the organization registry."}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={mainDrawer.isPublished}
+                        onCheckedChange={(checked) => mainDrawer.updateIsPublished(checked)}
+                      />
+                    </div>
+                  </div>
+
+                  {mainDrawer.isPublished && (
+                    <div className="p-4 border border-green-200 rounded-lg bg-green-50">
+                      <div className="flex items-start gap-3">
+                        <div className="h-5 w-5 text-green-600 mt-0.5">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-green-800">Published to Registry</p>
+                          <p className="text-sm text-green-700 mt-1">
+                            This string will appear in the organization registry with its content displayed 
+                            as plaintext, including any variable placeholders.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {!mainDrawer.stringData && (
+                    <div className="p-4 border border-amber-200 rounded-lg bg-amber-50">
+                      <p className="text-sm text-amber-800">
+                        <strong>Note:</strong> You can publish this string after saving it for the first time.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Publishing tab disabled message for conditionals */}
+              {currentDrawerLevel === 0 && stringDialogTab === "publishing" && mainDrawer.isConditional && (
+                <div className="space-y-4">
+                  <div className="p-4 border rounded-lg bg-muted/30">
+                    <p className="text-sm text-muted-foreground">
+                      Conditional variables cannot be published to the registry. 
+                      Only regular string variables can be published.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             </div>
@@ -4510,10 +4661,11 @@ export default function ProjectDetailPage() {
               {/* Main Tabs */}
               <div className="px-6 py-4 border-b">
                 <Tabs value={drawer.tab} onValueChange={(value) => updateCascadingDrawer(drawer.id, { tab: value })} className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="content">Content</TabsTrigger>
                     <TabsTrigger value="dimensions">Dimensions</TabsTrigger>
                     <TabsTrigger value="advanced">Advanced</TabsTrigger>
+                    <TabsTrigger value="publishing" disabled>Publishing</TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
@@ -5260,10 +5412,17 @@ export default function ProjectDetailPage() {
           <SheetHeader className="px-6 py-4 border-b bg-background">
             <SheetTitle>{editingString ? "Edit String" : "New String"}</SheetTitle>
             <Tabs value={stringDialogTab} onValueChange={setStringDialogTab} className="w-full mt-4">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="content">Content</TabsTrigger>
                 <TabsTrigger value="dimensions">Dimensions</TabsTrigger>
                 <TabsTrigger value="advanced">Advanced</TabsTrigger>
+                <TabsTrigger 
+                  value="publishing" 
+                  disabled={editingString?.is_conditional_container}
+                  className={editingString?.is_conditional_container ? "opacity-50 cursor-not-allowed" : ""}
+                >
+                  Publishing
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </SheetHeader>

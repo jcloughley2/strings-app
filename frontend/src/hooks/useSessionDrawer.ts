@@ -64,6 +64,10 @@ export function useSessionDrawer(options: {
     editSession.updateActiveVariable({ embeddedVariableEdits: edits });
   }, [editSession]);
 
+  const updateIsPublished = useCallback((isPublished: boolean) => {
+    editSession.updateActiveVariable({ isPublished });
+  }, [editSession]);
+
   const updateTab = useCallback((tab: string) => {
     setActiveTab(tab);
   }, []);
@@ -139,6 +143,7 @@ export function useSessionDrawer(options: {
     includeHiddenOption: activeEdit?.includeHiddenOption || false,
     controlledBySpawnId: activeEdit?.controlledBySpawnId || null,
     embeddedVariableEdits: activeEdit?.embeddedVariableEdits || {},
+    isPublished: activeEdit?.isPublished || false,
     pendingVariableContent: {}, // Not used in session mode
     activeTab,
     isSaving: session.isSaving,
@@ -155,6 +160,7 @@ export function useSessionDrawer(options: {
     updateHiddenOption,
     updateControlledBySpawnId,
     updateEmbeddedVariableEdits,
+    updateIsPublished,
     updatePendingVariableContent: () => {}, // Not used in session mode
     updateTab,
     save,

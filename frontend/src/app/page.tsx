@@ -125,9 +125,16 @@ export default function Home() {
       <p className="text-lg text-muted-foreground text-center max-w-xl">
         Effortlessly manage, localize, and export your app strings with variables, conditionals, and dimensions. Built for teams who care about content and flexibility.
       </p>
-      <Button size="lg" className="mt-2" onClick={() => setCreateOpen(true)} disabled={authLoading || !isLoggedIn}>
-        Create project
-      </Button>
+      <div className="flex gap-4 mt-2">
+        <Button size="lg" onClick={() => setCreateOpen(true)} disabled={authLoading || !isLoggedIn}>
+          Create project
+        </Button>
+        <Link href="/registry">
+          <Button size="lg" variant="outline" disabled={authLoading || !isLoggedIn}>
+            View Registry
+          </Button>
+        </Link>
+      </div>
       {!authLoading && isLoggedIn && (
         <section className="w-full max-w-4xl mt-12">
           <h2 className="text-2xl font-semibold mb-4">Your Projects</h2>

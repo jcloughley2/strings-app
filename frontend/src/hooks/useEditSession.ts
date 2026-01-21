@@ -15,6 +15,7 @@ export interface VariableEditState {
   includeHiddenOption: boolean;
   controlledBySpawnId: number | null;
   embeddedVariableEdits: {[variableId: string]: {display_name?: string}};
+  isPublished: boolean;
   
   // Metadata
   isNew: boolean;
@@ -62,6 +63,7 @@ export function useEditSession({ project, onSuccess, onCancel }: UseEditSessionO
         includeHiddenOption: false,
         controlledBySpawnId: null,
         embeddedVariableEdits: {},
+        isPublished: false,
         isNew: true,
         isDirty: false,
       };
@@ -97,6 +99,7 @@ export function useEditSession({ project, onSuccess, onCancel }: UseEditSessionO
       includeHiddenOption: hasHiddenOption,
       controlledBySpawnId: variableData?.controlled_by_spawn_id || null,
       embeddedVariableEdits: {},
+      isPublished: variableData?.is_published || false,
       isNew: false,
       isDirty: false,
     };
@@ -332,6 +335,7 @@ export function useEditSession({ project, onSuccess, onCancel }: UseEditSessionO
           conditionalSpawns: spawnsWithContent,
           includeHiddenOption: edit.includeHiddenOption,
           controlledBySpawnId: edit.controlledBySpawnId,
+          isPublished: edit.isPublished,
           embeddedVariableEdits: {},
           pendingVariableContent: {},
         };
@@ -357,6 +361,7 @@ export function useEditSession({ project, onSuccess, onCancel }: UseEditSessionO
           conditionalSpawns: spawnsWithContent,
           includeHiddenOption: edit.includeHiddenOption,
           controlledBySpawnId: edit.controlledBySpawnId,
+          isPublished: edit.isPublished,
           embeddedVariableEdits: edit.embeddedVariableEdits,
           pendingVariableContent: {},
         };

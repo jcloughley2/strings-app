@@ -14,15 +14,25 @@ import {
 
 export function Header() {
   const { isLoggedIn, username, logout, loading } = useAuth();
-  const { projectInfo } = useHeader();
+  const { projectInfo, pageInfo } = useHeader();
 
   return (
     <header className="sticky top-0 z-50 flex items-center justify-between px-6 py-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      {/* Left side: Logo + Project Breadcrumb */}
+      {/* Left side: Logo + Breadcrumb */}
       <div className="flex items-center gap-2">
         <Link href="/" className="text-3xl font-grand-hotel tracking-wide text-primary">
           Strings
         </Link>
+        
+        {/* Simple Page Breadcrumb (e.g., Registry) */}
+        {pageInfo && !projectInfo && (
+          <>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            <span className="text-lg font-medium">
+              {pageInfo.name}
+            </span>
+          </>
+        )}
         
         {/* Project Breadcrumb (when on a project page) */}
         {projectInfo && (

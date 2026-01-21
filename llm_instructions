@@ -41,6 +41,7 @@ String: "My favorite color is `{{color-option}}`"
 - **Real-time Variable Detection**: Sparkles icon (✨) for new/pending variables
 - **Unified Variable Hash Badges**: Click-to-copy badges with gradient backgrounds indicating variable type
 - **Minimal UI**: Clean cards with shadow effects, no redundant type icons or badges
+- **Organization Registry**: Publish finalized strings to a central registry for organization-wide visibility and consistency
 
 ---
 

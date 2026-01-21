@@ -497,3 +497,37 @@ class StringDimensionValueViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return StringDimensionValue.objects.filter(string__project__user=self.request.user)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def registry(request):
+    """
+    Get all published strings for the current user across all their projects.
+    Returns strings with their content displayed as plaintext with conditional variable placeholders.
+    Only non-conditional strings can be published.
+    """
+    # Get all published strings from user's projects (exclude conditionals)
+    published_strings = String.objects.filter(
+        project__user=request.user,
+        is_published=True,
+        is_conditional_container=False  # Only regular strings, not conditionals
+    ).select_related('project').order_by('-updated_at')
+    
+    # Build response with plaintext content (variables shown as placeholders)
+    registry_strings = []
+    for string in published_strings:
+        registry_strings.append({
+            'id': string.id,
+            'content': string.content,  # Content with {{variable}} placeholders preserved
+            'display_name': string.display_name,
+            'variable_name': string.variable_name,
+            'variable_hash': string.variable_hash,
+            'effective_variable_name': string.effective_variable_name,
+            'project_id': string.project.id,
+            'project_name': string.project.name,
+            'created_at': string.created_at,
+            'updated_at': string.updated_at,
+        })
+    
+    return Response(registry_strings)

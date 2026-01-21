@@ -15,7 +15,7 @@ class StringSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = String
-        fields = ['id', 'content', 'project', 'variable_name', 'variable_hash', 'display_name', 'effective_variable_name', 'is_conditional', 'is_conditional_container', 'controlled_by_spawn_id', 'dimension_values', 'created_at', 'updated_at']
+        fields = ['id', 'content', 'project', 'variable_name', 'variable_hash', 'display_name', 'effective_variable_name', 'is_conditional', 'is_conditional_container', 'controlled_by_spawn_id', 'is_published', 'dimension_values', 'created_at', 'updated_at']
         read_only_fields = ['id', 'variable_name', 'variable_hash', 'effective_variable_name', 'created_at', 'updated_at']
     
     def get_dimension_values(self, obj):

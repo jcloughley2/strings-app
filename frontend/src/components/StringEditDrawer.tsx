@@ -271,6 +271,10 @@ export interface StringEditDrawerProps {
   
   // Delete handler
   onDelete?: (variable: any) => void; // Called when user wants to delete the variable
+  
+  // Publishing state
+  isPublished?: boolean;
+  onIsPublishedChange?: (isPublished: boolean) => void;
 }
 
 export function StringEditDrawer({
@@ -319,6 +323,8 @@ export function StringEditDrawer({
   activeVariableId,
   resolveContentToPlaintext,
   onDelete,
+  isPublished = false,
+  onIsPublishedChange,
 }: StringEditDrawerProps) {
   
   // Ref for content textarea to enable auto-focus
@@ -760,10 +766,17 @@ export function StringEditDrawer({
           {/* Tabs */}
           <div className="mt-4">
             <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="content">Content</TabsTrigger>
                 <TabsTrigger value="dimensions">Conditions</TabsTrigger>
                 <TabsTrigger value="advanced">Advanced</TabsTrigger>
+                <TabsTrigger 
+                  value="publishing" 
+                  disabled={isConditional}
+                  className={isConditional ? "opacity-50 cursor-not-allowed" : ""}
+                >
+                  Publishing
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -1156,6 +1169,75 @@ export function StringEditDrawer({
                   </>
                 )}
               </div>
+            </TabsContent>
+
+            {/* Publishing Tab - Only for non-conditional strings */}
+            <TabsContent value="publishing" className="space-y-4">
+              {!isConditional ? (
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <Label className="text-base font-semibold">Publish to Organization Registry</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Publishing this string will make it visible in your organization's registry. 
+                      Published strings help maintain consistency across your organization by providing 
+                      a reference for tone, vocabulary, and terminology.
+                    </p>
+                  </div>
+
+                  <div className="p-4 border rounded-lg bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="font-medium">
+                          {isPublished ? "This string is published" : "This string is not published"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {isPublished 
+                            ? "This string is visible in the organization registry." 
+                            : "Publish this string to add it to the organization registry."}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={isPublished}
+                        onCheckedChange={(checked) => onIsPublishedChange?.(checked)}
+                      />
+                    </div>
+                  </div>
+
+                  {isPublished && (
+                    <div className="p-4 border border-green-200 rounded-lg bg-green-50">
+                      <div className="flex items-start gap-3">
+                        <div className="h-5 w-5 text-green-600 mt-0.5">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-green-800">Published to Registry</p>
+                          <p className="text-sm text-green-700 mt-1">
+                            This string will appear in the organization registry with its content displayed 
+                            as plaintext, including any variable placeholders.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {!stringData && (
+                    <div className="p-4 border border-amber-200 rounded-lg bg-amber-50">
+                      <p className="text-sm text-amber-800">
+                        <strong>Note:</strong> You can publish this string after saving it for the first time.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-4 border rounded-lg bg-muted/30">
+                  <p className="text-sm text-muted-foreground">
+                    Conditional variables cannot be published to the registry. 
+                    Only regular string variables can be published.
+                  </p>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </div>

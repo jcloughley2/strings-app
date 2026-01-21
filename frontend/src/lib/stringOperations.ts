@@ -31,6 +31,9 @@ export interface SaveStringOptions {
   // Controlling condition
   controlledBySpawnId?: number | null;
   
+  // Publishing
+  isPublished?: boolean;
+  
   // Context
   project?: any;
   onProjectUpdate?: (project: any) => void;
@@ -54,6 +57,7 @@ export async function saveString(options: SaveStringOptions): Promise<any> {
     conditionalSpawns = [],
     includeHiddenOption = false,
     controlledBySpawnId,
+    isPublished = false,
     project,
     onProjectUpdate,
     detectCircularReferences,
@@ -104,6 +108,7 @@ export async function saveString(options: SaveStringOptions): Promise<any> {
         displayName,
         projectId,
         controlledBySpawnId,
+        isPublished,
         isNewString,
       });
     }
@@ -123,6 +128,7 @@ async function saveStringVariable({
   displayName,
   projectId,
   controlledBySpawnId,
+  isPublished,
   isNewString,
 }: {
   stringData?: StringData | null;
@@ -131,6 +137,7 @@ async function saveStringVariable({
   displayName?: string;
   projectId: string | number;
   controlledBySpawnId?: number | null;
+  isPublished?: boolean;
   isNewString: boolean;
 }): Promise<any> {
   
@@ -140,6 +147,7 @@ async function saveStringVariable({
     is_conditional: false,
     is_conditional_container: false,
     controlled_by_spawn_id: controlledBySpawnId || null,
+    is_published: isPublished || false,
     project: projectId,
   };
   

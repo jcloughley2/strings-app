@@ -44,6 +44,7 @@ String: "My favorite color is `{{color-option}}`"
 - **Organization Registry**: Publish finalized strings to a central registry for organization-wide visibility and consistency
 - **User Settings**: Dedicated settings page accessible by clicking username in header, with Account and AI Features tabs
 - **OpenAI Integration**: Connect OpenAI API key in settings to enable AI-powered features, with connection test functionality
+- **Image-to-Text Extraction**: Extract text from images using OpenAI Vision API to populate string content
 
 ---
 
@@ -791,8 +792,18 @@ Parent string (no color) >
 - Test Connection section: "Tell me a joke" button to verify API connectivity
 - User-friendly error messages for common issues (invalid key, rate limits, insufficient quota)
 
+**Image-to-Text Extraction**:
+- "Extract from image" button in Content tab of string create/edit drawer
+- Opens `ImageToTextModal` component with upload interface
+- Checks OpenAI configuration on modal open - blocks if not configured with link to settings
+- Uses OpenAI Vision API (gpt-4o-mini) to extract text from uploaded images
+- Shows preview of extracted text before accepting
+- "Use This Text" populates content field, "Try Another Image" to retry
+- API endpoint: `POST /api/ai/extract-text/` accepts base64 image data
+
 **Key Files**:
 - `frontend/src/app/(dashboard)/settings/page.tsx` - Main settings page with OpenAI integration
+- `frontend/src/components/ImageToTextModal.tsx` - Modal for image upload and text extraction
 - `frontend/src/lib/useAuth.ts` - Updated to expose `email` from auth endpoint
 - `backend/strings_api/models.py` - `UserProfile` model for user settings
 - `backend/strings_api/views.py` - `openai_settings` and `test_openai_connection` endpoints

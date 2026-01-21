@@ -23,9 +23,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { VariableHashBadge } from "@/components/VariableHashBadge";
 import { StringEditDrawer, VariableSearchSelect } from "@/components/StringEditDrawer";
+import { ImageToTextModal } from "@/components/ImageToTextModal";
 import { useSessionDrawer } from "@/hooks/useSessionDrawer";
 import { useHeader } from "@/lib/HeaderContext";
 import { toast } from "sonner";
+import { ImageIcon } from "lucide-react";
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
@@ -56,6 +58,9 @@ export default function ProjectDetailPage() {
   const [showEmbedVariableResults, setShowEmbedVariableResults] = useState(false);
   const [existingSpawnSearch, setExistingSpawnSearch] = useState("");
   const [showExistingSpawnResults, setShowExistingSpawnResults] = useState(false);
+  
+  // Image to text modal state
+  const [isImageToTextModalOpen, setIsImageToTextModalOpen] = useState(false);
   
   // Global search state - filters conditions sidebar and strings canvas
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
@@ -3213,7 +3218,18 @@ export default function ProjectDetailPage() {
                   {!mainDrawer.isConditional && (
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label>Content</Label>
+                        <div className="flex items-center justify-between">
+                          <Label>Content</Label>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setIsImageToTextModalOpen(true)}
+                            className="h-7 text-xs gap-1.5"
+                          >
+                            <ImageIcon className="h-3.5 w-3.5" />
+                            Extract from image
+                          </Button>
+                        </div>
                         <Textarea
                           value={mainDrawer.content}
                           onChange={(e) => mainDrawer.updateContent(e.target.value)}
@@ -6346,6 +6362,16 @@ export default function ProjectDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Image to Text Modal */}
+      <ImageToTextModal
+        isOpen={isImageToTextModalOpen}
+        onClose={() => setIsImageToTextModalOpen(false)}
+        onAccept={(text) => {
+          mainDrawer.updateContent(text);
+          toast.success("Text extracted and added to content");
+        }}
+      />
     </div>
   );
 } 

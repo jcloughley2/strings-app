@@ -583,6 +583,101 @@ def openai_settings(request):
         })
 
 
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def check_openai_configured(request):
+    """
+    Quick check if user has OpenAI API key configured.
+    Used to enable/disable AI features in the UI.
+    """
+    try:
+        profile = UserProfile.objects.get(user=request.user)
+        return Response({'configured': bool(profile.openai_api_key)})
+    except UserProfile.DoesNotExist:
+        return Response({'configured': False})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def extract_text_from_image(request):
+    """
+    Extract text from an uploaded image using OpenAI's Vision API.
+    Expects base64 encoded image data.
+    """
+    # Get user profile and check for API key
+    try:
+        profile = UserProfile.objects.get(user=request.user)
+    except UserProfile.DoesNotExist:
+        return Response(
+            {'error': 'OpenAI not configured. Please add your API key in Settings > AI Features.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if not profile.openai_api_key:
+        return Response(
+            {'error': 'OpenAI not configured. Please add your API key in Settings > AI Features.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Get image data from request
+    image_data = request.data.get('image')
+    if not image_data:
+        return Response(
+            {'error': 'No image provided'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Initialize OpenAI client
+        client = OpenAI(api_key=profile.openai_api_key)
+        
+        # Call OpenAI Vision API to extract text
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Please extract and transcribe all the text visible in this image. Return only the transcribed text, preserving the original formatting as much as possible. Do not add any commentary or explanation."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_data  # Expects data:image/...;base64,... format
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=2000
+        )
+        
+        extracted_text = response.choices[0].message.content.strip()
+        
+        return Response({
+            'success': True,
+            'text': extracted_text
+        })
+        
+    except Exception as e:
+        error_message = str(e)
+        
+        # Provide user-friendly error messages
+        if 'invalid_api_key' in error_message.lower():
+            error_message = 'Invalid API key. Please check your key in Settings.'
+        elif 'rate_limit' in error_message.lower():
+            error_message = 'Rate limit exceeded. Please wait a moment and try again.'
+        elif 'insufficient_quota' in error_message.lower():
+            error_message = 'Insufficient OpenAI quota. Please check your billing settings.'
+        
+        return Response(
+            {'error': error_message, 'success': False},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def test_openai_connection(request):

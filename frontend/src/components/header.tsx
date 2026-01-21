@@ -92,7 +92,12 @@ export function Header() {
           <div className="w-20 h-9" />
         ) : isLoggedIn ? (
           <>
-            <span className="text-base font-medium text-muted-foreground mr-2">{username}</span>
+            <Link 
+              href="/settings" 
+              className="text-base font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {username}
+            </Link>
             <Button variant="secondary" onClick={logout}>Logout</Button>
           </>
         ) : (

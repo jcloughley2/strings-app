@@ -42,6 +42,7 @@ String: "My favorite color is `{{color-option}}`"
 - **Unified Variable Hash Badges**: Click-to-copy badges with gradient backgrounds indicating variable type
 - **Minimal UI**: Clean cards with shadow effects, no redundant type icons or badges
 - **Organization Registry**: Publish finalized strings to a central registry for organization-wide visibility and consistency
+- **User Settings**: Dedicated settings page accessible by clicking username in header, with Account and AI Features tabs
 
 ---
 
@@ -655,8 +656,9 @@ frontend/src/
 
 ### Key Files
 - **`page.tsx`**: Main UI, conditions sidebar, canvas, bottom drawer, state management
-- **`header.tsx`**: App header with project breadcrumb (uses HeaderContext)
-- **`HeaderContext.tsx`**: Context for passing project info to header from pages
+- **`header.tsx`**: App header with project breadcrumb (uses HeaderContext), clickable username links to settings
+- **`HeaderContext.tsx`**: Context for passing project/page info to header from pages
+- **`settings/page.tsx`**: User settings page with left sidebar navigation (Account, AI Features tabs)
 - **`StringEditDrawer.tsx`**: Unified drawer for all editing scenarios (legacy side sheet)
   - Contains `VariableSearchSelect` reusable component for embed/spawn variable search
 - **`DrawerNavigation.tsx`**: Visual hierarchy sidebar for variable relationships
@@ -769,6 +771,21 @@ Parent string (no color) >
 ---
 
 ## Recent Major Updates (2025)
+
+### User Settings Page (Latest - January 2025)
+
+**Settings accessible via username click in header**:
+- Username in app header is now a clickable link to `/settings`
+- Uses HeaderContext for "User Settings" breadcrumb display
+- URL reflects active tab (`/settings?tab=account` or `/settings?tab=ai-features`)
+
+**Left Sidebar Navigation**:
+- **Account Tab**: Displays username and email (read-only), password change placeholder
+- **AI Features Tab**: Placeholder for upcoming AI-powered features
+
+**Key Files**:
+- `frontend/src/app/(dashboard)/settings/page.tsx` - Main settings page
+- `frontend/src/lib/useAuth.ts` - Updated to expose `email` from auth endpoint
 
 ### Bottom Drawer Edit System (Latest - January 2025)
 

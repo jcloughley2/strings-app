@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { VariableHashBadge } from "@/components/VariableHashBadge";
 import { StringEditDrawer, VariableSearchSelect } from "@/components/StringEditDrawer";
 import { ImageToTextModal } from "@/components/ImageToTextModal";
+import { StringTile } from "@/components/StringTile";
 import { useSessionDrawer } from "@/hooks/useSessionDrawer";
 import { useHeader } from "@/lib/HeaderContext";
 import { toast } from "sonner";
@@ -2843,154 +2844,50 @@ export default function ProjectDetailPage() {
           ) : (
             <ul className="space-y-4">
               {filteredStrings.map((str: any) => (
-                <Card 
-                  key={str.id} 
-                  className="p-4 flex flex-col gap-3 group hover:bg-muted/30 transition-colors"
-                >
-                  <div className="flex items-start gap-3">
-                    {/* Add to Active Variable Button - only shown when drawer is open */}
-                    {mainDrawer.isOpen && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8 shrink-0 bg-primary/10 border-primary/30 hover:bg-primary/20"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const hash = str.effective_variable_name || str.variable_hash;
-                                if (mainDrawer.isConditional) {
-                                  // Add as spawn
-                                  if (mainDrawer.addExistingVariableAsSpawn) {
-                                    mainDrawer.addExistingVariableAsSpawn(str.id.toString());
-                                    toast.success(`Added ${hash} as spawn`);
-                                  }
-                                } else {
-                                  // Embed in content
-                                  const variableRef = `{{${hash}}}`;
-                                  const newContent = mainDrawer.content ? `${mainDrawer.content}${variableRef}` : variableRef;
-                                  mainDrawer.updateContent(newContent);
-                                  toast.success(`Added ${variableRef} to content`);
-                                }
-                              }}
-                            >
-                              <Plus className="h-4 w-4 text-primary" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>{mainDrawer.isConditional ? 'Add as spawn' : 'Embed in content'}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                    
-                    {/* Checkbox */}
-                    <div className="pt-1">
-                      <input
-                        type="checkbox"
-                        checked={selectedStringIds.has(str.id)}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          handleSelectString(str.id, e.target.checked);
-                        }}
-                        className="rounded border-gray-300"
-                      />
-                    </div>
-                    
-                    {/* String Content - now clickable to edit */}
-                    <div 
-                      className="flex items-start justify-between gap-2 flex-1 cursor-pointer"
-                      onClick={() => openEditInCascadingDrawer(str)}
-                    >
-                      <div className="flex-1">
-                        {/* Variable Name (Display Name) - shown when enabled */}
-                        {showVariableNames && str.display_name && (
-                          <div className="text-sm font-semibold text-foreground mb-2">
-                            {str.display_name}
-                          </div>
-                        )}
-                        
-                        <div className={`font-medium text-base ${isPlaintextMode ? 'leading-normal' : 'leading-loose'}`}>
-                        {str.is_conditional_container ? (
-                          <div className="flex items-center gap-2 text-muted-foreground italic">
-                            <Folder className="h-4 w-4" />
-                            <span>Split variable - click split to add more spawns</span>
-                          </div>
-                        ) : renderStyledContent(str.content, str.variables || [], str.id)
-                        }
-                        </div>
-                        
-                        {/* Variable hash badge - shown when enabled and not in plaintext mode */}
-                        {!isPlaintextMode && showVariableHashes && (
-                        <div className="mt-2">
-                          <VariableHashBadge 
-                            hash={str.effective_variable_name || str.variable_hash} 
-                            type={str.is_conditional_container ? 'conditional' : 'string'}
-                          />
-                        </div>
-                        )}
-                      </div>
-                      <div className="flex gap-1 shrink-0">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const hash = str.effective_variable_name || str.variable_hash;
-                                  copyVariableToClipboard(hash);
-                                }}
-                              >
-                                <Copy className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Copy reference</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDuplicateString(str);
-                              }}
-                            >
-                              <Copy className="h-4 w-4 mr-2" />
-                              Duplicate string
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openDeleteStringDialog(str);
-                              }}
-                              className="text-red-600 focus:text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete string
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  </div>
-                  
-
-                </Card>
+                <StringTile
+                  key={str.id}
+                  string={{
+                    id: str.id,
+                    content: str.content,
+                    display_name: str.display_name,
+                    variable_name: str.variable_name,
+                    variable_hash: str.variable_hash,
+                    effective_variable_name: str.effective_variable_name,
+                    is_conditional_container: str.is_conditional_container,
+                  }}
+                  showDisplayName={showVariableNames}
+                  showVariableHash={!isPlaintextMode && showVariableHashes}
+                  renderContent={(content) => renderStyledContent(content, str.variables || [], str.id)}
+                  onClick={() => openEditInCascadingDrawer(str)}
+                  showCheckbox={true}
+                  isSelected={selectedStringIds.has(str.id)}
+                  onSelect={(selected) => handleSelectString(str.id, selected)}
+                  showAddButton={mainDrawer.isOpen}
+                  addButtonTooltip={mainDrawer.isConditional ? 'Add as spawn' : 'Embed in content'}
+                  onAdd={() => {
+                    const hash = str.effective_variable_name || str.variable_hash;
+                    if (mainDrawer.isConditional) {
+                      if (mainDrawer.addExistingVariableAsSpawn) {
+                        mainDrawer.addExistingVariableAsSpawn(str.id.toString());
+                        toast.success(`Added ${hash} as spawn`);
+                      }
+                    } else {
+                      const variableRef = `{{${hash}}}`;
+                      const newContent = mainDrawer.content ? `${mainDrawer.content}${variableRef}` : variableRef;
+                      mainDrawer.updateContent(newContent);
+                      toast.success(`Added ${variableRef} to content`);
+                    }
+                  }}
+                  showCopyButton={true}
+                  onCopy={() => {
+                    const hash = str.effective_variable_name || str.variable_hash;
+                    copyVariableToClipboard(hash);
+                  }}
+                  showActionsMenu={true}
+                  onDuplicate={() => handleDuplicateString(str)}
+                  onDelete={() => openDeleteStringDialog(str)}
+                  onFocus={() => router.push(`/projects/${id}/focus/${str.id}`)}
+                />
               ))}
             </ul>
           )}

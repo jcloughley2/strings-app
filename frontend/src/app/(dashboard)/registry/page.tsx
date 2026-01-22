@@ -6,19 +6,12 @@ import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import { useHeader } from "@/lib/HeaderContext";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BookOpen } from "lucide-react";
+import { StringTile, StringTileData } from "@/components/StringTile";
+import { BookOpen, Copy } from "lucide-react";
+import { toast } from "sonner";
 
-interface RegistryString {
-  id: number;
-  content: string;
-  display_name: string | null;
-  variable_name: string | null;
-  variable_hash: string;
-  effective_variable_name: string;
-  project_id: number;
-  project_name: string;
+interface RegistryString extends StringTileData {
   created_at: string;
   updated_at: string;
 }
@@ -108,41 +101,21 @@ export default function RegistryPage() {
 
             <div className="grid gap-4">
               {registryStrings.map((registryString) => (
-                <Card key={registryString.id} className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      {/* Display name or variable name */}
-                      <div className="flex items-center gap-2 mb-2">
-                        {registryString.display_name && (
-                          <span className="font-medium text-foreground">
-                            {registryString.display_name}
-                          </span>
-                        )}
-                        <code className="text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground">
-                          {`{{${registryString.effective_variable_name}}}`}
-                        </code>
-                      </div>
-
-                      {/* Content with variable placeholders */}
-                      <p className="text-foreground whitespace-pre-wrap break-words">
-                        {registryString.content || (
-                          <span className="text-muted-foreground italic">No content</span>
-                        )}
-                      </p>
-
-                      {/* Project source */}
-                      <div className="mt-3 text-xs text-muted-foreground">
-                        From project:{" "}
-                        <Link
-                          href={`/projects/${registryString.project_id}`}
-                          className="hover:underline text-primary"
-                        >
-                          {registryString.project_name}
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
+                <StringTile
+                  key={registryString.id}
+                  string={registryString}
+                  showDisplayName={true}
+                  showVariableHash={true}
+                  showProjectSource={true}
+                  showCopyButton={true}
+                  onCopy={() => {
+                    const ref = `{{${registryString.effective_variable_name}}}`;
+                    navigator.clipboard.writeText(ref);
+                    toast.success(`Copied ${ref} to clipboard`);
+                  }}
+                  showActionsMenu={true}
+                  onFocus={() => router.push(`/registry/focus/${registryString.id}`)}
+                />
               ))}
             </div>
           </div>

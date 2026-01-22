@@ -45,6 +45,7 @@ String: "My favorite color is `{{color-option}}`"
 - **User Settings**: Dedicated settings page accessible by clicking username in header, with Account and AI Features tabs
 - **OpenAI Integration**: Connect OpenAI API key in settings to enable AI-powered features, with connection test functionality
 - **Image-to-Text Extraction**: Extract text from images using OpenAI Vision API to populate string content
+- **Focus Mode**: Deep-dive view for individual strings showing only relevant conditions with real-time content resolution
 
 ---
 
@@ -665,6 +666,7 @@ frontend/src/
   - Contains `VariableSearchSelect` reusable component for embed/spawn variable search
 - **`DrawerNavigation.tsx`**: Visual hierarchy sidebar for variable relationships
 - **`VariableHashBadge.tsx`**: Reusable hash badge component with copy-to-clipboard
+- **`StringTile.tsx`**: Reusable string card component used in project and registry pages
 - **`useSessionDrawer.ts`**: Bottom drawer state and operations
 - **`useEditSession.ts`**: Multi-variable editing session management
 - **`stringOperations.ts`**: Save logic for strings and conditionals
@@ -773,6 +775,59 @@ Parent string (no color) >
 ---
 
 ## Recent Major Updates (2025)
+
+### Focus Mode for Strings (Latest - January 2025)
+
+**Deep-dive view for individual strings** accessible from overflow menu:
+- Available on both project page and registry page string tiles
+- Opens dedicated focus page at `/projects/[id]/focus/[stringId]` or `/registry/focus/[stringId]`
+
+**Header Breadcrumb**:
+- Three-level breadcrumb: `Strings > Parent > String Name`
+- Parent is project name (from project) or "Registry" (from registry)
+- Parent link is clickable to navigate back
+- Uses `FocusInfo` interface in `HeaderContext`
+
+**Conditions Sidebar (Left)**:
+- Shows ONLY conditionals that the focused string depends on
+- Parses `{{variableName}}` references from string content to find relevant conditionals
+- Also detects indirectly referenced conditionals (via spawn variables)
+- Matches same styling as project page (spawn cards with content preview + display name)
+- Respects "Hide Controlled Variables" canvas setting
+- Read-only mode: no edit/delete/copy actions on conditional or spawn variables
+
+**Main Content Area**:
+- Single string card displayed prominently
+- **Real-time content resolution**: Changing condition selections updates the displayed content
+- All `{{variableName}}` placeholders resolved based on selected spawns
+- Supports nested variable resolution (recursive)
+- Show Variable Names toggle
+- Show Variable Hashes toggle
+- "Back to Project/Registry" navigation button
+
+**Canvas Settings**:
+- Show Variable Names toggle
+- Show Variable Hashes toggle  
+- Hide Controlled Variables toggle (affects conditions sidebar)
+
+**Hidden in Focus Mode**:
+- Search bar
+- New String button
+- Bulk selection checkboxes
+- Edit/delete/duplicate/copy actions on string tiles
+
+**Key Components**:
+- `StringTile` component updated with `onFocus` callback prop
+- Focus Mode option added to overflow menu dropdown
+- `resolveContentToPlaintext` function handles recursive variable resolution
+- Uses same spawn card styling as project page conditions sidebar
+
+**Key Files**:
+- `frontend/src/app/(dashboard)/projects/[id]/focus/[stringId]/page.tsx` - Project focus page
+- `frontend/src/app/(dashboard)/registry/focus/[stringId]/page.tsx` - Registry focus page
+- `frontend/src/components/StringTile.tsx` - Shared string tile component with focus mode support
+- `frontend/src/lib/HeaderContext.tsx` - Extended with `FocusInfo` interface
+- `frontend/src/components/header.tsx` - Updated for three-level focus breadcrumb
 
 ### User Settings Page (Latest - January 2025)
 

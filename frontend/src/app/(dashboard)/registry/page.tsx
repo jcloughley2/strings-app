@@ -8,7 +8,8 @@ import { useAuth } from "@/lib/useAuth";
 import { useHeader } from "@/lib/HeaderContext";
 import { Button } from "@/components/ui/button";
 import { StringTile, StringTileData } from "@/components/StringTile";
-import { BookOpen, Copy } from "lucide-react";
+import { StyleGuideModal } from "@/components/StyleGuideModal";
+import { BookOpen, FileText } from "lucide-react";
 import { toast } from "sonner";
 
 interface RegistryString extends StringTileData {
@@ -23,6 +24,7 @@ export default function RegistryPage() {
   const [registryStrings, setRegistryStrings] = useState<RegistryString[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isStyleGuideOpen, setIsStyleGuideOpen] = useState(false);
 
   // Set page info in header for breadcrumb
   useEffect(() => {
@@ -97,6 +99,13 @@ export default function RegistryPage() {
               <p className="text-muted-foreground">
                 {registryStrings.length} published string{registryStrings.length !== 1 ? "s" : ""}
               </p>
+              <Button
+                variant="outline"
+                onClick={() => setIsStyleGuideOpen(true)}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Style Guide
+              </Button>
             </div>
 
             <div className="grid gap-4">
@@ -121,6 +130,12 @@ export default function RegistryPage() {
           </div>
         )}
       </div>
+
+      {/* Style Guide Modal */}
+      <StyleGuideModal
+        isOpen={isStyleGuideOpen}
+        onClose={() => setIsStyleGuideOpen(false)}
+      />
     </main>
   );
 }

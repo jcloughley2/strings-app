@@ -738,3 +738,110 @@ def test_openai_connection(request):
             {'error': error_message, 'success': False},
             status=status.HTTP_400_BAD_REQUEST
         )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def generate_style_guide(request):
+    """
+    Generate a style guide based on the organization's published registry strings.
+    Analyzes tone, vocabulary, brevity, language patterns, and other important aspects.
+    """
+    from datetime import datetime
+    
+    # Get user profile and check for API key
+    try:
+        profile = UserProfile.objects.get(user=request.user)
+    except UserProfile.DoesNotExist:
+        return Response(
+            {'error': 'OpenAI not configured. Please add your API key in Settings > AI Features.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if not profile.openai_api_key:
+        return Response(
+            {'error': 'OpenAI not configured. Please add your API key in Settings > AI Features.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Get all published strings from the registry
+    published_strings = String.objects.filter(
+        project__user=request.user,
+        is_published=True,
+        is_conditional_container=False
+    ).select_related('project')
+    
+    if not published_strings.exists():
+        return Response(
+            {'error': 'No published strings found in your registry. Publish some strings first to generate a style guide.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Prepare the strings for analysis (limit to 50 to avoid token limits)
+    strings_for_analysis = []
+    for s in published_strings[:50]:
+        strings_for_analysis.append({
+            'content': s.content or '',
+            'name': s.display_name or s.effective_variable_name or s.variable_hash,
+            'project': s.project.name if s.project else 'Unknown'
+        })
+    
+    # Format strings for the prompt
+    strings_text = "\n\n".join([
+        f"**{s['name']}** (from {s['project']}):\n\"{s['content']}\""
+        for s in strings_for_analysis
+    ])
+    
+    try:
+        client = OpenAI(api_key=profile.openai_api_key)
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are an expert UX writer and content strategist. Analyze UI strings and create a concise, actionable style guide.
+
+Focus on:
+1. **Tone & Voice**: Personality (friendly, professional, casual, formal, etc.)
+2. **Vocabulary**: Common words, phrases, terminology patterns
+3. **Brevity**: How concise are the strings? Typical length?
+4. **Language Style**: Sentence structure, punctuation, capitalization
+5. **Patterns**: Action verbs, calls-to-action, error formats
+6. **Key Observations**: Other important patterns or recommendations
+
+Keep the guide succinct and practical for quick reference."""
+                },
+                {
+                    "role": "user",
+                    "content": f"""Analyze these {len(strings_for_analysis)} UI strings and create a style guide:
+
+{strings_text}
+
+Create a concise style guide to help writers match this established voice and style."""
+                }
+            ],
+            max_tokens=2000,
+            temperature=0.7
+        )
+        
+        style_guide = response.choices[0].message.content.strip()
+        generated_date = datetime.now().strftime("%B %d, %Y")
+        
+        return Response({
+            'success': True,
+            'style_guide': style_guide,
+            'generated_date': generated_date,
+            'strings_analyzed': len(strings_for_analysis),
+        })
+        
+    except Exception as e:
+        error_message = str(e)
+        if 'invalid_api_key' in error_message.lower():
+            error_message = 'Invalid API key. Please check your key in Settings.'
+        elif 'rate_limit' in error_message.lower():
+            error_message = 'Rate limit exceeded. Please wait and try again.'
+        elif 'insufficient_quota' in error_message.lower():
+            error_message = 'Insufficient OpenAI quota. Please check your billing.'
+        
+        return Response({'error': error_message, 'success': False}, status=status.HTTP_400_BAD_REQUEST)

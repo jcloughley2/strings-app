@@ -46,6 +46,7 @@ String: "My favorite color is `{{color-option}}`"
 - **OpenAI Integration**: Connect OpenAI API key in settings to enable AI-powered features, with connection test functionality
 - **Image-to-Text Extraction**: Extract text from images using OpenAI Vision API to populate string content
 - **Focus Mode**: Deep-dive view for individual strings showing only relevant conditions with real-time content resolution
+- **Style Guide Generator**: AI-powered analysis of registry strings to create organizational writing guidelines
 
 ---
 
@@ -775,6 +776,36 @@ Parent string (no color) >
 ---
 
 ## Recent Major Updates (2025)
+
+### Style Guide Generator (Latest - January 2025)
+
+**AI-powered style guide generation** from registry strings:
+- "Style Guide" button in Registry page header (visible when strings exist)
+- Opens `StyleGuideModal` component
+
+**How it works**:
+- Sends up to 50 published registry strings to OpenAI (gpt-4o-mini)
+- AI analyzes strings and generates comprehensive writing guidelines
+- Covers tone & voice, vocabulary, brevity, language style, patterns
+- Returns dated guide with count of strings analyzed
+
+**Modal States**:
+- **Not Configured**: Shows message if OpenAI API key not set up
+- **Initial**: "Generate Style Guide" button with explanation
+- **Loading**: Spinner while generating
+- **Error**: Error message with retry option
+- **Content**: Rendered style guide with regenerate button
+
+**Features**:
+- Guide persists when modal is closed/reopened
+- "Regenerate" button to refresh with latest strings
+- Markdown-like rendering (headers, bold, lists)
+- Generation date and string count displayed
+
+**Key Files**:
+- `frontend/src/components/StyleGuideModal.tsx` - Modal component
+- `backend/strings_api/views.py` - `generate_style_guide` endpoint
+- API endpoint: `POST /api/ai/style-guide/`
 
 ### Focus Mode for Strings (Latest - January 2025)
 

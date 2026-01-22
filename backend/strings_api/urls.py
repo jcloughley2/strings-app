@@ -22,4 +22,5 @@ urlpatterns = [
     path('settings/openai/test/', views.test_openai_connection, name='test-openai-connection'),
     path('settings/openai/check/', views.check_openai_configured, name='check-openai-configured'),
     path('ai/extract-text/', views.extract_text_from_image, name='extract-text-from-image'),
+    path('ai/style-guide/', views.generate_style_guide, name='generate-style-guide'),
 ] 

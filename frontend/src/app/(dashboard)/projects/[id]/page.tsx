@@ -22,7 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { Textarea } from "@/components/ui/textarea";
 import { VariableHashBadge } from "@/components/VariableHashBadge";
-import { StringEditDrawer, VariableSearchSelect } from "@/components/StringEditDrawer";
+import { StringEditDrawer } from "@/components/StringEditDrawer";
 import { ImageToTextModal } from "@/components/ImageToTextModal";
 import { StringTile } from "@/components/StringTile";
 import { useSessionDrawer } from "@/hooks/useSessionDrawer";
@@ -54,11 +54,6 @@ export default function ProjectDetailPage() {
   // Bottom drawer state
   const [isBottomDrawerOpen, setIsBottomDrawerOpen] = useState(false);
   
-  // Variable search state for bottom drawer
-  const [embedVariableSearch, setEmbedVariableSearch] = useState("");
-  const [showEmbedVariableResults, setShowEmbedVariableResults] = useState(false);
-  const [existingSpawnSearch, setExistingSpawnSearch] = useState("");
-  const [showExistingSpawnResults, setShowExistingSpawnResults] = useState(false);
   
   // Image to text modal state
   const [isImageToTextModalOpen, setIsImageToTextModalOpen] = useState(false);
@@ -2261,11 +2256,11 @@ export default function ProjectDetailPage() {
         {/* Conditions Sidebar (left) */}
         <aside className="w-90 border-r bg-muted/40 flex flex-col">
           {/* Conditions Header - Sticky */}
-          <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background min-h-[65px] sticky top-0 z-10">
+          <div className="flex items-center justify-between gap-4 border-b px-6 bg-background h-[65px] sticky top-0 z-10">
             <h2 className="text-lg font-semibold">Conditions</h2>
           </div>
           {/* Conditions Content - Scrollable */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className={`flex-1 overflow-y-auto p-6 space-y-6 ${mainDrawer.isOpen ? 'pb-[360px]' : ''}`}>
           {/* Conditions Section */}
           <div className="space-y-3">
             {/* Conditional Variable Filters - NEW: Direct conditional variable display */}
@@ -2392,48 +2387,51 @@ export default function ProjectDetailPage() {
                       <div key={conditionalVar.id} className="space-y-3">
                         {/* Conditional Variable Header */}
               <div className="flex items-center justify-between group">
-                {/* Add to Active Variable Button - only shown when drawer is open */}
-                {mainDrawer.isOpen && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-6 w-6 shrink-0 mr-2 bg-primary/10 border-primary/30 hover:bg-primary/20"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const hash = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
-                            if (mainDrawer.isConditional) {
-                              // Add as spawn
-                              if (mainDrawer.addExistingVariableAsSpawn) {
-                                mainDrawer.addExistingVariableAsSpawn(conditionalVar.id.toString());
-                                toast.success(`Added ${hash} as spawn`);
-                              }
-                            } else {
-                              // Embed in content
-                              const variableRef = `{{${hash}}}`;
-                              const newContent = mainDrawer.content ? `${mainDrawer.content}${variableRef}` : variableRef;
-                              mainDrawer.updateContent(newContent);
-                              toast.success(`Added ${variableRef} to content`);
-                            }
-                          }}
-                        >
-                          <Plus className="h-3 w-3 text-primary" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{mainDrawer.isConditional ? 'Add as spawn' : 'Embed in content'}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
                 <div 
                   className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1 cursor-pointer"
                             onClick={() => mainDrawer.openEditDrawer(conditionalVar)}
                 >
                             <h3 className="font-medium text-sm flex-1">{conditionalDisplayName}</h3>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className={`flex items-center gap-1 transition-opacity ${mainDrawer.isOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                    {/* Add Button - only shown when drawer is open and not editing self */}
+                    {mainDrawer.isOpen && mainDrawer.stringData?.id !== conditionalVar.id && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              style={{
+                                backgroundColor: mainDrawer.isConditional 
+                                  ? 'var(--conditional-var-color)' 
+                                  : 'var(--string-var-color)',
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const hash = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
+                                if (mainDrawer.isConditional) {
+                                  if (mainDrawer.addExistingVariableAsSpawn) {
+                                    mainDrawer.addExistingVariableAsSpawn(conditionalVar.id.toString());
+                                    toast.success(`Added ${hash} as spawn`);
+                                  }
+                                } else {
+                                  const variableRef = `{{${hash}}}`;
+                                  const newContent = mainDrawer.content ? `${mainDrawer.content}${variableRef}` : variableRef;
+                                  mainDrawer.updateContent(newContent);
+                                  toast.success(`Added ${variableRef} to content`);
+                                }
+                              }}
+                            >
+                              <Plus className="h-3 w-3 text-white" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{mainDrawer.isConditional ? 'Add as spawn' : 'Embed in content'}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -2773,7 +2771,7 @@ export default function ProjectDetailPage() {
         {/* Main Canvas */}
         <main className="flex-1 flex flex-col items-stretch min-w-0">
           {/* Canvas Header - Sticky */}
-          <div className="flex items-center justify-between gap-4 border-b px-6 py-4 bg-background sticky top-0 z-10">
+          <div className="flex items-center justify-between gap-4 border-b px-6 bg-background h-[65px] sticky top-0 z-10">
             <div className="flex items-center gap-4">
               <h2 className="text-lg font-semibold">Project Strings</h2>
               {/* Global Search */}
@@ -2833,9 +2831,9 @@ export default function ProjectDetailPage() {
           )}
 
           {/* Strings List - Scrollable */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className={`flex-1 overflow-y-auto p-6 ${mainDrawer.isOpen ? 'pb-[360px]' : ''}`}>
           {filteredStrings.length === 0 ? (
-            <div className="text-muted-foreground text-center">
+            <div className="text-muted-foreground text-center text-sm">
               {(project?.strings || []).length === 0 
                 ? "No strings found in this project." 
                 : "No strings match the current filters."
@@ -2864,6 +2862,8 @@ export default function ProjectDetailPage() {
                   onSelect={(selected) => handleSelectString(str.id, selected)}
                   showAddButton={mainDrawer.isOpen}
                   addButtonTooltip={mainDrawer.isConditional ? 'Add as spawn' : 'Embed in content'}
+                  isAddingToConditional={mainDrawer.isConditional}
+                  editingStringId={mainDrawer.stringData?.id || null}
                   onAdd={() => {
                     const hash = str.effective_variable_name || str.variable_hash;
                     if (mainDrawer.isConditional) {
@@ -2895,9 +2895,9 @@ export default function ProjectDetailPage() {
         </main>
       </div>
 
-      {/* Bottom Drawer - Edit Drawer */}
+      {/* Bottom Drawer - Edit Drawer (fixed to viewport bottom) */}
       {mainDrawer.isOpen && (
-        <div className="h-[340px] border-t bg-background flex flex-col shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
+        <div className="fixed bottom-0 left-0 right-0 h-[340px] border-t bg-background flex flex-col z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
           {/* Row 1: Header - Title, Mini-nav, Close */}
           <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
             {/* Left: Title + Type Button Group */}
@@ -3132,48 +3132,9 @@ export default function ProjectDetailPage() {
                           onChange={(e) => mainDrawer.updateContent(e.target.value)}
                           placeholder="Enter string content..."
                           rows={4}
-                          className="font-mono text-sm"
                           autoFocus={!mainDrawer.stringData?.id}
                         />
                       </div>
-                      
-                      {/* Embed Existing Variable */}
-                      <VariableSearchSelect
-                        label="Embed Existing Variable"
-                        helperText="Search and select a variable to embed as {{variableName}} in your content"
-                        searchValue={embedVariableSearch}
-                        onSearchChange={setEmbedVariableSearch}
-                        showResults={showEmbedVariableResults}
-                        onShowResultsChange={setShowEmbedVariableResults}
-                        availableVariables={(() => {
-                          const sortedStrings = [...(project?.strings || [])].sort((a: any, b: any) => b.id - a.id);
-                          return sortedStrings.filter((str: any) => {
-                            const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
-                            const matchesSearch = !embedVariableSearch || 
-                              effectiveName.toLowerCase().includes(embedVariableSearch.toLowerCase()) ||
-                              (str.content || "").toLowerCase().includes(embedVariableSearch.toLowerCase());
-                            return effectiveName && 
-                                   str.id !== mainDrawer.stringData?.id && 
-                                   matchesSearch;
-                          }).map((str: any) => ({
-                            id: str.id,
-                            name: str.effective_variable_name || str.variable_name || str.variable_hash,
-                            content: str.content || "",
-                            type: str.is_conditional_container ? 'conditional' : 'string',
-                            isConditional: str.is_conditional_container || false,
-                            isSpawn: !!str.controlled_by_spawn_id,
-                          }));
-                        })()}
-                        onSelect={(variable) => {
-                          const variableRef = `{{${variable.name}}}`;
-                          const newContent = mainDrawer.content ? `${mainDrawer.content}${variableRef}` : variableRef;
-                          mainDrawer.updateContent(newContent);
-                          setEmbedVariableSearch("");
-                          setShowEmbedVariableResults(false);
-                          toast.success(`Added ${variableRef} to content`);
-                        }}
-                        noBorder={true}
-                      />
                     </div>
                   )}
                   
@@ -3186,48 +3147,6 @@ export default function ProjectDetailPage() {
                           <Plus className="h-3 w-3 mr-1" /> Add Spawn
                         </Button>
                       </div>
-                      
-                      {/* Add Existing Variable as Spawn */}
-                      <VariableSearchSelect
-                        label="Add Existing Variable as Spawn"
-                        helperText="Search and select an existing variable to add it as a spawn"
-                        searchValue={existingSpawnSearch}
-                        onSearchChange={setExistingSpawnSearch}
-                        showResults={showExistingSpawnResults}
-                        onShowResultsChange={setShowExistingSpawnResults}
-                        availableVariables={(() => {
-                          const currentSpawnNames = mainDrawer.conditionalSpawns.map((spawn: any) => 
-                            spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash
-                          );
-                          const sortedStrings = [...(project?.strings || [])].sort((a: any, b: any) => b.id - a.id);
-                          return sortedStrings.filter((str: any) => {
-                            const effectiveName = str.effective_variable_name || str.variable_name || str.variable_hash;
-                            const matchesSearch = !existingSpawnSearch || 
-                              effectiveName.toLowerCase().includes(existingSpawnSearch.toLowerCase()) ||
-                              (str.content || "").toLowerCase().includes(existingSpawnSearch.toLowerCase());
-                            return effectiveName && 
-                                   str.id !== mainDrawer.stringData?.id &&
-                                   !currentSpawnNames.includes(effectiveName) &&
-                                   matchesSearch;
-                          }).map((str: any) => ({
-                            id: str.id,
-                            name: str.effective_variable_name || str.variable_name || str.variable_hash,
-                            content: str.content || "",
-                            type: str.is_conditional_container ? 'conditional' : 'string',
-                            isConditional: str.is_conditional_container || false,
-                            isSpawn: !!str.controlled_by_spawn_id,
-                          }));
-                        })()}
-                        onSelect={(variable) => {
-                          if (mainDrawer.addExistingVariableAsSpawn) {
-                            mainDrawer.addExistingVariableAsSpawn(variable.id.toString());
-                            setExistingSpawnSearch("");
-                            setShowExistingSpawnResults(false);
-                            toast.success(`Added ${variable.name} as spawn`);
-                          }
-                        }}
-                        noBorder={true}
-                      />
                       
                       <div className="space-y-2">
                         {mainDrawer.conditionalSpawns.map((spawn: any, index: number) => (

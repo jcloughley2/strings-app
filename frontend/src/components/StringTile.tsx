@@ -63,6 +63,12 @@ export interface StringTileProps {
   /** Tooltip text for add button */
   addButtonTooltip?: string;
   
+  /** Whether we're adding to a conditional (orange) vs string (teal) */
+  isAddingToConditional?: boolean;
+  
+  /** ID of the string currently being edited (to prevent self-embedding) */
+  editingStringId?: number | null;
+  
   /** Callback when add button is clicked */
   onAdd?: () => void;
   
@@ -102,6 +108,8 @@ export function StringTile({
   onSelect,
   showAddButton = false,
   addButtonTooltip = "Add",
+  isAddingToConditional = false,
+  editingStringId = null,
   onAdd,
   showCopyButton = true,
   onCopy,
@@ -121,30 +129,6 @@ export function StringTile({
       onClick={onClick}
     >
       <div className="flex items-start gap-3">
-        {/* Add to Active Variable Button */}
-        {showAddButton && onAdd && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 bg-primary/10 border-primary/30 hover:bg-primary/20"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAdd();
-                  }}
-                >
-                  <Plus className="h-4 w-4 text-primary" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{addButtonTooltip}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-
         {/* Checkbox */}
         {showCheckbox && (
           <div className="pt-1">
@@ -215,6 +199,34 @@ export function StringTile({
 
           {/* Action Buttons */}
           <div className="flex gap-1 shrink-0">
+            {/* Add Button - for embedding or adding as spawn (hidden if editing self) */}
+            {showAddButton && onAdd && editingStringId !== string.id && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      style={{
+                        backgroundColor: isAddingToConditional 
+                          ? 'var(--conditional-var-color)' 
+                          : 'var(--string-var-color)',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAdd();
+                      }}
+                    >
+                      <Plus className="h-4 w-4 text-white" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{addButtonTooltip}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
             {/* Copy Reference Button */}
             {showCopyButton && onCopy && (
               <TooltipProvider>

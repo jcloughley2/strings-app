@@ -896,11 +896,13 @@ Parent string (no color) >
 
 ### Bottom Drawer Edit System (Latest - January 2025)
 
-**Push Drawer Architecture**:
-- Variable editing now uses a bottom drawer that pushes content up (not an overlay)
-- Main content area (conditions sidebar + strings canvas) shrinks when drawer opens
-- User can still interact with page content while drawer is open
+**Fixed Drawer Architecture**:
+- Variable editing uses a bottom drawer fixed to viewport bottom
+- Drawer is always precisely aligned to screen bottom (not subject to scrolling)
+- Main content areas (conditions sidebar + strings canvas) add bottom padding when drawer opens
+- User can still scroll and interact with page content while drawer is open
 - Drop shadow on top edge gives visual separation
+- Z-index ensures drawer stays above all other content
 
 **Bottom Drawer Layout**:
 ```
@@ -968,10 +970,11 @@ Parent string (no color) >
 **"+" buttons appear on variable tiles when bottom drawer is open**:
 - Creates an "edit mode" experience for the entire project
 - When drawer is closed, "+" buttons disappear
+- **Self-reference prevention**: Button hidden on the variable currently being edited (prevents recursion)
 
 **Locations**:
-- **String cards in canvas**: Prominent "+" button at left of each card
-- **Conditional variables in sidebar**: "+" button to left of conditional header
+- **String cards in canvas**: "+" button in action buttons area (alongside copy/overflow menu)
+- **Conditional variables in sidebar**: "+" button in action buttons area (alongside copy/edit/overflow)
 - **NOT on spawn variables**: Spawns don't have this button
 
 **Behavior**:
@@ -981,8 +984,12 @@ Parent string (no color) >
 - Works seamlessly with global search to find and add variables quickly
 
 **Styling**:
-- Primary color background/border (`bg-primary/10 border-primary/30`)
-- Primary color icon
+- **Filled ShadCN button** (default variant, not outline)
+- **Color-coded by action**:
+  - Teal (`--string-var-color`) when embedding into a string variable
+  - Orange (`--conditional-var-color`) when adding as spawn to a conditional
+- White plus icon
+- Matches size of adjacent action buttons
 - Tooltip shows action ("Add as spawn" or "Embed in content")
 
 ### Dimension Layer Removal (Latest - January 2025)

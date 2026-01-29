@@ -14,18 +14,35 @@ import {
 
 export function Header() {
   const { isLoggedIn, username, logout, loading } = useAuth();
-  const { projectInfo, pageInfo } = useHeader();
+  const { projectInfo, pageInfo, focusInfo } = useHeader();
 
   return (
     <header className="sticky top-0 z-50 flex items-center justify-between px-6 py-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       {/* Left side: Logo + Breadcrumb */}
       <div className="flex items-center gap-2">
-        <Link href="/" className="text-3xl font-grand-hotel tracking-wide text-primary">
+        <Link href="/" className="text-3xl font-courgette tracking-wide text-primary">
           Strings
         </Link>
         
+        {/* Focus Mode Breadcrumb (Logo > Parent > String) */}
+        {focusInfo && (
+          <>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            <Link 
+              href={focusInfo.parentPath}
+              className="text-lg font-medium text-muted-foreground hover:text-foreground transition-colors truncate max-w-[200px]"
+            >
+              {focusInfo.parentName}
+            </Link>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            <span className="text-lg font-medium truncate max-w-[300px]">
+              {focusInfo.stringName}
+            </span>
+          </>
+        )}
+        
         {/* Simple Page Breadcrumb (e.g., Registry) */}
-        {pageInfo && !projectInfo && (
+        {pageInfo && !projectInfo && !focusInfo && (
           <>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
             <span className="text-lg font-medium">
@@ -35,7 +52,7 @@ export function Header() {
         )}
         
         {/* Project Breadcrumb (when on a project page) */}
-        {projectInfo && (
+        {projectInfo && !focusInfo && (
           <>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
             <span className="text-lg font-medium truncate max-w-[300px]">
@@ -92,7 +109,12 @@ export function Header() {
           <div className="w-20 h-9" />
         ) : isLoggedIn ? (
           <>
-            <span className="text-base font-medium text-muted-foreground mr-2">{username}</span>
+            <Link 
+              href="/settings" 
+              className="text-base font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {username}
+            </Link>
             <Button variant="secondary" onClick={logout}>Logout</Button>
           </>
         ) : (

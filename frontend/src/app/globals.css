@@ -8,7 +8,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-grand-hotel: var(--font-grand-hotel);
+  --font-courgette: var(--font-courgette);
   
   /* String variable colors - sourced from SCSS */
   --color-string-50: var(--string-var-50);

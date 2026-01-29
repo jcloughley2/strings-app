@@ -13,7 +13,7 @@ from django.template.loader import render_to_string
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.db import models
 from django.db.models.signals import post_save
-from .models import Project, String, Dimension, DimensionValue, StringDimensionValue
+from .models import Project, String, Dimension, DimensionValue, StringDimensionValue, UserProfile
 from .serializers import ProjectSerializer, StringSerializer, DimensionSerializer, DimensionValueSerializer, StringDimensionValueSerializer
 from rest_framework import serializers
 import logging
@@ -21,6 +21,7 @@ import csv
 import io
 from django.http import HttpResponse
 import re
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -531,3 +532,316 @@ def registry(request):
         })
     
     return Response(registry_strings)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([permissions.IsAuthenticated])
+def openai_settings(request):
+    """
+    GET: Check if OpenAI API key is configured (returns masked status, not the actual key)
+    POST: Save the OpenAI API key
+    """
+    # Get or create user profile
+    profile, created = UserProfile.objects.get_or_create(user=request.user)
+    
+    if request.method == 'GET':
+        has_key = bool(profile.openai_api_key)
+        # Return masked key if exists (show last 4 chars)
+        masked_key = None
+        if has_key and len(profile.openai_api_key) > 4:
+            masked_key = '•' * 20 + profile.openai_api_key[-4:]
+        
+        return Response({
+            'has_api_key': has_key,
+            'masked_key': masked_key,
+        })
+    
+    elif request.method == 'POST':
+        api_key = request.data.get('api_key', '').strip()
+        
+        if not api_key:
+            # Clear the API key
+            profile.openai_api_key = None
+            profile.save()
+            return Response({'message': 'API key cleared', 'has_api_key': False})
+        
+        # Validate the key format (should start with sk-)
+        if not api_key.startswith('sk-'):
+            return Response(
+                {'error': 'Invalid API key format. OpenAI API keys start with "sk-"'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Save the key
+        profile.openai_api_key = api_key
+        profile.save()
+        
+        return Response({
+            'message': 'API key saved successfully',
+            'has_api_key': True,
+            'masked_key': '•' * 20 + api_key[-4:],
+        })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def check_openai_configured(request):
+    """
+    Quick check if user has OpenAI API key configured.
+    Used to enable/disable AI features in the UI.
+    """
+    try:
+        profile = UserProfile.objects.get(user=request.user)
+        return Response({'configured': bool(profile.openai_api_key)})
+    except UserProfile.DoesNotExist:
+        return Response({'configured': False})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def extract_text_from_image(request):
+    """
+    Extract text from an uploaded image using OpenAI's Vision API.
+    Expects base64 encoded image data.
+    """
+    # Get user profile and check for API key
+    try:
+        profile = UserProfile.objects.get(user=request.user)
+    except UserProfile.DoesNotExist:
+        return Response(
+            {'error': 'OpenAI not configured. Please add your API key in Settings > AI Features.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if not profile.openai_api_key:
+        return Response(
+            {'error': 'OpenAI not configured. Please add your API key in Settings > AI Features.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Get image data from request
+    image_data = request.data.get('image')
+    if not image_data:
+        return Response(
+            {'error': 'No image provided'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Initialize OpenAI client
+        client = OpenAI(api_key=profile.openai_api_key)
+        
+        # Call OpenAI Vision API to extract text
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Please extract and transcribe all the text visible in this image. Return only the transcribed text, preserving the original formatting as much as possible. Do not add any commentary or explanation."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_data  # Expects data:image/...;base64,... format
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=2000
+        )
+        
+        extracted_text = response.choices[0].message.content.strip()
+        
+        return Response({
+            'success': True,
+            'text': extracted_text
+        })
+        
+    except Exception as e:
+        error_message = str(e)
+        
+        # Provide user-friendly error messages
+        if 'invalid_api_key' in error_message.lower():
+            error_message = 'Invalid API key. Please check your key in Settings.'
+        elif 'rate_limit' in error_message.lower():
+            error_message = 'Rate limit exceeded. Please wait a moment and try again.'
+        elif 'insufficient_quota' in error_message.lower():
+            error_message = 'Insufficient OpenAI quota. Please check your billing settings.'
+        
+        return Response(
+            {'error': error_message, 'success': False},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def test_openai_connection(request):
+    """
+    Test the OpenAI connection by asking for a one-line joke.
+    Returns the joke if successful, or an error message if not.
+    """
+    # Get user profile
+    try:
+        profile = UserProfile.objects.get(user=request.user)
+    except UserProfile.DoesNotExist:
+        return Response(
+            {'error': 'No API key configured. Please add your OpenAI API key first.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if not profile.openai_api_key:
+        return Response(
+            {'error': 'No API key configured. Please add your OpenAI API key first.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Initialize OpenAI client with user's API key
+        client = OpenAI(api_key=profile.openai_api_key)
+        
+        # Request a one-line joke
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that tells jokes."},
+                {"role": "user", "content": "Tell me a short, clean, one-line joke."}
+            ],
+            max_tokens=100,
+            temperature=0.7
+        )
+        
+        joke = response.choices[0].message.content.strip()
+        
+        return Response({
+            'success': True,
+            'joke': joke,
+            'message': 'Connection successful! Your OpenAI integration is working.'
+        })
+        
+    except Exception as e:
+        error_message = str(e)
+        
+        # Provide user-friendly error messages
+        if 'invalid_api_key' in error_message.lower() or 'incorrect api key' in error_message.lower():
+            error_message = 'Invalid API key. Please check your key and try again.'
+        elif 'rate_limit' in error_message.lower():
+            error_message = 'Rate limit exceeded. Please wait a moment and try again.'
+        elif 'insufficient_quota' in error_message.lower():
+            error_message = 'Insufficient quota. Please check your OpenAI billing settings.'
+        
+        return Response(
+            {'error': error_message, 'success': False},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def generate_style_guide(request):
+    """
+    Generate a style guide based on the organization's published registry strings.
+    Analyzes tone, vocabulary, brevity, language patterns, and other important aspects.
+    """
+    from datetime import datetime
+    
+    # Get user profile and check for API key
+    try:
+        profile = UserProfile.objects.get(user=request.user)
+    except UserProfile.DoesNotExist:
+        return Response(
+            {'error': 'OpenAI not configured. Please add your API key in Settings > AI Features.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if not profile.openai_api_key:
+        return Response(
+            {'error': 'OpenAI not configured. Please add your API key in Settings > AI Features.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Get all published strings from the registry
+    published_strings = String.objects.filter(
+        project__user=request.user,
+        is_published=True,
+        is_conditional_container=False
+    ).select_related('project')
+    
+    if not published_strings.exists():
+        return Response(
+            {'error': 'No published strings found in your registry. Publish some strings first to generate a style guide.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Prepare the strings for analysis (limit to 50 to avoid token limits)
+    strings_for_analysis = []
+    for s in published_strings[:50]:
+        strings_for_analysis.append({
+            'content': s.content or '',
+            'name': s.display_name or s.effective_variable_name or s.variable_hash,
+            'project': s.project.name if s.project else 'Unknown'
+        })
+    
+    # Format strings for the prompt
+    strings_text = "\n\n".join([
+        f"**{s['name']}** (from {s['project']}):\n\"{s['content']}\""
+        for s in strings_for_analysis
+    ])
+    
+    try:
+        client = OpenAI(api_key=profile.openai_api_key)
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are an expert UX writer and content strategist. Analyze UI strings and create a concise, actionable style guide.
+
+Focus on:
+1. **Tone & Voice**: Personality (friendly, professional, casual, formal, etc.)
+2. **Vocabulary**: Common words, phrases, terminology patterns
+3. **Brevity**: How concise are the strings? Typical length?
+4. **Language Style**: Sentence structure, punctuation, capitalization
+5. **Patterns**: Action verbs, calls-to-action, error formats
+6. **Key Observations**: Other important patterns or recommendations
+
+Keep the guide succinct and practical for quick reference."""
+                },
+                {
+                    "role": "user",
+                    "content": f"""Analyze these {len(strings_for_analysis)} UI strings and create a style guide:
+
+{strings_text}
+
+Create a concise style guide to help writers match this established voice and style."""
+                }
+            ],
+            max_tokens=2000,
+            temperature=0.7
+        )
+        
+        style_guide = response.choices[0].message.content.strip()
+        generated_date = datetime.now().strftime("%B %d, %Y")
+        
+        return Response({
+            'success': True,
+            'style_guide': style_guide,
+            'generated_date': generated_date,
+            'strings_analyzed': len(strings_for_analysis),
+        })
+        
+    except Exception as e:
+        error_message = str(e)
+        if 'invalid_api_key' in error_message.lower():
+            error_message = 'Invalid API key. Please check your key in Settings.'
+        elif 'rate_limit' in error_message.lower():
+            error_message = 'Rate limit exceeded. Please wait and try again.'
+        elif 'insufficient_quota' in error_message.lower():
+            error_message = 'Insufficient OpenAI quota. Please check your billing.'
+        
+        return Response({'error': error_message, 'success': False}, status=status.HTTP_400_BAD_REQUEST)

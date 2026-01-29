@@ -2,9 +2,9 @@
 
 ## About This Document
 
-**PURPOSE**: Comprehensive reference guide for LLM agents working on the Strings application. Contains architecture, functionality, and implementation patterns for maintaining consistency.
+**PURPOSE**: Reference guide for LLM agents working on the Strings application. Contains architecture, functionality, and implementation patterns.
 
-**MAINTENANCE**: Keep updated with changes. Essential for future development work.
+**MAINTENANCE**: Keep updated with significant changes. Essential for future development work.
 
 ---
 
@@ -15,33 +15,35 @@
 
 ### Core Concept: File System Analogy
 
-- **Strings = Files**: Each string has content and a unique name/hash, can be referenced
+- **Strings = Files**: Each string has content and a unique hash identifier, can be referenced
 - **Conditionals = Directories**: Containers holding multiple related string "files" (spawns)  
-- **Variable References = File Includes**: Strings embed other strings using `{{variableName}}` syntax
-- **Cascading Drawers = Deep Navigation**: Click nested variables to drill down with stacked editors
+- **Variable References = File Includes**: Strings embed other strings using `{{variableHash}}` syntax
+- **Bottom Drawer = Deep Navigation**: Click nested variables to drill down with session-based editing
 
 ### Example Usage
 
-Conditional variable `{{color-option}}` with spawns `{{option-1}}` (content: "blue") and `{{option-2}}` (content: "green").
+Conditional variable `{{color-option}}` with spawns `{{option-blue}}` (content: "blue") and `{{option-green}}` (content: "green").
 
 String: "My favorite color is `{{color-option}}`"
-- If option-1 selected → "My favorite color is blue"
-- If option-2 selected → "My favorite color is green"
+- If option-blue selected → "My favorite color is blue"
+- If option-green selected → "My favorite color is green"
 
 ### Key Features
 
-- **Every String is a Variable**: Automatic variable creation with slugified names or 6-character hash
-- **Variable Embedding**: Recursive `{{variableName}}` references with circular protection
+- **Every String is a Variable**: Automatic variable creation with user-defined or auto-generated 6-character hash
+- **Variable Embedding**: Recursive `{{variableHash}}` references with circular protection
 - **Conditionals**: Convert strings to directories containing multiple variations (spawns)
-- **Spawn Selection**: Users select which spawn variable displays for each conditional variable
+- **Spawn Selection**: Users select which spawn variable displays for each conditional
 - **Controlling Conditions**: Spawn variables can auto-select based on other spawn selections
-- **Drawer Navigation System**: Visual hierarchy sidebar showing parents, current variable, and children with click-to-navigate
-- **Canvas Display Control**: Hide embedded strings, toggle variable names/hashes, plaintext mode
-- **Conditions-Only Sidebar**: Conditional variables managed exclusively in left sidebar, not shown in canvas
-- **Real-time Variable Detection**: Sparkles icon (✨) for new/pending variables
-- **Unified Variable Hash Badges**: Click-to-copy badges with gradient backgrounds indicating variable type
-- **Minimal UI**: Clean cards with shadow effects, no redundant type icons or badges
-- **Organization Registry**: Publish finalized strings to a central registry for organization-wide visibility and consistency
+- **Session-Based Editing**: Edit multiple related variables in one session, save all on close
+- **Mini-Nav System**: Visual hierarchy showing parents ("Used in"), current variable, and children with click-to-navigate
+- **Canvas Display Control**: Hide embedded strings, toggle variable hashes, plaintext mode
+- **Conditions Sidebar**: Conditional variables managed in left sidebar with radio button spawn selection
+- **Real-time Variable Detection**: Pending variables detected as you type `{{newVariable}}`
+- **Organization Registry**: Publish finalized strings to a central registry (behind feature flag)
+- **User Settings**: Settings page with Account and AI Features tabs
+- **OpenAI Integration**: API key management, image-to-text extraction, style guide generation
+- **Focus Mode**: Deep-dive view for individual strings (behind feature flag)
 
 ---
 
@@ -72,28 +74,18 @@ String: "My favorite color is `{{color-option}}`"
 
 1. **Project**: Container for all content (name, description, user)
 
-2. **String**: The "file" system - every string is automatically a variable
-   - **Fields**: content, project, display_name, variable_name (auto-generated), variable_hash (auto-fallback), is_conditional, is_conditional_container, controlled_by_spawn
-   - **Display Name**: Human-readable name (e.g., "Welcome Message")
-   - **Variable Name**: Auto-generated slug from display_name (e.g., "welcome-message") or random hash if no display_name
-   - **Variable Hash**: 6-character fallback identifier (e.g., "A7B2K9")
-   - **Effective Variable Name**: Returns variable_name || variable_hash
-   - **Conditional Variables**: Containers that hold multiple spawn variables
-   - **Spawn Variables**: Individual variations within a conditional variable
-   - **Controlled By Spawn**: Optional ForeignKey to another spawn variable that controls this spawn's selection
+2. **String**: The core "file" model - every string is automatically a variable
+   - **Fields**: content, project, variable_hash, is_conditional, is_conditional_container, controlled_by_spawn_id, is_published
+   - **Variable Hash**: Primary identifier - user-defined (e.g., "welcome-message") or auto-generated 6-character hash
+   - **Validation**: Alphanumeric with hyphens, no spaces, max 50 characters
+   - **Conditional Variables**: Strings with `is_conditional_container=true` that hold spawn variables
+   - **Spawn Variables**: Individual variations within a conditional
+   - **Controlled By Spawn**: Optional ForeignKey linking to a controlling spawn variable
 
-3. **Dimension** (Deprecated): Previously used to link conditional variables to spawn options
-   - Model still exists in database for data compatibility
-   - No longer actively managed or used by frontend/backend
-   - API endpoints removed
-
-4. **DimensionValue** (Deprecated): Previously held individual spawn options
-   - Model still exists in database for data compatibility
-   - No longer actively managed or used by frontend/backend
-   - API endpoints removed
+3. **Dimension/DimensionValue**: Legacy models retained in database for compatibility but not actively used
 
 ### Key Relationships
-- Strings reference other strings via `{{variableName}}` embedding
+- Strings reference other strings via `{{variableHash}}` embedding
 - Conditional variables contain spawn variables (multiple string variations)
 - Spawn selection determines which content displays for conditional variables
 - Controlling spawn relationships enable cascading auto-selection
@@ -106,118 +98,111 @@ String: "My favorite color is `{{color-option}}`"
 ### Layout (Three Panels)
 
 **Left - Conditions Sidebar (360px)**:
-- Conditional variables with display names
-- Spawn variables as selectable tags beneath each conditional
-- Hover-triggered edit pencil icons
-- Selected spawns: Blue background
-- Auto-selected spawns: Green background with "(auto)" label
-- Disabled/locked spawns: Grey with "(locked)" label
+- Conditional variables with their spawn options
+- Radio button selection for spawn variables
+- Lock icon (🔒) for controlled/auto-selected spawns
+- Edit icons on hover for each conditional and spawn
+- Overflow menu with "Add New Spawn" option
 
 **Center - Main Canvas**:
-- String variables only (conditionals excluded - managed in sidebar)
-- Purple badges for strings
-- Canvas Settings button opens right-hand drawer
+- String variables only (conditionals excluded)
+- Optional variable hash display beneath each card
+- Canvas Settings button opens settings drawer
 - New String button for creating variables
+- Global search filters both sidebar and canvas
 
-**Right - Variables Sidebar** (collapsible): Variable management
+**Bottom - Edit Drawer (fixed to viewport)**:
+- Session-based editing for strings and conditionals
+- Mini-nav showing variable relationships
+- Three tabs: Content, Conditions, Advanced
+- Save/Cancel buttons persist all session changes
 
-### Canvas Settings Drawer
+### Canvas Settings
 
 **Display Mode Section**:
-- **Plaintext Mode**: Show resolved content without styling or conditional variables
-- **Show Variables**: Display variable names as badges instead of resolved content  
-- **Hide Embedded Strings** (ON by default): Hide strings used as variables or spawn variables
-- **Show Variable Names** (ON by default): Display the variable name (title/display_name) on each string card
-- **Show Variable Hashes** (OFF by default): Display the copiable variable hash badge on each string card
+- **Plaintext Mode**: Show resolved content without styling
+- **Show Variables**: Display variable hashes as badges  
+- **Hide Embedded Strings**: Hide strings used as variables or spawns
+- **Show Variable Hashes**: Display hash beneath each string card
 
 **Conditions Sidebar Section**:
-- **Hide Controlled Variables** (ON by default): Hide spawn variables that have a controlling condition set to a different conditional. If all spawns of a conditional are hidden, the conditional itself is also hidden from the sidebar.
+- **Hide Controlled Variables**: Hide spawns that have controlling conditions set
 
-**Key Features**:
-- Real-time updates: Canvas and sidebar update instantly
-- Smart detection: Automatically identifies embedded strings and controlled spawns
-- Conditional variables always hidden from canvas (managed in Conditions sidebar)
-- Controlled spawn visibility: When "Hide Controlled Variables" is disabled, controlled spawns show with Lock icon (🔒) and 60% opacity
+### Bottom Drawer System
 
-### Unified Drawer System
+**Session-Based Architecture**:
+- `useSessionDrawer` hook manages drawer state
+- `useEditSession` hook manages multi-variable editing sessions
+- `stringOperations.ts` contains save logic
+- All changes saved together when drawer closes
 
-**Single Component Architecture**:
-- `StringEditDrawer` component handles all string/conditional editing
-- `useStringEditDrawer` hook manages all drawer state and operations
-- `stringOperations.ts` contains consolidated save logic
-- Replaces 4+ legacy drawer systems
-- 60% code reduction, consistent UX across all scenarios
+**Drawer Layout**:
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  New/Edit string [String|Cond]   [Mini-nav tiles]          [Copy] [X]  │ ← Header
+├─────────────┬───────────────────────────────────────────────────────────┤
+│ ○ Content   │                                                           │
+│ ○ Conditions│           Tab content area                                │ ← Main
+│ ○ Advanced  │                                                           │
+├─────────────┴───────────────────────────────────────────────────────────┤
+│                                                       [Cancel] [Save]   │ ← Footer
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
-**Drawer Navigation Sidebar (Mini-Nav)**:
-- Fixed 120px width with 16px horizontal padding to accommodate full tree layout
-- Visual hierarchy showing variable relationships with branching tree connectors
-- **Parents** (36px, left of vertical line): Variables that embed or spawn the current one
-  - Horizontal connectors from parent's right edge to vertical line
-- **Current** (48px, centered): Active variable being edited
-  - Vertical line descends from center-bottom to children, ascends from center-top to parents
-- **Children** (36px, right of vertical line): Spawns, embedded, and pending variables
-  - Horizontal connectors from vertical line to child's left edge
-- All tiles have 1px border stroke (consistent for active and inactive)
-- Click any square to navigate to that variable
-- Hover tooltips show full names and relationships
-- Color-coded: Teal for strings (`--string-var-color`), Orange for conditionals (`--conditional-var-color`)
-- Works for both creating new and editing existing variables
-- Immediate save (no batch operations)
-
-**Three Main Tabs**: Content, Conditions, Advanced
+**Mini-Nav (Header Center)**:
+- **Used in**: Parent variables that embed or spawn the current one
+- **Active**: Current variable being edited (larger, centered)
+- **Children**: "Spawn variables" (for conditionals) or "Embedded variables" (for strings)
+- Click any tile to navigate to that variable within the session
+- Color-coded: Teal for strings, Orange for conditionals, Purple for pending
+- Pending variables show sparkle (✨) icon
 
 **Content Tab**:
-- Variable Type dropdown: String or Conditional
-- **String Mode**: 
-  - Text content editing (child variables shown in navigation sidebar)
-  - **Embed Existing Variable**: Search/select component to embed `{{variableName}}` into content
-    - Shows recently created variables by default (sorted by most recently created)
-    - Type-ahead search filters by name/hash AND content
-    - Spawn variables visible but not selectable (shown with "spawn" badge and parent name)
-    - After selection, focus returns to content textarea with cursor at end
-- **Conditional Mode**: 
-  - "Include option to hide" toggle (spawn variables shown in navigation sidebar)
-  - **Add Existing Variable as Spawn**: Search/select component (same styling/behavior as embed search)
+- Variable Type toggle: String or Conditional
+- **String Mode**: Content textarea, embedded variable search
+- **Conditional Mode**: "Include hide option" toggle, "Add Spawn" button, spawn list
 
 **Conditions Tab**:
-- Shows parent conditional variables (for spawn variables)
-- **Controlling Condition Feature**:
-  - Toggle to enable/disable
-  - Dropdown to select controller spawn
-  - Grouped list by parent conditional
-  - Type-ahead search filtering (searches ID/hash AND content)
-  - Content preview shown below each spawn option (resolved to plaintext, truncated to 60 chars)
-  - Auto-selection when controller is selected
+- **For spawn variables**: Controlling Condition selector
+  - Enable/disable toggle
+  - Search-select dropdown listing spawns from other conditionals
+  - When controller spawn is selected, this spawn auto-selects
+- **For all variables**: List of parent conditional variables
 
 **Advanced Tab**:
-- Display Name input (triggers slugify)
-- Variable Name (read-only, auto-generated)
-- Variable Hash (read-only, fallback)
+- Variable Hash input (editable identifier)
+- Shows reference format preview: `{{variableHash}}`
+- Delete button in danger zone
 
 ### Spawn Management
 
 **Add/Remove Spawns**:
-- Add New Spawn button (creates temporary spawn)
-- Add Existing Variable as Spawn (autocomplete search with VariableSearchSelect)
-- Remove spawn button (hover-triggered in navigation or via conditions sidebar)
-- Include Hide Option checkbox
+- "Add Spawn" button creates temporary spawn in session
+- "Add New Spawn" option in conditional overflow menu
+- Overflow menu on each spawn for removal
 
-### Delete Protection
+**Include Hide Option**:
+- Toggle next to "Add Spawn" button
+- When enabled, adds "Hidden" as selectable option in conditions sidebar
+- Selecting "Hidden" removes conditional's content from output
 
-**In-Use Variable Check**:
-- Before deleting a variable, system checks if it's embedded in other strings or used as a spawn
-- If in-use, delete is blocked with explanation of dependencies
-- Delete points with protection:
-  - Single string delete (overflow menu in canvas)
-  - Bulk delete (checkboxes + floating action bar)
-  - Conditional variable delete (overflow menu in conditions sidebar)
-  - Spawn variable delete (overflow menu in conditions sidebar)
-  - Delete button in edit drawer footer
+**Controlling Conditions**:
+- Spawn variables can be linked to a controller spawn
+- When controller is selected, controlled spawn auto-selects
+- Controller selection done via search-select in Conditions tab
+- Lock icon indicates controlled spawns in sidebar
 
-**Navigation**:
-- All spawn variables shown in drawer navigation sidebar
-- Click spawn square to navigate and edit
-- Spawns aligned to right side of navigation
+### Edit Mode Quick-Add Buttons
+
+When bottom drawer is open, ghost-styled "+" buttons appear on:
+- String cards in canvas
+- Conditional headers in sidebar
+
+**Behavior**:
+- Hidden on the variable currently being edited (prevents self-reference)
+- If editing string: Embeds `{{variableHash}}` in content
+- If editing conditional: Adds variable as spawn
+- Toast notifications confirm actions
 
 ---
 
@@ -230,38 +215,37 @@ String: "My favorite color is `{{color-option}}`"
 - `GET /api/auth/me/` - Current user
 
 ### Projects
-- `GET /api/projects/` - List projects (ordered by -created_at)
+- `GET /api/projects/` - List projects
 - `POST /api/projects/` - Create project
 - `GET /api/projects/{id}/` - Get project with all data
 - `PATCH /api/projects/{id}/` - Update project
 - `DELETE /api/projects/{id}/` - Delete project
-- `POST /api/projects/{id}/duplicate/` - Duplicate project with all content
+- `POST /api/projects/{id}/duplicate/` - Duplicate project
 
-### Strings (Core API)
-- `POST /api/strings/` - Create string (auto-generates variable_name from display_name using slugify)
-- `PATCH /api/strings/{id}/` - Update string (auto-updates variable_name if display_name changes)
+### Strings
+- `POST /api/strings/` - Create string
+- `PATCH /api/strings/{id}/` - Update string
 - `DELETE /api/strings/{id}/` - Delete string
-- `POST /api/strings/{id}/duplicate/` - Duplicate string (preserves embedded variable references)
+- `POST /api/strings/{id}/duplicate/` - Duplicate string
 
-**String Creation/Update Payload**:
+**String Payload**:
 ```json
 {
   "content": "String content here",
-  "display_name": "Welcome Message",  // Optional - generates slug: "welcome-message"
+  "variable_hash": "welcome-message",
   "is_conditional": false,
   "is_conditional_container": false,
-  "controlled_by_spawn_id": null,  // Optional - ID of controlling spawn variable
+  "controlled_by_spawn_id": null,
+  "is_published": false,
   "project": 1
 }
-// Note: variable_name is auto-generated (read-only) from display_name
-// If no display_name provided, uses random 6-char hash
 ```
 
-### Dimensions (Removed)
-- Dimension API endpoints have been removed from the backend
-- `/api/dimensions/`, `/api/dimension-values/`, `/api/string-dimension-values/` no longer exist
-- Frontend works directly with conditional/spawn variables via the String API
-- Dimension models still exist in database for data compatibility but are no longer actively managed
+### AI Features
+- `GET/POST /api/settings/openai/` - OpenAI API key management
+- `POST /api/settings/openai/test/` - Test connection
+- `POST /api/ai/extract-text/` - Image-to-text extraction
+- `POST /api/ai/style-guide/` - Generate style guide from registry
 
 ---
 
@@ -272,36 +256,25 @@ String: "My favorite color is `{{color-option}}`"
 // Null-safe data access
 const strings = project?.strings || [];
 
-// Conditional spawn selection state (NEW - replaces dimension-based state)
+// Conditional spawn selection (direct variable names)
 const [selectedConditionalSpawns, setSelectedConditionalSpawns] = useState<{
   [conditionalVariableName: string]: string | null
 }>({});
 
-// Canvas display settings
-const [hideEmbeddedStrings, setHideEmbeddedStrings] = useState(true);
-const [showVariableNames, setShowVariableNames] = useState(true);
-const [showVariableHashes, setShowVariableHashes] = useState(false);
-const [hideControlledVariables, setHideControlledVariables] = useState(true); // Conditions sidebar
-
-// Unified drawer system
-const mainDrawer = useStringEditDrawer({
+// Session-based drawer
+const mainDrawer = useSessionDrawer({
   project,
-  selectedDimensionValues,
-  pendingStringVariables,
   onSuccess: () => fetchProject()
 });
 ```
 
 ### Conditional Variable Resolution
 ```javascript
-// Direct conditional spawn selection (NEW)
 const selectedSpawnName = selectedConditionalSpawns[conditionalName];
 
-// Find and render spawn content
 if (selectedSpawnName && selectedSpawnName !== "Hidden") {
   const spawnVariable = project?.strings?.find((str: any) =>
     str.effective_variable_name === selectedSpawnName ||
-    str.variable_name === selectedSpawnName ||
     str.variable_hash === selectedSpawnName
   );
   
@@ -312,25 +285,8 @@ if (selectedSpawnName && selectedSpawnName !== "Hidden") {
 }
 ```
 
-### Slugify-Based Variable Naming
-```python
-# Backend: String model save() method
-def save(self, *args, **kwargs):
-    if self.display_name and self.display_name.strip():
-        base_slug = slugify(self.display_name, max_length=50)
-        self.variable_name = self.generate_unique_slug(base_slug)
-    elif not self.variable_name:
-        self.variable_name = self.generate_unique_hash()
-    
-    if not self.variable_hash:
-        self.variable_hash = self.generate_unique_hash()
-    
-    super().save(*args, **kwargs)
-```
-
 ### Controlling Spawn Relationships
 ```javascript
-// Build bidirectional maps
 const getControllingSpawnMap = () => {
   const controllerToControlled = new Map<number, number[]>();
   const controlledToController = new Map<number, number>();
@@ -347,702 +303,132 @@ const getControllingSpawnMap = () => {
   
   return { controllerToControlled, controlledToController };
 };
-
-// Auto-select controlled spawns when controller is selected
-useEffect(() => {
-  // ... build autoSelections map ...
-  
-  // Only update if there are actual changes (prevents infinite loop)
-  if (Object.keys(autoSelections).length > 0) {
-    const hasChanges = Object.entries(autoSelections).some(
-      ([conditionalName, spawnName]) => 
-        selectedConditionalSpawns[conditionalName] !== spawnName
-    );
-    
-    if (hasChanges) {
-      setSelectedConditionalSpawns(prev => ({ ...prev, ...autoSelections }));
-    }
-  }
-}, [selectedConditionalSpawns, project?.strings]);
 ```
 
-### Inline Spawn Editing
+---
+
+## File Structure
+
+```
+frontend/src/
+├── app/
+│   ├── (dashboard)/
+│   │   ├── projects/[id]/page.tsx      # Main project page
+│   │   ├── registry/page.tsx           # Registry page
+│   │   └── settings/page.tsx           # User settings
+│   └── style-guide/page.tsx            # Style reference page
+├── components/
+│   ├── StringEditDrawer.tsx            # Legacy drawer + VariableSearchSelect
+│   ├── StringTile.tsx                  # Reusable string card component
+│   ├── ImageToTextModal.tsx            # Image upload for text extraction
+│   ├── StyleGuideModal.tsx             # AI style guide generation
+│   └── header.tsx                      # App header with breadcrumbs
+├── hooks/
+│   ├── useSessionDrawer.ts             # Bottom drawer state adapter
+│   └── useEditSession.ts               # Multi-variable session management
+├── lib/
+│   ├── stringOperations.ts             # Save logic for strings/conditionals
+│   ├── featureFlags.ts                 # Feature flag configuration
+│   └── HeaderContext.tsx               # Context for header breadcrumbs
+└── styles/
+    └── embedded-variables.scss         # Centralized variable styling
+```
+
+### Key Files
+
+- **`page.tsx`**: Main project UI with canvas, sidebar, and bottom drawer
+- **`useSessionDrawer.ts`**: Adapter between useEditSession and drawer interface
+- **`useEditSession.ts`**: Core session management for multi-variable editing
+- **`stringOperations.ts`**: API calls for saving strings and conditionals
+- **`featureFlags.ts`**: Centralized feature flag control (FEATURES.REGISTRY)
+- **`StringTile.tsx`**: Reusable card component for strings
+- **`VariableSearchSelect`**: Exported from StringEditDrawer for search/select UI
+
+---
+
+## Styling System
+
+### Logo
+- Font: Courgette (Google Fonts)
+
+### Color Variables (CSS/SCSS)
+```scss
+$string-var-color: teal;           // String variable accents
+$conditional-var-color: orange;    // Conditional variable accents
+$pending-var-color: mediumpurple;  // Pending/new variable accents
+```
+
+### Embedded Variable Classes
+- `.embedded-var-string-{0-4}` - Nested string styling with progressive tinting
+- `.embedded-var-conditional-{0-4}` - Nested conditional styling
+- Uses `mix()` function for solid hover colors (no transparency)
+
+### Text Styles
+- **Description Text**: `text-sm text-muted-foreground` - Used for hashes, previews, helper text
+- Reference `/style-guide` page for complete style documentation
+
+---
+
+## Feature Flags
+
+Located in `frontend/src/lib/featureFlags.ts`:
+
 ```typescript
-// Component: StringEditDrawer.tsx
-<Input
-  value={spawn.display_name || ''}
-  onChange={(e) => onUpdateSpawn?.(index, { ...spawn, display_name: e.target.value })}
-  placeholder="Enter variable name"
-/>
-
-<Textarea
-  value={spawn.content || ''}
-  onChange={(e) => onUpdateSpawn?.(index, { ...spawn, content: e.target.value })}
-  placeholder="Enter spawn content"
-  rows={3}
-/>
-
-// Hook: useStringEditDrawer.ts
-const updateSpawn = useCallback((index: number, updatedSpawn: any) => {
-  setState(prev => ({
-    ...prev,
-    conditionalSpawns: prev.conditionalSpawns.map((spawn, i) => 
-      i === index ? updatedSpawn : spawn
-    )
-  }));
-}, []);
-
-// Save logic: stringOperations.ts
-const spawnPayload = {
-  content: spawn.content?.trim() || 'Default spawn content',
-  display_name: spawn.display_name?.trim() || null,  // Triggers slugify
-  is_conditional: false,
-  is_conditional_container: false,
-  project: projectId,
+export const FEATURES = {
+  REGISTRY: false,  // Registry, Publishing tab, Focus Mode
 };
 ```
 
-### Inline Embedded Variable Editing
-```typescript
-// State management in useStringEditDrawer.ts
-embeddedVariableEdits: {[variableId: string]: {display_name?: string; content?: string}};
-pendingVariableContent: {[variableName: string]: string};
-
-// Component: StringEditDrawer.tsx - Existing variables
-const currentEdits = embeddedVariableEdits[stringVar.id] || {};
-const currentDisplayName = currentEdits.display_name !== undefined 
-  ? currentEdits.display_name 
-  : (stringVar.display_name || '');
-
-<Input
-  value={currentDisplayName}
-  onChange={(e) => {
-    const newEdits = {
-      ...embeddedVariableEdits,
-      [stringVar.id]: { ...currentEdits, display_name: e.target.value }
-    };
-    onEmbeddedVariableEditsChange(newEdits);
-  }}
-/>
-
-// Component: StringEditDrawer.tsx - Pending variables
-<Textarea
-  value={pendingVariableContent[variableName] || ''}
-  onChange={(e) => {
-    const newContent = { ...pendingVariableContent, [variableName]: e.target.value };
-    onPendingVariableContentChange(newContent);
-  }}
-  placeholder="Enter content or leave blank for default"
-/>
-
-// Save logic: useStringEditDrawer.ts
-const saveEmbeddedVariableEdits = async () => {
-  for (const [variableId, edits] of Object.entries(state.embeddedVariableEdits)) {
-    const payload: any = {};
-    if (edits.display_name !== undefined) payload.display_name = edits.display_name?.trim() || null;
-    if (edits.content !== undefined) payload.content = edits.content?.trim() || 'Default content';
-    await apiFetch(`/api/strings/${variableId}/`, { method: 'PATCH', body: JSON.stringify(payload) });
-  }
-};
-
-// Custom content for new variables
-const customContent = state.pendingVariableContent[varName];
-const content = customContent && customContent.trim() 
-  ? customContent.trim() 
-  : `Content for ${varName}`;
-```
-
-### Nested Variable Prevention
-```typescript
-// Validation in save function (useStringEditDrawer.ts)
-// Check spawn content
-for (const spawn of state.conditionalSpawns) {
-  if (spawn.content && spawn.content.includes('{{')) {
-    throw new Error(
-      `Spawn variable "${spawn.display_name || 'Unnamed'}" contains embedded variables ({{...}}). ` +
-      `Nested variables cannot be added in this view. Please open the variable directly.`
-    );
-  }
-}
-
-// Check embedded variable edits
-for (const [variableId, edits] of Object.entries(state.embeddedVariableEdits)) {
-  if (edits.content && edits.content.includes('{{')) {
-    throw new Error(
-      `Embedded variable "${varName}" contains nested variables ({{...}}). ` +
-      `Please open the variable directly to add embedded variables.`
-    );
-  }
-}
-
-// Check pending variable content
-for (const [varName, content] of Object.entries(state.pendingVariableContent)) {
-  if (content && content.includes('{{')) {
-    throw new Error(
-      `New variable "${varName}" contains embedded variables ({{...}}). ` +
-      `Please open the variable directly after creation.`
-    );
-  }
-}
-```
-
-### Error Handling
-```javascript
-// Graceful handling of API errors
-try {
-  await apiFetch(`/api/strings/${stringId}/`, {
-    method: 'DELETE',
-  });
-} catch (deleteError: any) {
-  const errorStr = deleteError.message || String(deleteError);
-  if (errorStr.includes('Not found') || errorStr.includes('404')) {
-    console.log(`Already removed, continuing...`);
-  } else {
-    console.error(`Failed to delete:`, deleteError);
-    // Optionally re-throw for critical operations
-  }
-}
-```
-
----
-
-## Major Architectural Changes
-
-### Dimensions Elimination (January 2025)
-
-**Previous Architecture**:
-```
-User sees: "Dimensions" → "Dimension Values"
-Backend:   Conditional Variable → Dimension → Dimension Values → Spawn Variables
-Frontend:  selectedDimensionValues[dimensionId] = dimensionValueName
-```
-
-**New Architecture**:
-```
-User sees: Conditional Variables → Spawn Variables (direct)
-Backend:   Conditional Variable → Spawn Variables (no dimension layer)
-Frontend:  selectedConditionalSpawns[conditionalName] = spawnName
-```
-
-**Key Changes**:
-- Conditions sidebar shows actual conditional/spawn variable names
-- Direct spawn selection without dimension ID lookups
-- Dimension API endpoints removed from backend
-- Backend dimension signals and helper methods removed
-- Frontend dimension-related API calls removed from `stringOperations.ts`
-- Dimension models remain in database for data preservation
-
-**Benefits**:
-- Simplified mental model (what you see = actual data structure)
-- Reduced complexity (eliminated abstraction layer)
-- Better performance (direct name lookups)
-- Clearer UI ("Conditions" instead of "Dimensions")
-- Smaller codebase (removed dimension ViewSets, serializers, signals)
-
-### Unified Drawer System (January 2025)
-
-**Consolidated**:
-- 4+ duplicate drawer systems → Single `StringEditDrawer` component
-- Multiple save functions → Single `saveString` function in `stringOperations.ts`
-- Inconsistent interfaces → Unified 3-tab structure (Content, Conditions, Advanced)
-
-**Results**:
-- 60% code reduction
-- Consistent UX across all editing scenarios
-- Easier maintenance and debugging
-- Single source of truth for drawer logic
-
----
-
-## Working Features
-
-### Core Functionality
-- ✅ Authentication system with Django sessions
-- ✅ Project management with CRUD operations
-- ✅ String-as-variable system with auto-slugify generation
-- ✅ Variable embedding with recursive processing
-- ✅ Conditional system with spawn management
-- ✅ Controlling condition relationships
-- ✅ Inline spawn editing
-- ✅ Inline embedded variable editing
-- ✅ Custom content for new variables
-- ✅ Nested variable prevention validation
-- ✅ Circular reference protection
-- ✅ Canvas display control (hide embedded, toggle names/hashes)
-- ✅ Delete protection for in-use variables (embedded or spawn)
-
-### UI/UX
-- ✅ Three-panel responsive layout (Conditions sidebar, Canvas, Variables sidebar)
-- ✅ Unified drawer system for all editing
-- ✅ Canvas Settings drawer with display options
-- ✅ Conditions sidebar with spawn selection (conditionals excluded from canvas)
-- ✅ Yellow/purple/orange variable detection boxes
-- ✅ Bulk operations with floating action bar
-- ✅ String duplication preserving variable references
-- ✅ Grand Hotel font for logo
-
-### Technical
-- ✅ Idempotent operations throughout
-- ✅ Comprehensive content validation (including nested variable prevention)
-- ✅ Django signals for variable name tracking
-- ✅ Frontend/backend validation alignment
-- ✅ Slugify-based variable naming
-- ✅ Local state management for inline editing
-- ✅ Graceful error handling for race conditions
-- ✅ Dimension layer removed (simplified architecture)
-
----
-
-## Testing Focus Areas
-
-### Critical Flows
-1. **Inline Embedded Variable Editing**: Edit embedded variable names/content → save parent → verify slugify → check updates
-2. **Custom Content for New Variables**: Add new variable with custom content → save → verify content persists
-3. **Nested Variable Prevention**: Try adding `{{var}}` in spawn/embedded content → verify validation blocks it
-4. **Inline Spawn Editing**: Edit spawn names/content → save → verify slugify → check conditions sidebar updates
-5. **Controlling Conditions**: Set controller → select controller spawn → verify auto-selection and disabled states
-6. **Variable Embedding**: Multi-level A→B→C references work correctly
-7. **Circular Protection**: Self-reference and loops properly blocked
-8. **Canvas Filtering**: Hide embedded strings, toggle names/hashes, plaintext mode
-9. **Hidden Option Toggle**: Enable/disable "Hidden" option for conditional variables → verify no "Not found" errors
-
-### UI/UX
-1. **Drawer System**: Unified drawer handles create/edit for strings and conditionals
-2. **Embedded Variables Section**: Shows existing (purple/orange) and new (yellow) variables with inline editing
-3. **Conditions Sidebar**: Spawn selection, auto-selection, disabled states display correctly
-4. **Canvas**: Only shows string variables (conditionals excluded)
-5. **Variable Boxes**: Yellow (new), purple (existing strings), orange (conditionals) appear correctly
-6. **Canvas Settings**: All toggles work together properly
+When `FEATURES.REGISTRY` is false:
+- "View Registry" button hidden on homepage
+- "Publishing" tab hidden in drawer
+- "Focus mode" option hidden in overflow menus
 
 ---
 
 ## Development Workflow
 
 ### Git Operations
-- **IMPORTANT**: Do NOT commit or push code changes unless explicitly requested by the user
-- Only make the requested code changes and let the user handle git operations when ready
-- User prefers to control their own commit timing and messages
+- Do NOT commit or push unless explicitly requested
+- User controls commit timing and messages
 
 ### Development Servers
-**Auto-Start Configuration**: The project has `.vscode/tasks.json` configured to automatically start both servers when the workspace opens:
-- **Backend Server**: Green terminal, server icon, runs `python manage.py runserver` (port 8000)
-- **Frontend Server**: Blue terminal, browser icon, runs `npm run dev` (port 3000)
+**Auto-Start**: `.vscode/tasks.json` starts both servers on workspace open
 
-**Manual Start**: If servers need to be restarted manually:
-- **Start each server in a separate Cursor/VS Code terminal window**
-- **Backend**: `cd backend && source env/bin/activate && python manage.py runserver`
-- **Frontend**: `cd frontend && npm run dev`
-- Run each as a background process so they persist
+**Manual Start**:
+- Backend: `cd backend && source env/bin/activate && python manage.py runserver`
+- Frontend: `cd frontend && npm run dev`
 
-**VS Code Tasks Available**:
-- "Backend Server" - Starts Django backend
-- "Frontend Server" - Starts Next.js frontend  
-- "Start All Servers" - Starts both together
-- Access via `Cmd+Shift+P` → "Tasks: Run Task"
-
-### File Structure
-```
-frontend/src/
-├── components/
-│   └── StringEditDrawer.tsx          # Unified drawer component
-├── hooks/
-│   └── useStringEditDrawer.ts        # Unified state management
-├── lib/
-│   └── stringOperations.ts           # Consolidated save logic
-└── app/(dashboard)/projects/[id]/
-    └── page.tsx                      # Main project page
-```
-
-### Key Files
-- **`page.tsx`**: Main UI, conditions sidebar, canvas, bottom drawer, state management
-- **`header.tsx`**: App header with project breadcrumb (uses HeaderContext)
-- **`HeaderContext.tsx`**: Context for passing project info to header from pages
-- **`StringEditDrawer.tsx`**: Unified drawer for all editing scenarios (legacy side sheet)
-  - Contains `VariableSearchSelect` reusable component for embed/spawn variable search
-- **`DrawerNavigation.tsx`**: Visual hierarchy sidebar for variable relationships
-- **`VariableHashBadge.tsx`**: Reusable hash badge component with copy-to-clipboard
-- **`useSessionDrawer.ts`**: Bottom drawer state and operations
-- **`useEditSession.ts`**: Multi-variable editing session management
-- **`stringOperations.ts`**: Save logic for strings and conditionals
-- **`backend/strings_api/models.py`**: String model with slugify logic
-- **`backend/strings_api/serializers.py`**: API serializers
-- **`frontend/src/styles/embedded-variables.scss`**: Centralized styling for embedded variables and hash badges
-- **`frontend/src/components/ui/tooltip.tsx`**: ShadCN/UI tooltip component
-- **`frontend/src/components/ui/sheet.tsx`**: ShadCN/UI sheet component (modified for wider drawer)
-
-### Reusable Components
-
-**VariableSearchSelect** (in `StringEditDrawer.tsx`):
-- Shared search/select component for embedding and spawning variables
-- Props: `label`, `helperText`, `searchValue`, `onSearchChange`, `showResults`, `onShowResultsChange`, `availableVariables`, `onSelect`, `maxResults`
-- Features:
-  - Dropdown opens on focus (shows recent variables even before typing)
-  - Type-ahead search filters by name/hash and content
-  - Spawn variables shown with `isSpawn: true` are visible but not selectable
-  - Color-coded: Teal icons for strings, Orange icons for conditionals
-  - Shows content preview and type badges for each result
-
----
-
-## Embedded Variable Styling System
-
-### Overview
-All embedded variable styling is centralized in a single SCSS file for easy customization. The system uses semantic naming (based on what the element is, not how it looks) and progressive tinting for nested variables of the same type.
-
-### File Location
-- **`frontend/src/styles/embedded-variables.scss`**: All embedded variable styles
-- **`frontend/src/styles/README.md`**: Customization guide
-
-### Color Variables (Customizable)
-```scss
-// Edit these to change the entire color scheme
-$string-var-color: blue;              // Border color for string variables
-$string-text-color: black;            // Text color for string variables
-$conditional-var-color: gold;         // Border color for conditional variables
-$conditional-text-color: black;       // Text color for conditional variables
-```
-
-### Semantic Class Names
-- **String Variables**: `.embedded-var-string-{0-4}` (not color-based like "purple")
-- **Conditional Variables**: `.embedded-var-conditional-{0-4}` (not color-based like "orange")
-- **Badge Mode**: `.embedded-var-badge-string`, `.embedded-var-badge-conditional`
-
-### DRY Architecture
-Uses attribute selectors to apply base styles to all depth levels:
-```scss
-// Base styles for ALL string variables
-[class*="embedded-var-string-"] {
-  color: $string-text-color;
-  border-color: $string-var-color;
-  padding: 0 0 4px;
-}
-
-// Only depth-specific hover backgrounds
-.embedded-var-string-0:hover { background-color: tint($string-var-color, 70%); }
-.embedded-var-string-1:hover { background-color: tint($string-var-color, 60%); }
-// ... etc
-```
-
-### Progressive Hover Tinting
-- **Depth 0**: `tint(70%)` - Very light (70% white mixed in)
-- **Depth 1**: `tint(60%)` - Slightly darker
-- **Depth 2**: `tint(50%)` - Medium
-- **Depth 3**: `tint(40%)` - Darker
-- **Depth 4**: `tint(30%)` - Darkest
-
-### Tint/Shade Functions
-Uses SCSS `mix()` function for solid colors (no transparency):
-```scss
-@function tint($color, $percentage) {
-  @return mix(white, $color, $percentage);
-}
-
-@function shade($color, $percentage) {
-  @return mix(black, $color, $percentage);
-}
-```
-
-### Same-Type Nesting Logic
-- **Color context tracking**: Tracks whether parent is 'string' or 'conditional'
-- **Depth resets**: When variable type changes (string→conditional or vice versa), depth resets to 0
-- **Progressive tinting**: Only applies when same type is nested within itself
-
-**Example:**
-```
-Parent string (no color) >
-  String var (depth 0, light hover) >
-    Conditional var (depth 0, type changed!) >
-      Conditional var (depth 1, darker hover) >
-        String var (depth 0, type changed!) >
-          String var (depth 1, darker hover)
-```
-
-### Border Behavior
-- **Always base color**: Border color never changes, regardless of depth or hover state
-- **Consistent identifier**: Acts as stable visual indicator of variable type
-
-### TypeScript Integration
-- Helper function: `getEmbeddedVarClass(type: 'string' | 'conditional', colorDepth: number)`
-- Function signatures: `colorContext: 'string' | 'conditional' | null`
-- Automatically applies correct class based on nesting context
-
----
-
-## Recent Major Updates (2025)
-
-### Bottom Drawer Edit System (Latest - January 2025)
-
-**Push Drawer Architecture**:
-- Variable editing now uses a bottom drawer that pushes content up (not an overlay)
-- Main content area (conditions sidebar + strings canvas) shrinks when drawer opens
-- User can still interact with page content while drawer is open
-- Drop shadow on top edge gives visual separation
-
-**Bottom Drawer Layout**:
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  New/Edit string [String|Cond]   [P]→[C]→[S1][S2]      [Copy] [X]       │  ← Header
-├─────────────┬───────────────────────────────────────────────────────────┤
-│ ○ Content   │                                                           │
-│ ○ Conditions│           Tab content area                                │  ← Main
-│ ○ Advanced  │           (Delete option in Advanced tab)                 │
-│             │                                                           │
-├─────────────┴───────────────────────────────────────────────────────────┤
-│                                                       [Cancel] [Save]   │  ← Footer
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-**Key Features**:
-- Header: Title, Type button group (String/Conditional), Mini-nav tiles (centered), Copy + Close buttons
-- Type selector is a button group (not dropdown) next to title
-- Mini-navigation tiles centered in header
-- Vertical sidebar tabs on left (Content, Conditions, Advanced)
-- Main content area on right for selected tab
-- Footer: Cancel/Save buttons on right only
-- Delete option moved to Advanced tab (danger zone section)
-- Auto-focus on content textarea when creating new string
-
-### App Header Project Breadcrumb (Latest - January 2025)
-
-**Project bar removed from project page**. Project info now in app header:
-- App header shows: `Strings > Project Name [edit] [overflow menu]`
-- Edit icon opens project edit modal
-- Overflow menu: Import Strings, Download CSV, Duplicate Project, Delete Project
-- Uses `HeaderContext` to pass project info from page to header component
-
-### Global Search (Latest - January 2025)
-
-**Search bar in canvas header** (next to "Project Strings" title):
-- Filters both conditions sidebar AND strings canvas simultaneously
-- Searches by: content, variable name, variable hash, display name
-- Conditionals show if they match OR if any of their spawns match
-- Clear button (X) when search has text
-
-### Copy Reference UX (Latest - January 2025)
-
-**Standalone copy button with tooltip** on all variable tiles:
-- Conditional variables in sidebar: Copy button before Edit button
-- Spawn variables (selected and unselected): Copy button before Edit button
-- Strings in canvas: Copy button before overflow menu
-- Bottom drawer header: Copy button next to Close button
-- All have consistent "Copy reference" tooltip on hover
-- Removed "Copy reference" from overflow menus (now direct button)
-
-### Variable Search/Select Restored (Latest - January 2025)
-
-**VariableSearchSelect component** now used in bottom drawer:
-- **String Content Tab**: "Embed Existing Variable" search below content textarea
-  - Search/select to add `{{variableName}}` to content
-  - Shows toast confirmation when added
-- **Conditional Content Tab**: "Add Existing Variable as Spawn" search near Add Spawn button
-  - Search/select to add existing variable as spawn
-  - Shows toast confirmation when added
-- Component exported from `StringEditDrawer.tsx` for reuse
-
-### Edit Mode Quick-Add Buttons (Latest - January 2025)
-
-**"+" buttons appear on variable tiles when bottom drawer is open**:
-- Creates an "edit mode" experience for the entire project
-- When drawer is closed, "+" buttons disappear
-
-**Locations**:
-- **String cards in canvas**: Prominent "+" button at left of each card
-- **Conditional variables in sidebar**: "+" button to left of conditional header
-- **NOT on spawn variables**: Spawns don't have this button
-
-**Behavior**:
-- If editing a **string variable**: Clicking "+" embeds `{{variableName}}` at end of content
-- If editing a **conditional variable**: Clicking "+" adds clicked variable as a spawn
-- Toast notifications confirm the action ("Added {{hash}} as spawn" or "Added {{hash}} to content")
-- Works seamlessly with global search to find and add variables quickly
-
-**Styling**:
-- Primary color background/border (`bg-primary/10 border-primary/30`)
-- Primary color icon
-- Tooltip shows action ("Add as spawn" or "Embed in content")
-
-### Dimension Layer Removal (Latest - January 2025)
-- **Backend**: Removed dimension-related signals, helper methods, and API ViewSets
-  - Removed `DimensionViewSet`, `DimensionValueViewSet`, `StringDimensionValueViewSet` from `views.py`
-  - Removed router registrations for dimension endpoints from `urls.py`
-  - Removed `update_dimension_values_from_variables()` method from `String` model
-  - Removed dimension-related signals (`update_dependent_strings_when_string_variable_changes`, etc.)
-  - Removed calls to dimension methods from `StringSerializer`
-- **Frontend**: Removed dimension API calls from `stringOperations.ts`
-  - Conditional variables now saved using only `is_conditional_container` flag
-  - Spawn variables linked via `controlled_by_spawn_id` field
-  - No more `/api/dimensions/`, `/api/dimension-values/` calls
-- **Data Preservation**: Dimension models (`Dimension`, `DimensionValue`, `StringDimensionValue`) still exist in database for historical data
-
-### Controlling Spawn Selector Enhancement (Latest - January 2025)
-- **Content Preview**: Each spawn option in the controlling condition dropdown now shows a content preview
-  - Content resolved to plaintext based on current conditional selections
-  - Truncated to 60 characters with ellipsis for long content
-- **Enhanced Search**: Type-ahead search now filters by both ID/hash AND content
-  - Makes it easier to find correct spawn when many exist with similar names
-  - Search matches on `display_name`, `effective_variable_name`, `variable_hash`, and `content`
-
-### Drawer Navigation System
-- **Visual Hierarchy Sidebar**: Shows parents, current variable, and children as clickable squares
-- **Parent Detection**: Automatically finds variables that embed or spawn the current one
-- **Child Display**: Shows spawns, embedded, and pending variables
-- **Size Differentiation**: Active (48px centered), Parents/Children (36px)
-- **Branching Tree Structure**: 
-  - **Parents Section**: Vertical line descends from horizontal center of active tile's top; horizontal connectors branch LEFT from vertical line to each parent tile's right edge (at vertical center)
-  - **Children Section**: Vertical line descends from horizontal center of active tile's bottom; horizontal connectors branch RIGHT from vertical line to each child tile's left edge (at vertical center)
-- **Consistent Layout**: Mini-nav sidebar width (120px) accommodates full parent + active + child layout with 16px horizontal padding
-- **1px Border Stroke**: All tiles (active and inactive) use 1px border for consistency
-- **Click-to-Navigate**: Immediate navigation to any related variable
-- **Hover Tooltips**: Fixed-position tooltips with variable names and relationships
-- **Color-Coded**: Teal for strings, Orange for conditionals (uses CSS variables `--string-var-color` and `--conditional-var-color`)
-- **Simplified Content Tab**: Removed inline editing sections (now handled via navigation)
-- **Component Architecture**: Separate `NodeSquare` component with consistent sizing and styling
-
-### Drawer UI Refinements
-- **Auto-focus Content Field**: When creating a new string variable, the content textarea automatically receives focus so users can immediately start typing
-- **Unified Variable Hash Badges**: All variable hashes use `VariableHashBadge` component
-  - Click-to-copy functionality throughout app
-  - Gradient backgrounds: String variables (color → gray), Conditional variables (color → gray)
-  - Type-aware styling via `type` prop ('string' | 'conditional' | 'default')
-  - Centralized in SCSS with `$string-var-color` and `$conditional-var-color`
-  - Border radius: 0.375rem (rounded-md) for consistency
-- **Pending Variable Indicators**: Sparkles icon (✨) with tooltip ("Pending/New") for new variables
-  - Purple color (`$pending-var-color: mediumpurple`) in SCSS
-  - Replaces "New variable!" and "Existing variable" badges
-  - Standalone icon without box/border, size h-5 w-5
-- **Minimal Card Design**: 
-  - Removed all type indicator icons (Plus, Spool, Folder) from variable cards
-  - Unified shadow-based cards: `shadow-sm hover:shadow-md transition-all`
-  - Clean borders without background colors
-  - Focus on content rather than visual noise
-  - Consistent styling for embedded, spawn, and pending variable cards
-- **Drawer Header Layout**: Variable hash badge positioned beneath title instead of side-by-side
-- **Conditional Variable Editing**: Removed edit icons and messages for conditional variables in embedded/spawn lists
-  - No misleading paths to edit conditionals from inline contexts
-  - Conditional variables shown as read-only in inline contexts
-- **Spawn Remove Button**: Neutral ghost button styling (no red coloring)
-- **Tooltip Component**: Added ShadCN/UI tooltip component (`@radix-ui/react-tooltip`)
-- **Conditions Sidebar Badge Refinements**:
-  - All selected spawn badges use solid conditional color background (no gradient)
-  - Text always neutral gray (rgb(55 65 81)) - never changes on hover or active state
-  - Font weight: medium (500) - not bold
-  - Border radius: 0.375rem (rounded-md) matching hash badges
-  - Locked/controlled spawns: Lock icon (🔒) prefix + 60% opacity
-  - Removed "(auto)" and "(locked)" text labels
-  - Pencil edit icon always has cursor-pointer, even on disabled badges
-  - Unselected badges stay neutral on hover (no color change)
-
-### Embedded Variable Styling System
-- **Centralized SCSS file**: All embedded variable styling consolidated into `frontend/src/styles/embedded-variables.scss`
-- **Semantic naming**: Classes use `string`/`conditional` instead of color names (`purple`/`orange`)
-- **DRY architecture**: Attribute selectors for base styles, depth classes only define hover backgrounds
-- **Customizable colors**: Four variables at top of file control entire color scheme
-- **Progressive hover tinting**: Uses SCSS `mix()` function for solid colors (no transparency)
-- **Same-type nesting logic**: Color depth only increments when same type is nested within itself
-- **Consistent borders**: Border color always uses base color, never changes on hover or with depth
-- **Easy customization**: Change entire color scheme by editing 4 variables
-
-### Inline Embedded Variable Editing (Latest)
-- Edit existing embedded variables' names/content directly within parent string drawer
-- Custom content input for new embedded variables (optional, defaults to "Content for {name}")
-- Purple/orange tiles for existing variables, yellow tiles for new variables
-- Local state management prevents React mutation issues
-- Batch save: all embedded variable edits saved together with parent string
-- Nested variable prevention: Validation blocks `{{...}}` in inline editing contexts
-
-### Canvas Simplification
-- Conditional variables removed from canvas (managed exclusively in Conditions sidebar)
-- Canvas now shows string variables only
-- Removed String Type Filter section from Canvas Settings
-- Clearer separation: strings in canvas, conditionals in sidebar
-- Improved performance with fewer items to render
-
-### Font Update
-- Logo font changed from Knewave to Grand Hotel
-- Elegant cursive style for more artistic feel
-- Google Fonts integration via Next.js font system
-
-### Inline Spawn Editing Feature
-- Edit spawn names and content directly within conditional variable drawer
-- Variable Name input for all spawn types (triggers slugify)
-- Content textarea for string variables only
-- Conditional spawns show name + edit button
-- Batch save: all spawn edits saved together
-- Conditions sidebar automatically syncs with new slugified names
-
-### Controlling Condition Feature
-- Spawn variables can be controlled by other spawn variables
-- When controller spawn is selected → controlled spawn auto-selects
-- Sibling spawns of controlled spawn become disabled
-- Visual indicators: green "(auto)" for controlled, grey "(locked)" for disabled
-- Edit icons still work on disabled spawns
-- Prevents infinite loops with hasChanges check
-- **Enhanced Spawn Selector** (Latest):
-  - Content preview shown below each spawn option (resolved to plaintext using current conditional settings)
-  - Content truncated to 60 characters with ellipsis
-  - Type-ahead search filters by ID/hash AND content
-  - Makes it easier to identify correct spawn when many exist
-
-### Canvas Display Controls
-- Hide Embedded Strings (OFF by default) - Shows all strings including embedded/spawn
-- Show Variable Names (ON by default)
-- Show Variable Hashes (OFF by default)
-- Plaintext Mode toggle
-- Show Variables toggle
-- Hide Controlled Variables (ON by default) - Hides spawns with controlling conditions from sidebar
-
-### Slugify-Based Variable Naming
-- Display names automatically converted to URL-friendly identifiers
-- Backend uses python-slugify with uniqueness handling
-- Fallback to random 6-char hash if no display name
-- Frontend shows live preview of generated slug
-- Conditions sidebar displays slugified names
-
-### Dimensions Elimination (Complete)
-- Frontend UI simplified to work directly with conditional/spawn variables
-- Eliminated abstract "dimensions" layer from user interface
-- Backend dimension API endpoints removed (`/api/dimensions/`, `/api/dimension-values/`, `/api/string-dimension-values/`)
-- Backend dimension signals and helper methods removed from `models.py`
-- Frontend dimension-related API calls removed from `stringOperations.ts`
-- Dimension models remain in database for data preservation (no migration needed)
-- Improved performance and clarity
+### Style Guide Page
+- **URL**: `http://localhost:3000/style-guide`
+- Reference for all text styles used in the app
 
 ---
 
 ## Implementation Guidelines
 
 ### String Variables
-- Every string is automatically a variable (no opt-in)
-- Purple badges for strings (conditionals not shown in canvas)
-- Always show `{{effectiveVariableName}}` with copy functionality
-- Canvas shows string variables only (conditionals managed in sidebar)
-- Use Canvas Settings to hide embedded strings
+- Every string is automatically a variable
+- Variable hash is the sole identifier (no separate display name)
+- Canvas shows string variables only (conditionals in sidebar)
 
 ### Variable Embedding
-- Use `{{variableName}}` syntax only
+- Use `{{variableHash}}` syntax
 - Max 10 levels depth with visited set tracking
 - Process with current spawn selections
 - Validate against circular references
 
-### Unified Drawer System
-- All editing uses `StringEditDrawer` component
-- `useStringEditDrawer` manages all state and operations
-- Variable Type dropdown for String/Conditional selection
-- Auto-repair for missing `is_conditional_container` flags
-- Consolidated save logic handles all scenarios
-
-### Content Validation
-- Multiple layers: Frontend + backend validation
-- Default fallbacks: Never allow empty content
-- Meaningful errors: Specific validation messages
-- Idempotent operations: Safe to retry
+### Session-Based Editing
+- All related variables edited in one session
+- Changes tracked with `isDirty` flag
+- Save all on drawer close
+- Navigate between variables via mini-nav
 
 ### Error Handling
 - Null safety: Use `project?.strings` patterns
 - Graceful degradation: Fallbacks for missing data
-- User feedback: Clear error messages via toast
-- Race condition handling: Check for "Not found" errors when backend signals pre-empt frontend operations
+- User feedback: Toast notifications for actions and errors
 
 ---
 
-**CORE PRINCIPLE**: This is a file system for text content. Every string is a file, conditionals are directories, and the unified drawer system enables consistent editing throughout the hierarchy. Maintain this analogy for intuitive user experience.
+**CORE PRINCIPLE**: This is a file system for text content. Every string is a file, conditionals are directories, and the bottom drawer with session-based editing enables seamless navigation throughout the hierarchy. Maintain this analogy for intuitive user experience.

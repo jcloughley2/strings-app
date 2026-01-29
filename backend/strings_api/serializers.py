@@ -16,14 +16,40 @@ class StringSerializer(serializers.ModelSerializer):
     class Meta:
         model = String
         fields = ['id', 'content', 'project', 'variable_name', 'variable_hash', 'display_name', 'effective_variable_name', 'is_conditional', 'is_conditional_container', 'controlled_by_spawn_id', 'is_published', 'dimension_values', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'variable_name', 'variable_hash', 'effective_variable_name', 'created_at', 'updated_at']
+        # variable_hash is now editable (but validated), display_name and variable_name are deprecated
+        read_only_fields = ['id', 'variable_name', 'effective_variable_name', 'created_at', 'updated_at']
+        # Disable automatic unique_together validation since variable_name is synced with variable_hash
+        validators = []
     
     def get_dimension_values(self, obj):
         return StringDimensionValueSerializer(obj.dimension_values.all(), many=True).data
 
     def validate(self, data):
-        # Note: variable_name is now auto-generated from display_name in the model's save() method
-        # No need to validate variable_name here as it's read-only
+        # Validate variable_hash format if provided
+        variable_hash = data.get('variable_hash')
+        if variable_hash:
+            # Must be alphanumeric with optional hyphens, no spaces, reasonable length
+            if not re.match(r'^[A-Za-z0-9][A-Za-z0-9\-]*$', variable_hash):
+                raise serializers.ValidationError({
+                    'variable_hash': 'Hash must start with a letter or number and contain only letters, numbers, and hyphens (no spaces).'
+                })
+            if len(variable_hash) > 50:
+                raise serializers.ValidationError({
+                    'variable_hash': 'Hash must be 50 characters or less.'
+                })
+            # Check for uniqueness within the project
+            project = data.get('project') or (self.instance.project if self.instance else None)
+            if project:
+                existing = String.objects.filter(
+                    project=project,
+                    variable_hash=variable_hash
+                )
+                if self.instance:
+                    existing = existing.exclude(id=self.instance.id)
+                if existing.exists():
+                    raise serializers.ValidationError({
+                        'variable_hash': f'A variable with hash "{variable_hash}" already exists in this project.'
+                    })
         
         project = data.get('project')
         content = data.get('content', '')

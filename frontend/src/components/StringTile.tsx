@@ -4,7 +4,6 @@ import { ReactNode } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { VariableHashBadge } from "@/components/VariableHashBadge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -165,13 +164,10 @@ export function StringTile({
               )}
             </div>
 
-            {/* Variable Hash Badge */}
+            {/* Variable Hash */}
             {showVariableHash && (
-              <div className="mt-2">
-                <VariableHashBadge
-                  hash={string.effective_variable_name || string.variable_hash}
-                  type={isConditional ? "conditional" : "string"}
-                />
+              <div className="mt-1 text-xs text-muted-foreground/70">
+                {string.effective_variable_name || string.variable_hash}
               </div>
             )}
 
@@ -262,7 +258,7 @@ export function StringTile({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      variant="default"
+                      variant="ghost"
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();

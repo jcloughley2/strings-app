@@ -12,6 +12,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 
 import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Settings, EyeOff, Hash, Lock, PanelBottom, Search, Sparkles } from "lucide-react";
@@ -21,8 +22,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { Textarea } from "@/components/ui/textarea";
-import { VariableHashBadge } from "@/components/VariableHashBadge";
-import { StringEditDrawer } from "@/components/StringEditDrawer";
+import { StringEditDrawer, VariableSearchSelect } from "@/components/StringEditDrawer";
 import { ImageToTextModal } from "@/components/ImageToTextModal";
 import { StringTile } from "@/components/StringTile";
 import { useSessionDrawer } from "@/hooks/useSessionDrawer";
@@ -55,6 +55,10 @@ export default function ProjectDetailPage() {
   // Bottom drawer state
   const [isBottomDrawerOpen, setIsBottomDrawerOpen] = useState(false);
   
+  // Controlling spawn selector state (for conditions tab)
+  const [controllingSpawnSearch, setControllingSpawnSearch] = useState("");
+  const [showControllingSpawnResults, setShowControllingSpawnResults] = useState(false);
+  const [isControllingConditionEnabled, setIsControllingConditionEnabled] = useState(false);
   
   // Image to text modal state
   const [isImageToTextModalOpen, setIsImageToTextModalOpen] = useState(false);
@@ -443,7 +447,6 @@ export default function ProjectDetailPage() {
 
   
   // Helper function to copy variable reference to clipboard
-  // Matches the UX of VariableHashBadge component
   const copyVariableToClipboard = useCallback((hash: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const copyText = `{{${hash}}}`;
@@ -703,6 +706,14 @@ export default function ProjectDetailPage() {
       }
     }
   }, [selectedConditionalSpawns, project?.strings]);
+
+  // Reset controlling condition state when drawer opens or active variable changes
+  useEffect(() => {
+    // Initialize based on whether the current variable has a controlledBySpawnId
+    setIsControllingConditionEnabled(false);
+    setControllingSpawnSearch("");
+    setShowControllingSpawnResults(false);
+  }, [mainDrawer.stringData?.id]);
 
   // Detect new variables in string content and add them as pending variables
   useEffect(() => {
@@ -2502,7 +2513,7 @@ export default function ProjectDetailPage() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
-                              variant="default"
+                              variant="ghost"
                               size="sm"
                               className="h-6 w-6 p-0"
                               onClick={(e) => {
@@ -2548,7 +2559,7 @@ export default function ProjectDetailPage() {
                               })
                             : spawnOptions; // Show all spawns when setting is disabled
                           
-                          // Helper to render a spawn card
+                          // Helper to render a spawn card with radio button
                           const renderSpawnCard = (spawn: any) => {
                             const spawnHash = spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash;
                             const spawnDisplayName = spawnHash;
@@ -2569,199 +2580,137 @@ export default function ProjectDetailPage() {
                               ? contentPreview.slice(0, 60) + '...' 
                               : contentPreview;
                   
-                  if (isSelected) {
-                              // Selected spawn badge with content first, hash below, action buttons
-                    return (
-                      <div
-                                  key={spawn.id}
-                        className={`group rounded-md border px-2 py-1.5 transition-all ${
-                          (isControlled || hasControllingCondition)
-                            ? 'opacity-60' 
-                            : 'cursor-pointer'
-                        }`}
-                        style={{
-                          backgroundColor: 'var(--conditional-var-100)', // Solid color, not gradient
-                          borderColor: 'var(--conditional-var-200)',
-                          color: 'rgb(55 65 81)' // text-gray-700
-                        }}
-                      >
-                        {/* Content preview (primary) */}
-                        <div className="flex items-start gap-1">
-                          {(isControlled || hasControllingCondition) && <Lock className="h-3 w-3 flex-shrink-0 mt-0.5" />}
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm text-muted-foreground">
-                              {truncatedContent || <span className="text-muted-foreground italic">No content</span>}
-                            </div>
-                          </div>
-                          {/* Action buttons */}
-                          {spawn.id !== 'hidden' && (
-                            <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  mainDrawer.openEditDrawer(spawn);
+                            // Unified spawn card with radio button
+                            return (
+                              <div
+                                key={spawn.id}
+                                className={`group rounded-md border px-2 py-1.5 transition-all ${
+                                  (isDisabled || hasControllingCondition)
+                                    ? 'opacity-60'
+                                    : 'cursor-pointer hover:bg-gray-50'
+                                }`}
+                                style={{
+                                  backgroundColor: 'white',
+                                  borderColor: 'rgb(229 231 235)', // border-gray-200
+                                  color: 'rgb(55 65 81)' // text-gray-700
                                 }}
-                                className="rounded p-0.5 hover:bg-conditional-200 cursor-pointer"
-                                aria-label="Edit spawn variable"
-                                title="Edit"
-                              >
-                                <Edit2 className="h-3 w-3" />
-                              </button>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="rounded p-0.5 hover:bg-conditional-200 cursor-pointer"
-                                    aria-label="More options"
-                                  >
-                                    <MoreHorizontal className="h-3 w-3" />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      copyVariableToClipboard(spawnHash);
-                                    }}
-                                  >
-                                    <Copy className="h-4 w-4 mr-2" />
-                                    Copy reference
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDuplicateString(spawn);
-                                    }}
-                                  >
-                                    <Copy className="h-4 w-4 mr-2" />
-                                    Duplicate
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openDeleteStringDialog(spawn);
-                                    }}
-                                    className="text-red-600 focus:text-red-600"
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          )}
-                        </div>
-                        {/* Hash/ID (secondary) */}
-                        <div className="text-sm text-muted-foreground mt-1">
-                          {spawnDisplayName}
-                        </div>
-                      </div>
-                    );
-                  } else {
-                              // Unselected spawn badge with content first, hash below, edit and copy buttons
-                    return (
-                      <div
-                                  key={spawn.id}
-                        className={`group rounded-md border px-2 py-1.5 transition-all ${
-                          (isDisabled || hasControllingCondition)
-                            ? 'opacity-60'
-                            : 'cursor-pointer hover:bg-gray-100'
-                        }`}
-                        style={{
-                          backgroundColor: 'rgb(249 250 251)', // bg-gray-50 - stays neutral
-                          borderColor: 'rgb(229 231 235)', // border-gray-200
-                          color: 'rgb(55 65 81)' // text-gray-700
-                        }}
-                        onClick={() => {
-                          if (!isDisabled && !hasControllingCondition) {
-                            setSelectedConditionalSpawns(prev => ({
-                          ...prev,
-                              [conditionalName]: spawnHash
-                            }));
-                          }
-                        }}
-                      >
-                        {/* Content preview (primary) */}
-                        <div className="flex items-start gap-1">
-                          {(isDisabled || hasControllingCondition) && <Lock className="h-3 w-3 flex-shrink-0 mt-0.5" />}
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm text-muted-foreground">
-                              {truncatedContent || <span className="text-muted-foreground italic">No content</span>}
-                            </div>
-                          </div>
-                          {/* Action buttons */}
-                          {spawn.id !== 'hidden' && (
-                            <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  mainDrawer.openEditDrawer(spawn);
+                                onClick={() => {
+                                  if (!isDisabled && !hasControllingCondition && !isControlled) {
+                                    setSelectedConditionalSpawns(prev => ({
+                                      ...prev,
+                                      [conditionalName]: spawnHash
+                                    }));
+                                  }
                                 }}
-                                className="rounded p-0.5 hover:bg-gray-200 cursor-pointer"
-                                aria-label="Edit spawn variable"
-                                title="Edit"
                               >
-                                <Edit2 className="h-3 w-3" />
-                              </button>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="rounded p-0.5 hover:bg-gray-200 cursor-pointer"
-                                    aria-label="More options"
-                                  >
-                                    <MoreHorizontal className="h-3 w-3" />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      copyVariableToClipboard(spawnHash);
-                                    }}
-                                  >
-                                    <Copy className="h-4 w-4 mr-2" />
-                                    Copy reference
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDuplicateString(spawn);
-                                    }}
-                                  >
-                                    <Copy className="h-4 w-4 mr-2" />
-                                    Duplicate
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openDeleteStringDialog(spawn);
-                                    }}
-                                    className="text-red-600 focus:text-red-600"
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          )}
-                        </div>
-                        {/* Hash/ID (secondary) */}
-                        <div className="text-sm text-muted-foreground mt-1">
-                          {spawnDisplayName}
-                        </div>
-                      </div>
-                    );
-                  }
+                                {/* Main content row with radio button */}
+                                <div className="flex items-center gap-2">
+                                  {/* Radio button on left, vertically centered */}
+                                  <RadioGroupItem 
+                                    value={spawnHash} 
+                                    id={`spawn-${spawn.id}`}
+                                    disabled={isDisabled || hasControllingCondition || isControlled}
+                                    className="flex-shrink-0"
+                                    checked={isSelected}
+                                  />
+                                  
+                                  {/* Lock icon if controlled */}
+                                  {(isControlled || hasControllingCondition) && <Lock className="h-3 w-3 flex-shrink-0" />}
+                                  
+                                  {/* Content */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm text-foreground">
+                                      {spawn.id === 'hidden' 
+                                        ? <span className="italic text-muted-foreground">Hidden</span>
+                                        : truncatedContent || <span className="italic text-muted-foreground">No content</span>}
+                                    </div>
+                                    {/* Hash/ID - only show if showVariableHashes is enabled */}
+                                    {showVariableHashes && spawn.id !== 'hidden' && (
+                                      <div className="text-xs text-muted-foreground/70 mt-0.5">
+                                        {spawnDisplayName}
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Action buttons */}
+                                  {spawn.id !== 'hidden' && (
+                                    <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          mainDrawer.openEditDrawer(spawn);
+                                        }}
+                                        className="rounded p-0.5 hover:bg-gray-200 cursor-pointer"
+                                        aria-label="Edit spawn variable"
+                                        title="Edit"
+                                      >
+                                        <Edit2 className="h-3 w-3" />
+                                      </button>
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <button
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="rounded p-0.5 hover:bg-gray-200 cursor-pointer"
+                                            aria-label="More options"
+                                          >
+                                            <MoreHorizontal className="h-3 w-3" />
+                                          </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          <DropdownMenuItem
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              copyVariableToClipboard(spawnHash);
+                                            }}
+                                          >
+                                            <Copy className="h-4 w-4 mr-2" />
+                                            Copy reference
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleDuplicateString(spawn);
+                                            }}
+                                          >
+                                            <Copy className="h-4 w-4 mr-2" />
+                                            Duplicate
+                                          </DropdownMenuItem>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              openDeleteStringDialog(spawn);
+                                            }}
+                                            className="text-red-600 focus:text-red-600"
+                                          >
+                                            <Trash2 className="h-4 w-4 mr-2" />
+                                            Delete
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
                           };
                           
+                          // Get current selection for RadioGroup
+                          const currentSelection = selectedConditionalSpawns[conditionalName] || '';
+                          
                           return (
-                            <div className="flex flex-col gap-2">
+                            <RadioGroup 
+                              value={currentSelection}
+                              onValueChange={(value) => {
+                                setSelectedConditionalSpawns(prev => ({
+                                  ...prev,
+                                  [conditionalName]: value
+                                }));
+                              }}
+                              className="flex flex-col gap-2"
+                            >
                               {visibleSpawnOptions.map(renderSpawnCard)}
-                            </div>
+                            </RadioGroup>
                           );
                         })()}
                     </div>
@@ -2864,7 +2813,7 @@ export default function ProjectDetailPage() {
                     is_conditional_container: str.is_conditional_container,
                   }}
                   showDisplayName={false}
-                  showVariableHash={!isPlaintextMode && showVariableHashes}
+                  showVariableHash={showVariableHashes}
                   renderContent={(content) => renderStyledContent(content, str.variables || [], str.id)}
                   onClick={() => openEditInCascadingDrawer(str)}
                   showCheckbox={true}
@@ -3428,10 +3377,249 @@ export default function ProjectDetailPage() {
               
               {/* Conditions Tab */}
               {mainDrawer.activeTab === 'conditions' && (
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Conditions settings will appear here (controlling conditions, etc.)
-                  </p>
+                <div className="space-y-6">
+                  {/* Controlling Condition Section - Only for spawn variables */}
+                  {(() => {
+                    const currentVarHash = mainDrawer.variableHash || mainDrawer.stringData?.variable_hash;
+                    const currentStringId = mainDrawer.stringData?.id;
+                    
+                    // Check if this variable is a spawn for any conditional
+                    const isSpawn = currentVarHash && project?.strings?.some((str: any) => {
+                      if (!str.is_conditional_container) return false;
+                      const conditionalName = str.effective_variable_name || str.variable_hash;
+                      const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
+                      return dimension?.values?.some((dv: any) => dv.value === currentVarHash);
+                    });
+
+                    if (!isSpawn) {
+                      return (
+                        <div className="rounded-lg bg-muted/50 p-4">
+                          <p className="text-sm text-muted-foreground">
+                            This variable is not a spawn of any conditional. Controlling conditions can only be set for spawn variables.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    // Build grouped spawn list for dropdown
+                    const groupedSpawns: {conditionalName: string; conditionalDisplayName: string; spawns: any[]}[] = [];
+                    
+                    project?.strings?.forEach((str: any) => {
+                      if (!str.is_conditional_container) return;
+                      
+                      const conditionalName = str.effective_variable_name || str.variable_hash;
+                      const conditionalDisplayName = conditionalName;
+                      const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
+                      
+                      if (!dimension) return;
+                      
+                      // Find spawns for this conditional (excluding the current variable)
+                      const spawns = project.strings.filter((spawnStr: any) => {
+                        if (spawnStr.is_conditional_container) return false;
+                        if (spawnStr.id === currentStringId) return false; // Exclude self
+                        const spawnName = spawnStr.effective_variable_name || spawnStr.variable_hash;
+                        return dimension.values?.some((dv: any) => dv.value === spawnName && dv.value !== "Hidden");
+                      });
+                      
+                      if (spawns.length > 0) {
+                        groupedSpawns.push({
+                          conditionalName,
+                          conditionalDisplayName,
+                          spawns
+                        });
+                      }
+                    });
+                    
+                    // Build flat list of spawns with parent conditional info
+                    const availableControllingSpawns: any[] = [];
+                    
+                    groupedSpawns.forEach(group => {
+                      // Add conditional as a non-selectable header
+                      availableControllingSpawns.push({
+                        id: `conditional-${group.conditionalName}`,
+                        name: group.conditionalName,
+                        content: '',
+                        type: 'conditional',
+                        isConditional: true,
+                        isSpawn: true, // Mark as non-selectable (it's a header)
+                        parentConditionalName: undefined,
+                        isCurrent: false,
+                        isSelected: false,
+                      });
+                      
+                      // Add spawns under this conditional
+                      group.spawns.forEach(spawn => {
+                        const spawnName = spawn.effective_variable_name || spawn.variable_hash;
+                        const spawnContent = spawn.content || '';
+                        const resolvedContent = resolveContentToPlaintext(spawnContent, spawn.id);
+                        const truncatedContent = resolvedContent.length > 60 
+                          ? resolvedContent.substring(0, 60) + '...' 
+                          : resolvedContent;
+                        
+                        availableControllingSpawns.push({
+                          id: spawn.id,
+                          name: spawnName,
+                          content: truncatedContent,
+                          type: 'spawn',
+                          isConditional: false,
+                          isSpawn: false, // Spawns ARE selectable in this context
+                          parentConditionalName: group.conditionalDisplayName,
+                          isCurrent: spawn.id === currentStringId,
+                          isSelected: mainDrawer.controlledBySpawnId === spawn.id,
+                        });
+                      });
+                    });
+                    
+                    // Filter by search
+                    const filteredControllingSpawns = controllingSpawnSearch
+                      ? availableControllingSpawns.filter(v => {
+                          // Always include conditional headers if any of their spawns match
+                          if (v.isConditional) {
+                            const groupSpawns = availableControllingSpawns.filter(
+                              s => s.parentConditionalName === v.name && !s.isConditional
+                            );
+                            return groupSpawns.some(s => 
+                              s.name.toLowerCase().includes(controllingSpawnSearch.toLowerCase()) ||
+                              s.content.toLowerCase().includes(controllingSpawnSearch.toLowerCase())
+                            );
+                          }
+                          // Filter spawns by name or content
+                          return v.name.toLowerCase().includes(controllingSpawnSearch.toLowerCase()) ||
+                                 v.content.toLowerCase().includes(controllingSpawnSearch.toLowerCase());
+                        })
+                      : availableControllingSpawns;
+                    
+                    // Check if controlling condition is enabled (has a value set)
+                    const hasControllingCondition = !!mainDrawer.controlledBySpawnId;
+                    
+                    // Find the currently selected controlling spawn for display
+                    const selectedController = mainDrawer.controlledBySpawnId 
+                      ? project?.strings?.find((s: any) => s.id === mainDrawer.controlledBySpawnId)
+                      : null;
+                    const selectedControllerName = selectedController 
+                      ? (selectedController.effective_variable_name || selectedController.variable_hash)
+                      : null;
+                          
+                    return (
+                      <div className="space-y-4 p-4 rounded-lg border bg-card">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <h3 className="text-sm font-semibold">Controlling Condition</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Link this spawn to another spawn variable. When the controlling spawn is selected, this spawn will also show.
+                            </p>
+                          </div>
+                          <Button
+                            variant={(isControllingConditionEnabled || hasControllingCondition) ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => {
+                              if (isControllingConditionEnabled || hasControllingCondition) {
+                                // Disable - clear the selection
+                                setIsControllingConditionEnabled(false);
+                                mainDrawer.updateControlledBySpawnId(null);
+                              } else {
+                                setIsControllingConditionEnabled(true);
+                              }
+                            }}
+                          >
+                            {(isControllingConditionEnabled || hasControllingCondition) ? 'Enabled' : 'Enable'}
+                          </Button>
+                        </div>
+
+                        {/* Show current selection if set */}
+                        {hasControllingCondition && !isControllingConditionEnabled && selectedControllerName && (
+                          <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
+                            <p className="text-sm">
+                              <span className="text-muted-foreground">Controlled by: </span>
+                              <span className="font-medium">{selectedControllerName}</span>
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Controlling Spawn Selector */}
+                        {(isControllingConditionEnabled || hasControllingCondition) && (
+                          <VariableSearchSelect
+                            label="Select Controlling Spawn"
+                            helperText="When the selected spawn is chosen, this spawn will also be automatically selected"
+                            placeholder="Search for a spawn variable..."
+                            searchValue={controllingSpawnSearch}
+                            onSearchChange={setControllingSpawnSearch}
+                            showResults={showControllingSpawnResults}
+                            onShowResultsChange={setShowControllingSpawnResults}
+                            availableVariables={filteredControllingSpawns}
+                            onSelect={(variable) => {
+                              mainDrawer.updateControlledBySpawnId(variable.id);
+                              setShowControllingSpawnResults(false);
+                              setControllingSpawnSearch("");
+                            }}
+                            maxResults={20}
+                            noBorder={true}
+                            showNoResultsOnEmpty={true}
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Helper Text */}
+                  <div className="rounded-lg bg-muted/50 p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Below you will find all the conditional variables that this variable serves as a spawn for.
+                    </p>
+                  </div>
+                  
+                  {/* Parent Conditional Variables List */}
+                  {(() => {
+                    const currentVarHash = mainDrawer.variableHash || mainDrawer.stringData?.variable_hash;
+                    
+                    if (!currentVarHash || !project?.strings) {
+                      return (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <p className="text-sm">No parent conditional variables found</p>
+                        </div>
+                      );
+                    }
+
+                    // Find parent conditionals by checking dimension values
+                    const parentConditionals = project.strings.filter((str: any) => {
+                      if (!str.is_conditional_container) return false;
+                      
+                      const conditionalName = str.effective_variable_name || str.variable_hash;
+                      const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
+                      
+                      return dimension?.values?.some((dv: any) => dv.value === currentVarHash);
+                    });
+
+                    if (parentConditionals.length === 0) {
+                      return (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <p className="text-sm">This variable is not a spawn of any conditional</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-2">
+                        {parentConditionals.map((conditional: any) => {
+                          const conditionalName = conditional.effective_variable_name || conditional.variable_hash;
+                          return (
+                            <div 
+                              key={conditional.id}
+                              className="p-3 rounded-md border bg-card hover:bg-muted/30 transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary" className="bg-orange-100 text-orange-700 border-orange-200">
+                                  <Signpost className="h-3 w-3 mr-1" />
+                                  Conditional
+                                </Badge>
+                                <span className="font-medium">{conditionalName}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
               

@@ -203,7 +203,13 @@ String: "My favorite color is `{{color-option}}`"
 - Add New Spawn button (creates temporary spawn)
 - Add Existing Variable as Spawn (autocomplete search with VariableSearchSelect)
 - Remove spawn button (hover-triggered in navigation or via conditions sidebar)
-- Include Hide Option checkbox
+
+**Include Hide Option**:
+- Toggle switch next to "Add Spawn" button in conditional variable editor
+- When enabled, adds "Hidden" as a selectable option in the conditions sidebar
+- Selecting "Hidden" removes the conditional variable's content from the output
+- Creates/removes a "Hidden" dimension value when saving the conditional variable
+- State tracked per-conditional in session editing via `includeHiddenOption` field
 
 ### Delete Protection
 

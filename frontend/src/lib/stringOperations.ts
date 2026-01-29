@@ -182,6 +182,7 @@ async function saveConditionalVariable({
   variableHash,
   projectId,
   conditionalSpawns,
+  includeHiddenOption,
   isNewString,
   project,
 }: {
@@ -190,7 +191,7 @@ async function saveConditionalVariable({
   variableHash?: string;
   projectId: string | number;
   conditionalSpawns: any[];
-  includeHiddenOption: boolean; // kept for interface compatibility but no longer used
+  includeHiddenOption: boolean;
   project?: any;
   onProjectUpdate?: (project: any) => void;
   isNewString: boolean;
@@ -362,6 +363,49 @@ async function saveConditionalVariable({
         const errorStr = linkError.message || String(linkError);
         if (!errorStr.includes('unique') && !errorStr.includes('already exists')) {
           console.error('Failed to create string-dimension-value link:', linkError);
+        }
+      }
+    }
+  }
+  
+  // 7. Handle the "Hidden" option
+  // Refetch the dimension to get the latest values (including any just created)
+  const updatedProject = await apiFetch(`/api/projects/${projectId}/`);
+  const updatedDimension = updatedProject?.dimensions?.find((d: any) => d.name === conditionalName);
+  const hiddenDimensionValue = updatedDimension?.values?.find((dv: any) => dv.value === "Hidden");
+  
+  if (includeHiddenOption) {
+    // Create "Hidden" dimension value if it doesn't exist
+    if (!hiddenDimensionValue) {
+      try {
+        await apiFetch('/api/dimension-values/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dimension: updatedDimension?.id || dimension.id,
+            value: "Hidden",
+          }),
+        });
+        console.log('Created "Hidden" dimension value');
+      } catch (hiddenError: any) {
+        const errorStr = hiddenError.message || String(hiddenError);
+        if (!errorStr.includes('unique') && !errorStr.includes('already exists')) {
+          console.error('Failed to create Hidden dimension value:', hiddenError);
+        }
+      }
+    }
+  } else {
+    // Remove "Hidden" dimension value if it exists
+    if (hiddenDimensionValue) {
+      try {
+        await apiFetch(`/api/dimension-values/${hiddenDimensionValue.id}/`, {
+          method: 'DELETE',
+        });
+        console.log('Removed "Hidden" dimension value');
+      } catch (deleteError: any) {
+        const errorStr = deleteError.message || String(deleteError);
+        if (!errorStr.includes('Not found') && !errorStr.includes('404')) {
+          console.error('Failed to delete Hidden dimension value:', deleteError);
         }
       }
     }

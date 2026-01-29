@@ -3354,9 +3354,22 @@ export default function ProjectDetailPage() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <Label>Spawn Variables</Label>
-                        <Button size="sm" variant="outline" onClick={mainDrawer.addSpawn}>
-                          <Plus className="h-3 w-3 mr-1" /> Add Spawn
-                        </Button>
+                        <div className="flex items-center gap-3">
+                          {/* Include option to hide toggle */}
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              id="include-hidden-option"
+                              checked={mainDrawer.includeHiddenOption}
+                              onCheckedChange={(checked) => mainDrawer.updateHiddenOption?.(checked)}
+                            />
+                            <Label htmlFor="include-hidden-option" className="text-sm font-normal cursor-pointer">
+                              Include hide option
+                            </Label>
+                          </div>
+                          <Button size="sm" variant="outline" onClick={mainDrawer.addSpawn}>
+                            <Plus className="h-3 w-3 mr-1" /> Add Spawn
+                          </Button>
+                        </div>
                       </div>
                       
                       <div className="space-y-2">

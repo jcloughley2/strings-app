@@ -181,7 +181,7 @@ export function ImageToTextModal({ isOpen, onClose, onAccept }: ImageToTextModal
                 >
                   <Upload className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
                   <p className="text-sm font-medium mb-1">Click to upload an image</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     PNG, JPG, GIF up to 10MB
                   </p>
                 </div>

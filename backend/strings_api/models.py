@@ -89,8 +89,12 @@ class String(models.Model):
             hash_chars = string.ascii_uppercase + string.digits
             new_hash = ''.join(secrets.choice(hash_chars) for _ in range(6))
             
-            # Check if hash is unique
-            if not String.objects.filter(variable_hash=new_hash).exists():
+            # Check if hash is unique for both variable_hash (globally) 
+            # AND variable_name within this project (since the hash may be used as variable_name)
+            hash_unique = not String.objects.filter(variable_hash=new_hash).exists()
+            name_unique = not String.objects.filter(project=self.project, variable_name=new_hash).exists()
+            
+            if hash_unique and name_unique:
                 return new_hash
 
     @property

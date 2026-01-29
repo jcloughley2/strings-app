@@ -658,6 +658,13 @@ frontend/src/
     └── page.tsx                      # Main project page
 ```
 
+### Style Guide Page
+- **URL**: `http://localhost:3000/style-guide`
+- **Purpose**: Reference page showing all text styles used in the app
+- **Usage**: Helps identify and reference specific text styles when requesting styling changes
+- **Contents**: Headings, body text, labels, display names, UI elements, status messages, font scales
+- **Key File**: `frontend/src/app/style-guide/page.tsx`
+
 ### Key Files
 - **`page.tsx`**: Main UI, conditions sidebar, canvas, bottom drawer, state management
 - **`header.tsx`**: App header with project breadcrumb (uses HeaderContext), clickable username links to settings

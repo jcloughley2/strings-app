@@ -111,7 +111,7 @@ export function VariableSearchSelect({
                       )}
                       <Badge 
                         variant="outline" 
-                        className={`text-xs font-mono ${
+                        className={`text-xs ${
                           variable.isConditional 
                             ? 'bg-conditional-50 text-conditional-700 border-conditional-200'
                             : 'bg-string-50 text-string-700 border-string-200'
@@ -123,12 +123,12 @@ export function VariableSearchSelect({
                         {variable.type}
                       </Badge>
                       {isSpawn && (
-                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                        <Badge variant="outline" className="text-sm text-muted-foreground">
                           spawn
                         </Badge>
                       )}
                       {isCurrent && (
-                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                        <Badge variant="outline" className="text-sm text-muted-foreground">
                           current
                         </Badge>
                       )}
@@ -138,7 +138,7 @@ export function VariableSearchSelect({
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground line-clamp-1">
+                    <p className="text-sm text-muted-foreground line-clamp-1">
                       {isSpawn && variable.parentConditionalName 
                         ? `Spawn of ${variable.parentConditionalName}` 
                         : (variable.content || "No content")}
@@ -147,7 +147,7 @@ export function VariableSearchSelect({
                 );
               })}
               {availableVariables.length > maxResults && (
-                <div className="p-2 text-xs text-muted-foreground text-center border-t">
+                <div className="p-2 text-sm text-muted-foreground text-center border-t">
                   Showing first {maxResults} results. Type more to filter further.
                 </div>
               )}
@@ -167,7 +167,7 @@ export function VariableSearchSelect({
           )}
         </div>
         
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {helperText}
         </p>
       </div>
@@ -938,7 +938,7 @@ export function StringEditDrawer({
                       <div className="flex items-center justify-between">
                         <div className="space-y-1">
                           <h3 className="text-sm font-semibold">Controlling Condition</h3>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                             Link this spawn to another spawn variable. When the controlling spawn is selected, this spawn will also show.
                       </p>
                     </div>
@@ -1134,7 +1134,7 @@ export function StringEditDrawer({
                     onChange={(e) => onDisplayNameChange(e.target.value)}
                     placeholder="Enter a descriptive name (e.g., Welcome Message)"
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {displayName ? 
                       `Will create hash: {{${slugify(displayName)}}}` : 
                       "Leave empty to use random hash"
@@ -1152,7 +1152,7 @@ export function StringEditDrawer({
                           type={stringData.is_conditional_container ? 'conditional' : 'string'}
                         />
                       </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         Use this identifier to reference this variable in other strings
                       </p>
                     </div>
@@ -1162,7 +1162,7 @@ export function StringEditDrawer({
                     <div className="text-sm text-muted-foreground font-mono">
                       {stringData.variable_hash}
                     </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         Auto-generated 6-character backup identifier
                       </p>
                   </div>

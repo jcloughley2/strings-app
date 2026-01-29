@@ -29,6 +29,7 @@ import { useSessionDrawer } from "@/hooks/useSessionDrawer";
 import { useHeader } from "@/lib/HeaderContext";
 import { toast } from "sonner";
 import { ImageIcon } from "lucide-react";
+import { FEATURES } from "@/lib/featureFlags";
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
@@ -741,7 +742,49 @@ export default function ProjectDetailPage() {
     });
   }, [stringContent, project?.strings]);
 
-  // TODO: Re-implement cascading drawer variable detection with new hook structure
+  // Detect embedded variables in session drawer content and update pending variables
+  useEffect(() => {
+    // Only run when drawer is open and we have content
+    if (!mainDrawer.isOpen) {
+      return;
+    }
+    
+    const content = mainDrawer.content || '';
+    if (!content.trim()) {
+      setPendingStringVariables({});
+      return;
+    }
+
+    const variableMatches = content.match(/{{([^}]+)}}/g) || [];
+    const variableNames = variableMatches.map((match: string) => match.slice(2, -2));
+    const uniqueVariableNames = [...new Set(variableNames)];
+
+    // Find existing string variables
+    const existingStringVariableNames = project?.strings?.map((str: any) => 
+      str.effective_variable_name || str.variable_name || str.variable_hash
+    ).filter(Boolean) || [];
+
+    // Find new variables that don't exist yet
+    const newVariableNames = uniqueVariableNames.filter(name => 
+      !existingStringVariableNames.includes(name) && name.trim() !== ''
+    );
+
+    // Update pending variables - add new ones, remove ones no longer referenced
+    setPendingStringVariables(prev => {
+      const newPending: {[name: string]: {content: string, is_conditional: boolean}} = {};
+      
+      // Add new variables as pending
+      newVariableNames.forEach(variableName => {
+        // Keep existing pending variable data if it exists, otherwise create empty
+        newPending[variableName] = prev[variableName] || {
+          content: "",
+          is_conditional: false
+        };
+      });
+      
+      return newPending;
+    });
+  }, [mainDrawer.isOpen, mainDrawer.content, project?.strings]);
 
   // Helper function to sort strings by creation date (newest first)
   const sortProjectStrings = (projectData: any) => {
@@ -2388,71 +2431,11 @@ export default function ProjectDetailPage() {
                         {/* Conditional Variable Header */}
               <div className="flex items-center justify-between group">
                 <div 
-                  className="flex items-center justify-between w-full hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1 cursor-pointer"
+                  className="flex items-center justify-between w-full cursor-pointer"
                             onClick={() => mainDrawer.openEditDrawer(conditionalVar)}
                 >
                             <h3 className="font-medium text-sm flex-1">{conditionalDisplayName}</h3>
                   <div className={`flex items-center gap-1 transition-opacity ${mainDrawer.isOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                    {/* Add Button - only shown when drawer is open and not editing self */}
-                    {mainDrawer.isOpen && mainDrawer.stringData?.id !== conditionalVar.id && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="default"
-                              size="sm"
-                              className="h-6 w-6 p-0"
-                              style={{
-                                backgroundColor: mainDrawer.isConditional 
-                                  ? 'var(--conditional-var-color)' 
-                                  : 'var(--string-var-color)',
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const hash = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
-                                if (mainDrawer.isConditional) {
-                                  if (mainDrawer.addExistingVariableAsSpawn) {
-                                    mainDrawer.addExistingVariableAsSpawn(conditionalVar.id.toString());
-                                    toast.success(`Added ${hash} as spawn`);
-                                  }
-                                } else {
-                                  const variableRef = `{{${hash}}}`;
-                                  const newContent = mainDrawer.content ? `${mainDrawer.content}${variableRef}` : variableRef;
-                                  mainDrawer.updateContent(newContent);
-                                  toast.success(`Added ${variableRef} to content`);
-                                }
-                              }}
-                            >
-                              <Plus className="h-3 w-3 text-white" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>{mainDrawer.isConditional ? 'Add as spawn' : 'Embed in content'}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const hash = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
-                              copyVariableToClipboard(hash);
-                            }}
-                          >
-                            <Copy className="h-3 w-3" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Copy reference</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -2479,6 +2462,27 @@ export default function ProjectDetailPage() {
                         <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation();
+                            const hash = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
+                            copyVariableToClipboard(hash);
+                          }}
+                        >
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copy reference
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Use the dedicated function to open create drawer for a spawn
+                            mainDrawer.openCreateSpawnDrawer?.(conditionalVar);
+                          }}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add New Spawn
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
                             handleDuplicateString(conditionalVar);
                           }}
                         >
@@ -2498,6 +2502,40 @@ export default function ProjectDetailPage() {
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
+                    {/* Add Button - only shown when drawer is open and not editing self - placed last (far right) */}
+                    {mainDrawer.isOpen && mainDrawer.stringData?.id !== conditionalVar.id && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const hash = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
+                                if (mainDrawer.isConditional) {
+                                  if (mainDrawer.addExistingVariableAsSpawn) {
+                                    mainDrawer.addExistingVariableAsSpawn(conditionalVar.id.toString());
+                                    toast.success(`Added ${hash} as spawn`);
+                                  }
+                                } else {
+                                  const variableRef = `{{${hash}}}`;
+                                  const newContent = mainDrawer.content ? `${mainDrawer.content}${variableRef}` : variableRef;
+                                  mainDrawer.updateContent(newContent);
+                                  toast.success(`Added ${variableRef} to content`);
+                                }
+                              }}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{mainDrawer.isConditional ? 'Add as spawn' : 'Embed in content'}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2557,32 +2595,13 @@ export default function ProjectDetailPage() {
                         <div className="flex items-start gap-1">
                           {(isControlled || hasControllingCondition) && <Lock className="h-3 w-3 flex-shrink-0 mt-0.5" />}
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs leading-tight">
+                            <div className="text-sm text-muted-foreground">
                               {truncatedContent || <span className="text-muted-foreground italic">No content</span>}
                             </div>
                           </div>
                           {/* Action buttons */}
                           {spawn.id !== 'hidden' && (
                             <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        copyVariableToClipboard(spawnHash);
-                                      }}
-                                      className="rounded p-0.5 hover:bg-conditional-200 cursor-pointer"
-                                      aria-label="Copy reference"
-                                    >
-                                      <Copy className="h-3 w-3" />
-                                    </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Copy reference</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -2605,6 +2624,15 @@ export default function ProjectDetailPage() {
                                   </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      copyVariableToClipboard(spawnHash);
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    Copy reference
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -2631,7 +2659,7 @@ export default function ProjectDetailPage() {
                           )}
                         </div>
                         {/* Hash/ID (secondary) */}
-                        <div className="text-[10px] text-muted-foreground mt-1 leading-tight font-mono">
+                        <div className="text-sm text-muted-foreground mt-1">
                           {spawnDisplayName}
                         </div>
                       </div>
@@ -2664,32 +2692,13 @@ export default function ProjectDetailPage() {
                         <div className="flex items-start gap-1">
                           {(isDisabled || hasControllingCondition) && <Lock className="h-3 w-3 flex-shrink-0 mt-0.5" />}
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs leading-tight">
+                            <div className="text-sm text-muted-foreground">
                               {truncatedContent || <span className="text-muted-foreground italic">No content</span>}
                             </div>
                           </div>
                           {/* Action buttons */}
                           {spawn.id !== 'hidden' && (
                             <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        copyVariableToClipboard(spawnHash);
-                                      }}
-                                      className="rounded p-0.5 hover:bg-gray-200 cursor-pointer"
-                                      aria-label="Copy reference"
-                                    >
-                                      <Copy className="h-3 w-3" />
-                                    </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Copy reference</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -2712,6 +2721,15 @@ export default function ProjectDetailPage() {
                                   </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      copyVariableToClipboard(spawnHash);
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    Copy reference
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -2738,7 +2756,7 @@ export default function ProjectDetailPage() {
                           )}
                         </div>
                         {/* Hash/ID (secondary) */}
-                        <div className="text-[10px] text-muted-foreground mt-1 leading-tight font-mono">
+                        <div className="text-sm text-muted-foreground mt-1">
                           {spawnDisplayName}
                         </div>
                       </div>
@@ -2931,90 +2949,242 @@ export default function ProjectDetailPage() {
               </div>
             </div>
             
-            {/* Center: Mini Navigation */}
-            <div className="flex items-center gap-2 overflow-x-auto">
+            {/* Center: Mini Navigation - Three Sections */}
+            <div className="flex items-center gap-4 overflow-x-auto">
               {(() => {
-                const nodes: {id: string; name: string; type: 'string' | 'conditional'; isActive: boolean; relationship?: string}[] = [];
-                const currentData = mainDrawer.stringData;
+                const activeId = mainDrawer.activeVariableId;
+                const activeEdit = mainDrawer.sessionEdits?.get(activeId || '');
                 
-                // Find parent nodes (variables that embed or spawn the current one)
-                if (currentData?.id) {
-                  const currentName = currentData.effective_variable_name || currentData.variable_hash;
-                  project?.strings?.forEach((str: any) => {
-                    if (str.id === currentData.id) return;
-                    if (str.content?.includes(`{{${currentName}}}`)) {
-                      nodes.push({
+                // Get active variable info
+                let activeData: any = null;
+                let activeName = 'New Variable';
+                let activeIsConditional = mainDrawer.isConditional;
+                
+                if (activeId?.startsWith('new-')) {
+                  // New variable being created
+                  activeName = activeEdit?.displayName || mainDrawer.displayName || 'New Variable';
+                  activeIsConditional = activeEdit?.isConditional ?? mainDrawer.isConditional;
+                } else if (activeId?.startsWith('temp-')) {
+                  // Temp spawn - find it in parent's spawns
+                  const rootId = mainDrawer.stringData?.id ? String(mainDrawer.stringData.id) : 'new';
+                  const rootEdit = mainDrawer.sessionEdits?.get(rootId);
+                  const spawn = rootEdit?.conditionalSpawns?.find((s: any) => String(s.id) === activeId);
+                  if (spawn) {
+                    activeData = spawn;
+                    activeName = spawn.display_name || spawn.effective_variable_name || spawn.variable_hash || 'Spawn';
+                    activeIsConditional = spawn.is_conditional_container || false;
+                  }
+                } else if (activeId) {
+                  // Existing variable
+                  activeData = project?.strings?.find((s: any) => String(s.id) === activeId);
+                  if (activeData) {
+                    activeName = activeEdit?.displayName || activeData.display_name || activeData.effective_variable_name || activeData.variable_hash || 'Variable';
+                    activeIsConditional = activeEdit?.isConditional ?? activeData.is_conditional_container ?? false;
+                  }
+                }
+                
+                const activeVarName = activeData?.effective_variable_name || activeData?.variable_hash || '';
+                
+                // Build parent nodes
+                const parents: {id: string; name: string; type: 'string' | 'conditional'; parentType: 'embeds' | 'spawns'}[] = [];
+                
+                if (activeVarName && project?.strings) {
+                  project.strings.forEach((str: any) => {
+                    if (String(str.id) === activeId) return;
+                    
+                    // Check if this string embeds the active variable
+                    if (str.content?.includes(`{{${activeVarName}}}`)) {
+                      parents.push({
                         id: String(str.id),
                         name: str.display_name || str.effective_variable_name || str.variable_hash,
                         type: str.is_conditional_container ? 'conditional' : 'string',
-                        isActive: false,
-                        relationship: 'parent-embeds'
+                        parentType: 'embeds'
+                      });
+                    }
+                  });
+                  
+                  // Check if active is a spawn of a conditional
+                  // Method 1: Check dimension_values (legacy system)
+                  if (activeData?.dimension_values?.length > 0) {
+                    const dimValue = activeData.dimension_values[0];
+                    const dimName = dimValue?.dimension_value_detail?.dimension?.name || dimValue?.dimension?.name;
+                    if (dimName) {
+                      const parentConditional = project.strings.find((s: any) => 
+                        s.is_conditional_container && 
+                        (s.effective_variable_name === dimName || s.variable_hash === dimName)
+                      );
+                      if (parentConditional && String(parentConditional.id) !== activeId) {
+                        if (!parents.some(p => p.id === String(parentConditional.id))) {
+                          parents.push({
+                            id: String(parentConditional.id),
+                            name: parentConditional.display_name || parentConditional.effective_variable_name || parentConditional.variable_hash,
+                            type: 'conditional',
+                            parentType: 'spawns'
+                          });
+                        }
+                      }
+                    }
+                  }
+                  
+                  // Method 2: Search all conditionals to find if active is in their spawns
+                  // This works for the new system where spawns are linked via dimension values
+                  project.strings.forEach((conditionalVar: any) => {
+                    if (!conditionalVar.is_conditional_container) return;
+                    if (String(conditionalVar.id) === activeId) return;
+                    
+                    const conditionalName = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
+                    
+                    // Find dimension for this conditional
+                    const dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
+                    if (dimension?.values) {
+                      // Check if active variable's name matches any spawn in this conditional
+                      const isSpawnOfThis = dimension.values.some((dv: any) => 
+                        dv.value === activeVarName && dv.value !== "Hidden"
+                      );
+                      
+                      if (isSpawnOfThis && !parents.some(p => p.id === String(conditionalVar.id))) {
+                        parents.push({
+                          id: String(conditionalVar.id),
+                          name: conditionalVar.display_name || conditionalVar.effective_variable_name || conditionalVar.variable_hash,
+                          type: 'conditional',
+                          parentType: 'spawns'
+                        });
+                      }
+                    }
+                  });
+                }
+                
+                // Also check if editing a temp spawn - the root is the parent
+                if (activeId?.startsWith('temp-') && mainDrawer.stringData) {
+                  const rootData = mainDrawer.stringData;
+                  if (!parents.some(p => p.id === String(rootData.id))) {
+                    parents.push({
+                      id: String(rootData.id),
+                      name: rootData.display_name || rootData.effective_variable_name || rootData.variable_hash,
+                      type: 'conditional',
+                      parentType: 'spawns'
+                    });
+                  }
+                }
+                
+                // Build children nodes (spawns if conditional, or embedded variables)
+                const children: {id: string; name: string; type: 'string' | 'conditional'}[] = [];
+                
+                // If active is conditional, show its spawns
+                if (activeIsConditional) {
+                  const spawns = activeEdit?.conditionalSpawns || [];
+                  spawns.forEach((spawn: any, index: number) => {
+                    const spawnId = String(spawn.id || `temp-${index}`);
+                    if (spawnId !== activeId) {
+                      children.push({
+                        id: spawnId,
+                        name: spawn.display_name || spawn.effective_variable_name || spawn.variable_hash || `Spawn ${index + 1}`,
+                        type: spawn.is_conditional_container ? 'conditional' : 'string'
                       });
                     }
                   });
                 }
                 
-                // Add current node
-                if (currentData) {
-                  nodes.push({
-                    id: String(currentData.id || 'new'),
-                    name: mainDrawer.displayName || currentData.effective_variable_name || currentData.variable_hash || 'New Variable',
-                    type: mainDrawer.isConditional ? 'conditional' : 'string',
-                    isActive: true
-                  });
-                } else {
-                  nodes.push({
-                    id: 'new',
-                    name: mainDrawer.displayName || 'New Variable',
-                    type: mainDrawer.isConditional ? 'conditional' : 'string',
-                    isActive: true
-                  });
-                }
+                // Find embedded variables in content
+                const activeContent = activeEdit?.content || activeData?.content || mainDrawer.content || '';
+                const embeddedMatches = activeContent.match(/{{([^}]+)}}/g) || [];
+                const embeddedNamesSet = new Set<string>(embeddedMatches.map((m: string) => m.slice(2, -2)));
+                const embeddedNames = Array.from(embeddedNamesSet);
                 
-                // Add child nodes (spawns if conditional)
-                if (mainDrawer.isConditional && mainDrawer.conditionalSpawns) {
-                  mainDrawer.conditionalSpawns.forEach((spawn: any, index: number) => {
-                    nodes.push({
-                      id: String(spawn.id || `spawn-${index}`),
-                      name: spawn.display_name || spawn.variable_name || `Spawn ${index + 1}`,
-                      type: 'string',
-                      isActive: false,
-                      relationship: 'spawn'
-                    });
-                  });
-                }
+                embeddedNames.forEach((varName) => {
+                  const embeddedVar = project?.strings?.find((s: any) => 
+                    s.effective_variable_name === varName || 
+                    s.variable_name === varName || 
+                    s.variable_hash === varName
+                  );
+                  if (embeddedVar && String(embeddedVar.id) !== activeId) {
+                    // Avoid duplicates
+                    if (!children.some(c => c.id === String(embeddedVar.id))) {
+                      children.push({
+                        id: String(embeddedVar.id),
+                        name: embeddedVar.display_name || embeddedVar.effective_variable_name || embeddedVar.variable_hash,
+                        type: embeddedVar.is_conditional_container ? 'conditional' : 'string'
+                      });
+                    }
+                  }
+                });
                 
-                return nodes.map((node) => {
+                // Render helper
+                const renderTile = (node: {id: string; name: string; type: 'string' | 'conditional'}, size: number = 28, isActive: boolean = false) => {
                   const bgColor = node.type === 'conditional' ? 'var(--conditional-var-100)' : 'var(--string-var-100)';
                   const borderColor = node.type === 'conditional' ? 'var(--conditional-var-color)' : 'var(--string-var-color)';
                   const activeBg = node.type === 'conditional' ? 'var(--conditional-var-200)' : 'var(--string-var-200)';
-                  const size = node.isActive ? 32 : 28;
                   
                   return (
                     <button
                       key={node.id}
-                      onClick={() => node.id !== 'new' && !node.isActive && mainDrawer.navigateToVariable?.(node.id)}
-                      className="flex-shrink-0 rounded-md flex items-center justify-center transition-all cursor-pointer"
+                      onClick={() => !isActive && !node.id.startsWith('new') && mainDrawer.navigateToVariable?.(node.id)}
+                      className={`flex-shrink-0 rounded-md flex items-center justify-center transition-all ${isActive ? '' : 'cursor-pointer hover:opacity-80'}`}
                       style={{
                         width: `${size}px`,
                         height: `${size}px`,
-                        backgroundColor: node.isActive ? activeBg : bgColor,
-                        border: `1px solid ${borderColor}`,
+                        backgroundColor: isActive ? activeBg : bgColor,
+                        border: `2px solid ${borderColor}`,
                       }}
                       title={node.name}
+                      disabled={isActive}
                     >
                       <span 
                         className="font-semibold"
                         style={{ 
                           color: node.type === 'conditional' ? 'var(--conditional-var-700)' : 'var(--string-var-700)',
-                          fontSize: node.isActive ? '12px' : '10px'
+                          fontSize: isActive ? '12px' : '10px'
                         }}
                       >
                         {node.name.charAt(0).toUpperCase()}
                       </span>
                     </button>
                   );
-                });
+                };
+                
+                return (
+                  <>
+                    {/* Parents Section */}
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Used in</span>
+                      <div className="flex items-center gap-1 min-h-[32px]">
+                        {parents.length > 0 ? parents.map(p => renderTile(p, 28)) : (
+                          <span className="text-sm text-muted-foreground/50">—</span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Separator */}
+                    <div className="w-px h-8 bg-border" />
+                    
+                    {/* Active Section */}
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Active</span>
+                      <div className="flex items-center gap-1 min-h-[32px]">
+                        {renderTile({
+                          id: activeId || 'new',
+                          name: activeName,
+                          type: activeIsConditional ? 'conditional' : 'string'
+                        }, 32, true)}
+                      </div>
+                    </div>
+                    
+                    {/* Separator */}
+                    <div className="w-px h-8 bg-border" />
+                    
+                    {/* Children Section */}
+                    <div className="flex flex-col items-start gap-1">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                        {activeIsConditional ? 'Spawn variables' : 'Embedded variables'}
+                      </span>
+                      <div className="flex items-center justify-start gap-1 min-h-[32px]">
+                        {children.length > 0 ? children.map(c => renderTile(c, 28)) : (
+                          <span className="text-sm text-muted-foreground/50">—</span>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                );
               })()}
             </div>
             
@@ -3091,19 +3261,21 @@ export default function ProjectDetailPage() {
               >
                 Advanced
               </button>
-              <button
-                onClick={() => !mainDrawer.isConditional && mainDrawer.updateTab('publishing')}
-                disabled={mainDrawer.isConditional}
-                className={`px-4 py-2 text-left text-sm font-medium transition-colors ${
-                  mainDrawer.isConditional 
-                    ? 'text-muted-foreground/50 cursor-not-allowed'
-                    : mainDrawer.activeTab === 'publishing' 
-                      ? 'bg-background border-r-2 border-primary text-foreground' 
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                }`}
-              >
-                Publishing
-              </button>
+              {FEATURES.REGISTRY && (
+                <button
+                  onClick={() => !mainDrawer.isConditional && mainDrawer.updateTab('publishing')}
+                  disabled={mainDrawer.isConditional}
+                  className={`px-4 py-2 text-left text-sm font-medium transition-colors ${
+                    mainDrawer.isConditional 
+                      ? 'text-muted-foreground/50 cursor-not-allowed'
+                      : mainDrawer.activeTab === 'publishing' 
+                        ? 'bg-background border-r-2 border-primary text-foreground' 
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  Publishing
+                </button>
+              )}
             </div>
             
             {/* Main Content Area */}
@@ -3149,28 +3321,54 @@ export default function ProjectDetailPage() {
                       </div>
                       
                       <div className="space-y-2">
-                        {mainDrawer.conditionalSpawns.map((spawn: any, index: number) => (
-                          <div key={spawn.id || index} className="flex items-center gap-2 p-2 border rounded bg-muted/30">
-                            <Input
-                              value={spawn.display_name || ''}
-                              onChange={(e) => mainDrawer.updateSpawn(index, { ...spawn, display_name: e.target.value })}
-                              placeholder="Spawn name..."
-                              className="flex-1"
-                            />
-                            <Input
-                              value={spawn.content || ''}
-                              onChange={(e) => mainDrawer.updateSpawn(index, { ...spawn, content: e.target.value })}
-                              placeholder="Content..."
-                              className="flex-1"
-                            />
-                          </div>
-                        ))}
+                        {mainDrawer.conditionalSpawns.map((spawn: any, index: number) => {
+                          const spawnId = String(spawn.id || `temp-spawn-${index}`);
+                          const spawnName = spawn.display_name || spawn.effective_variable_name || spawn.variable_hash || `Spawn ${index + 1}`;
+                          const contentPreview = spawn.content ? spawn.content.substring(0, 60) + (spawn.content.length > 60 ? '...' : '') : 'No content';
+                          const isNew = spawn._isTemporary;
+                          
+                          return (
+                            <div 
+                              key={spawnId} 
+                              className="flex items-center gap-2 p-3 border rounded cursor-pointer hover:bg-muted/50 transition-colors"
+                              style={{
+                                backgroundColor: 'var(--string-var-50)',
+                                borderColor: 'var(--string-var-200)',
+                              }}
+                              onClick={() => mainDrawer.navigateToVariable?.(spawnId)}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-sm truncate">{spawnName}</span>
+                                  {isNew && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">New</span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-muted-foreground truncate mt-0.5">{contentPreview}</p>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  mainDrawer.removeSpawn?.(spawn, index);
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          );
+                        })}
                         {mainDrawer.conditionalSpawns.length === 0 && (
                           <p className="text-sm text-muted-foreground py-4 text-center">
                             No spawn variables yet. Click "Add Spawn" to create one.
                           </p>
                         )}
                       </div>
+                      <p className="text-sm text-muted-foreground">
+                        Click a spawn to edit its name and content. Changes are saved when you click Save.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -3195,7 +3393,7 @@ export default function ProjectDetailPage() {
                       onChange={(e) => mainDrawer.updateDisplayName(e.target.value)}
                       placeholder="Enter a display name..."
                     />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       This will be slugified to create the variable name.
                     </p>
                   </div>
@@ -3232,8 +3430,8 @@ export default function ProjectDetailPage() {
                 </div>
               )}
 
-              {/* Publishing Tab - Only for non-conditional strings */}
-              {mainDrawer.activeTab === 'publishing' && (
+              {/* Publishing Tab - Only for non-conditional strings (Feature flagged) */}
+              {FEATURES.REGISTRY && mainDrawer.activeTab === 'publishing' && (
                 <div className="space-y-4">
                   {!mainDrawer.isConditional ? (
                     <>
@@ -3250,7 +3448,7 @@ export default function ProjectDetailPage() {
                             <p className="font-medium text-sm">
                               {mainDrawer.isPublished ? "Published" : "Not published"}
                             </p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-sm text-muted-foreground">
                               {mainDrawer.isPublished 
                                 ? "This string is visible in the registry." 
                                 : "Toggle to add to the registry."}
@@ -3385,7 +3583,7 @@ export default function ProjectDetailPage() {
                   </SheetTitle>
                   {(editingString || (currentDrawerLevel > 0 && editingSpawn)) && (
                     <div className="flex items-center gap-2 mt-1">
-                      <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                      <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                         {currentDrawerLevel > 0 && editingSpawn
                           ? `{{${editingSpawn.effective_variable_name || editingSpawn.variable_hash}}}`
                           : `{{${editingString.effective_variable_name || editingString.variable_hash}}}`
@@ -3539,7 +3737,7 @@ export default function ProjectDetailPage() {
                                           <Spool className="h-3 w-3" />
                                         </div>
                                       )}
-                                      <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                                      <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                                         {`{{${stringVar.effective_variable_name || stringVar.variable_hash}}}`}
                                       </Badge>
                                       {stringVar.is_conditional && (
@@ -3573,7 +3771,7 @@ export default function ProjectDetailPage() {
                                       <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 p-1 rounded border border-yellow-200">
                                         <Plus className="h-3 w-3" />
                                       </div>
-                                      <Badge variant="outline" className="text-xs font-mono bg-yellow-50 text-yellow-700 border-yellow-200">
+                                      <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
                                         {`{{${pendingVar}}}`}
                                       </Badge>
                                       <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
@@ -3626,7 +3824,7 @@ export default function ProjectDetailPage() {
                           <Label htmlFor="includeHiddenOption" className="text-sm font-medium">
                             Include option to hide
                           </Label>
-                          <p className="text-xs text-muted-foreground ml-2">
+                          <p className="text-sm text-muted-foreground ml-2">
                             Adds a "Hidden" option that makes this conditional invisible when selected
                           </p>
                         </div>
@@ -3667,7 +3865,7 @@ export default function ProjectDetailPage() {
                                         <Spool className="h-3 w-3" />
                                       </div>
                                     )}
-                                    <Badge variant="outline" className={`text-xs font-mono ${
+                                    <Badge variant="outline" className={`text-xs ${
                                       isTemporary 
                                         ? 'bg-yellow-50 text-yellow-700 border-yellow-200' 
                                         : 'bg-purple-50 text-purple-700 border-purple-200'
@@ -3784,7 +3982,7 @@ export default function ProjectDetailPage() {
                             <Label htmlFor="includeHiddenOptionEdit" className="text-sm font-medium">
                               Include option to hide
                             </Label>
-                            <p className="text-xs text-muted-foreground ml-2">
+                            <p className="text-sm text-muted-foreground ml-2">
                               Adds a "Hidden" option that makes this conditional invisible when selected
                             </p>
                           </div>
@@ -3808,7 +4006,7 @@ export default function ProjectDetailPage() {
                                   <div className="flex items-center gap-1 text-purple-600 bg-purple-50 p-1 rounded border border-purple-200">
                                     <Spool className="h-3 w-3" />
                                   </div>
-                                  <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                                  <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                                     {`{{${spawn.effective_variable_name || spawn.variable_hash || 'new_variable'}}}`}
                                   </Badge>
                                   {spawn.is_conditional && (
@@ -3924,7 +4122,7 @@ export default function ProjectDetailPage() {
                                             <Spool className="h-3 w-3" />
                                           </div>
                                         )}
-                                        <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                                        <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                                           {`{{${stringVar.effective_variable_name || stringVar.variable_hash}}}`}
                                         </Badge>
                                         {stringVar.is_conditional && (
@@ -3959,7 +4157,7 @@ export default function ProjectDetailPage() {
                                         <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 p-1 rounded border border-yellow-200">
                                           <Plus className="h-3 w-3" />
                                         </div>
-                                        <Badge variant="outline" className="text-xs font-mono bg-yellow-50 text-yellow-700 border-yellow-200">
+                                        <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
                                           {`{{${pendingVar}}}`}
                                         </Badge>
                                         <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
@@ -4054,7 +4252,7 @@ export default function ProjectDetailPage() {
                                     <Spool className="h-3 w-3" />
                                   </div>
                                 )}
-                                <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                                <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                                   {`{{${stringVar.effective_variable_name || stringVar.variable_hash}}}`}
                                 </Badge>
                                 {stringVar.is_conditional && (
@@ -4089,7 +4287,7 @@ export default function ProjectDetailPage() {
                                 <div className="flex items-center gap-1 text-blue-600 bg-blue-50 p-1 rounded border border-blue-200">
                                   <Plus className="h-3 w-3" />
                                 </div>
-                                <Badge variant="outline" className="text-xs font-mono bg-blue-50 text-blue-700 border-blue-200">
+                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
                                   {`{{${variableName}}}`}
                                 </Badge>
                                 <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
@@ -4132,7 +4330,7 @@ export default function ProjectDetailPage() {
                       }}
                       placeholder="Variable name (optional)"
                     />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       {stringVariableName.trim() 
                         ? `This will be used as {{${stringVariableName.trim()}}} in other strings.`
                         : `Currently using: {{${editingSpawn.effective_variable_name || editingSpawn.variable_hash}}}`
@@ -4157,7 +4355,7 @@ export default function ProjectDetailPage() {
                         Is Conditional
                       </Label>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       Conditional spawns can be shown or hidden based on specific conditions
                     </p>
                   </div>
@@ -4209,7 +4407,7 @@ export default function ProjectDetailPage() {
                       onChange={(e) => setStringVariableName(e.target.value)}
                       placeholder="Variable name (optional)"
                     />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       {!editingString ? (
                                                       contentSubTab === "conditional" ? 
                           "This name will be used as the base for all spawn variables" : 
@@ -4237,7 +4435,7 @@ export default function ProjectDetailPage() {
                           Is Conditional
                         </Label>
                       </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         Conditional strings can be shown or hidden based on specific conditions
                       </p>
                     </div>
@@ -4474,7 +4672,7 @@ export default function ProjectDetailPage() {
                       Edit String
                     </SheetTitle>
                     <div className="flex items-center gap-2 mt-1">
-                      <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                      <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                         {`{{${drawer.stringData.effective_variable_name || drawer.stringData.variable_hash}}}`}
                       </Badge>
                       {drawer.isConditionalContainer && (
@@ -4603,7 +4801,7 @@ export default function ProjectDetailPage() {
                               <Label htmlFor={`includeHiddenOptionCascading-${drawer.id}`} className="text-sm font-medium">
                                 Include option to hide
                               </Label>
-                              <p className="text-xs text-muted-foreground ml-2">
+                              <p className="text-sm text-muted-foreground ml-2">
                                 Adds a "Hidden" option that makes this conditional invisible when selected
                               </p>
                             </div>
@@ -4633,7 +4831,7 @@ export default function ProjectDetailPage() {
                                           <Spool className="h-3 w-3" />
                                         </div>
                                       )}
-                                      <Badge variant="outline" className={`text-xs font-mono ${
+                                      <Badge variant="outline" className={`text-xs ${
                                         isTemporary 
                                           ? 'bg-yellow-50 text-yellow-700 border-yellow-200' 
                                           : 'bg-purple-50 text-purple-700 border-purple-200'
@@ -4721,7 +4919,7 @@ export default function ProjectDetailPage() {
                                             <Spool className="h-3 w-3" />
                                           </div>
                                         )}
-                                        <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                                        <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                                           {`{{${variableName}}}`}
                                         </Badge>
                                         {stringVar.is_conditional_container && (
@@ -4748,7 +4946,7 @@ export default function ProjectDetailPage() {
                                       <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 p-1 rounded border border-yellow-200">
                                         <Plus className="h-3 w-3" />
                                       </div>
-                                      <Badge variant="outline" className="text-xs font-mono bg-yellow-50 text-yellow-700 border-yellow-200">
+                                      <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
                                         {`{{${pendingVar}}}`}
                                       </Badge>
                                       <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-600 border-yellow-200">
@@ -5299,7 +5497,7 @@ export default function ProjectDetailPage() {
             {/* String Variables Section */}
             <div>
               <h3 className="font-medium mb-2">String Variables Used</h3>
-              <p className="text-xs text-muted-foreground mb-3">
+              <p className="text-sm text-muted-foreground mb-3">
                 String variables referenced in this string content. Click to edit them.
               </p>
               {(() => {
@@ -5346,7 +5544,7 @@ export default function ProjectDetailPage() {
                               <Spool className="h-3 w-3" />
                             </div>
                           )}
-                          <Badge variant="outline" className="text-xs font-mono bg-purple-50 text-purple-700 border-purple-200">
+                          <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                             {`{{${stringVar.effective_variable_name || stringVar.variable_hash}}}`}
                           </Badge>
                           {stringVar.is_conditional && (
@@ -5382,7 +5580,7 @@ export default function ProjectDetailPage() {
                           <div className="flex items-center gap-1 text-blue-600 bg-blue-50 p-1 rounded border border-blue-200">
                             <Plus className="h-3 w-3" />
                           </div>
-                          <Badge variant="outline" className="text-xs font-mono bg-blue-50 text-blue-700 border-blue-200">
+                          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
                             {`{{${variableName}}}`}
                           </Badge>
                           <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
@@ -5403,11 +5601,11 @@ export default function ProjectDetailPage() {
                 {project.dimensions && project.dimensions.length > 0 ? (
                   <div>
                     <h3 className="font-medium mb-2">Dimension Values</h3>
-                    <p className="text-xs text-muted-foreground mb-3">
+                    <p className="text-sm text-muted-foreground mb-3">
                       Optional: Assign values for each dimension to categorize this string.
                     </p>
                     <div className="mb-4 p-3 bg-muted/50 rounded-md">
-                      <p className="text-xs text-muted-foreground mb-2">
+                      <p className="text-sm text-muted-foreground mb-2">
                         <strong>Legend:</strong>
                       </p>
                       <div className="flex flex-wrap gap-3 text-xs">
@@ -5579,7 +5777,7 @@ export default function ProjectDetailPage() {
               <TabsContent value="advanced" className="mt-0">
                 <div>
                   <h3 className="font-medium mb-2">Variable Name</h3>
-                  <p className="text-xs text-muted-foreground mb-3">
+                  <p className="text-sm text-muted-foreground mb-3">
                     All strings are automatically available as variables. You can provide a custom name or leave blank to use an auto-generated hash.
                   </p>
                   <div className="space-y-4">
@@ -5592,7 +5790,7 @@ export default function ProjectDetailPage() {
                         onChange={(e) => setStringVariableName(e.target.value)}
                         placeholder="Enter custom variable name (optional)"
                       />
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         Optional: Provide a custom name for this variable. If left blank, a random hash will be used (e.g., ABC123).
                       </p>
                     </div>
@@ -5611,7 +5809,7 @@ export default function ProjectDetailPage() {
                           Make this a conditional variable
                         </Label>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-sm text-muted-foreground mt-1">
                         Conditional variables can be toggled on/off when viewing strings
                       </p>
                     </div>
@@ -5830,7 +6028,7 @@ export default function ProjectDetailPage() {
                     <div key={spawn.id} className="border rounded-lg p-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <h4 className="font-medium flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs font-mono">
+                          <Badge variant="outline" className="text-xs">
                             {`{{${spawn.effective_variable_name || spawn.variable_hash}}}`}
                           </Badge>
                         </h4>
@@ -5941,7 +6139,7 @@ export default function ProjectDetailPage() {
                         </Label>
                       </div>
                       
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-sm text-muted-foreground">
                         Variable name: <code>{`{{${spawn.variableName}}}`}</code>
                       </div>
                     </div>
@@ -5971,7 +6169,7 @@ export default function ProjectDetailPage() {
                     onChange={(e) => setNestedStringVariableName(e.target.value)}
                     placeholder="Leave empty to use auto-generated hash"
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {nestedStringVariableName.trim() 
                       ? `This will be used as {{${nestedStringVariableName.trim()}}} in other strings.`
                       : editingNestedString 

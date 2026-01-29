@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Grand_Hotel } from "next/font/google";
+import { Geist, Geist_Mono, Courgette } from "next/font/google";
 import "./globals.css";
 import "../styles/embedded-variables.scss";
 import { Header } from "@/components/header";
@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const grandHotel = Grand_Hotel({
-  variable: "--font-grand-hotel",
+const courgette = Courgette({
+  variable: "--font-courgette",
   subsets: ["latin"],
   weight: "400",
 });
@@ -35,7 +35,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${grandHotel.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${courgette.variable} antialiased`}
       >
         <HeaderProvider>
           <Header />

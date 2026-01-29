@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { FEATURES } from "@/lib/featureFlags";
 
 export default function Home() {
   const { isLoggedIn, loading: authLoading } = useAuth();
@@ -129,11 +130,13 @@ export default function Home() {
         <Button size="lg" onClick={() => setCreateOpen(true)} disabled={authLoading || !isLoggedIn}>
           Create project
         </Button>
-        <Link href="/registry">
-          <Button size="lg" variant="outline" disabled={authLoading || !isLoggedIn}>
-            View Registry
-          </Button>
-        </Link>
+        {FEATURES.REGISTRY && (
+          <Link href="/registry">
+            <Button size="lg" variant="outline" disabled={authLoading || !isLoggedIn}>
+              View Registry
+            </Button>
+          </Link>
+        )}
       </div>
       {!authLoading && isLoggedIn && (
         <section className="w-full max-w-4xl mt-12">
@@ -158,7 +161,7 @@ export default function Home() {
                           <div className="font-semibold text-lg mb-2">{project.name}</div>
                           <div className="text-muted-foreground text-sm min-h-[32px]">{project.description || <span>&nbsp;</span>}</div>
                         </div>
-                        <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground">
                           <span>Strings: <span className="font-semibold">{project.strings?.length ?? 0}</span></span>
                           <span>Variables: <span className="font-semibold">{project.variables?.length ?? 0}</span></span>
                         </div>

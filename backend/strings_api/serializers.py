@@ -17,6 +17,9 @@ class StringSerializer(serializers.ModelSerializer):
         model = String
         fields = ['id', 'content', 'project', 'variable_name', 'variable_hash', 'display_name', 'effective_variable_name', 'is_conditional', 'is_conditional_container', 'controlled_by_spawn_id', 'is_published', 'dimension_values', 'created_at', 'updated_at']
         read_only_fields = ['id', 'variable_name', 'variable_hash', 'effective_variable_name', 'created_at', 'updated_at']
+        # Disable automatic unique_together validation since variable_name is auto-generated
+        # in the model's save() method, which handles uniqueness properly
+        validators = []
     
     def get_dimension_values(self, obj):
         return StringDimensionValueSerializer(obj.dimension_values.all(), many=True).data

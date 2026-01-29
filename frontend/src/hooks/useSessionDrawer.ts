@@ -11,10 +11,11 @@ export function useSessionDrawer(options: {
   pendingStringVariables: any;
   onSuccess: () => void;
 }) {
-  const { project, onSuccess } = options;
+  const { project, pendingStringVariables, onSuccess } = options;
 
   const editSession = useEditSession({
     project,
+    pendingStringVariables,
     onSuccess,
   });
 
@@ -91,7 +92,47 @@ export function useSessionDrawer(options: {
     editSession.updateActiveVariable({
       conditionalSpawns: [...activeEdit.conditionalSpawns, newSpawn],
     });
+    
+    return newSpawn.id; // Return the new spawn's ID so caller can navigate to it
   }, [activeEdit, editSession]);
+
+  // Open a create drawer for a new spawn variable under a specific conditional
+  const openCreateSpawnDrawer = useCallback((conditionalVariable: any) => {
+    // First, open the parent conditional for editing
+    editSession.openEditSession(conditionalVariable);
+    
+    // Create the new spawn
+    const spawnId = `temp-${Date.now()}`;
+    const newSpawn = {
+      id: spawnId,
+      display_name: '',
+      content: '',
+      is_conditional: false,
+      is_conditional_container: false,
+      _isTemporary: true,
+    };
+    
+    // We need to get the edit state for the conditional after opening
+    // Since openEditSession creates the edit state, we need to update it after
+    // Use a microtask to ensure the state update from openEditSession is processed
+    setTimeout(() => {
+      // Get the conditional's edit state and add the spawn
+      const conditionalId = conditionalVariable.id.toString();
+      const conditionalEdit = editSession.session.edits.get(conditionalId);
+      
+      if (conditionalEdit) {
+        // Update the conditional with the new spawn
+        editSession.updateActiveVariable({
+          conditionalSpawns: [...conditionalEdit.conditionalSpawns, newSpawn],
+        });
+        
+        // Navigate to the new spawn
+        setTimeout(() => {
+          editSession.navigateToVariable(spawnId);
+        }, 10);
+      }
+    }, 0);
+  }, [editSession]);
 
   const updateSpawn = useCallback((index: number, updatedSpawn: any) => {
     if (!activeEdit) return;
@@ -172,6 +213,7 @@ export function useSessionDrawer(options: {
     // Session-specific
     navigateToVariable: editSession.navigateToVariable,
     sessionEdits: session.edits,
+    openCreateSpawnDrawer,
     activeVariableId: session.activeVariableId,
   };
 }

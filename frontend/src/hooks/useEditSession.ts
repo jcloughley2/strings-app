@@ -37,11 +37,12 @@ export interface EditSessionState {
 
 export interface UseEditSessionOptions {
   project: any;
+  pendingStringVariables?: {[name: string]: {content: string, is_conditional: boolean}};
   onSuccess: () => void;
   onCancel?: () => void;
 }
 
-export function useEditSession({ project, onSuccess, onCancel }: UseEditSessionOptions) {
+export function useEditSession({ project, pendingStringVariables = {}, onSuccess, onCancel }: UseEditSessionOptions) {
   const [session, setSession] = useState<EditSessionState>({
     edits: new Map(),
     activeVariableId: null,
@@ -255,12 +256,26 @@ export function useEditSession({ project, onSuccess, onCancel }: UseEditSessionO
     // For each variable in the session
     updatedEdits.forEach((edit, parentId) => {
       if (edit.conditionalSpawns && edit.conditionalSpawns.length > 0) {
+        let anySpawnEdited = false;
+        
         // For each spawn, check if there's a separate edit for it
         const updatedSpawns = edit.conditionalSpawns.map((spawn: any) => {
           const spawnId = spawn.id ? spawn.id.toString() : `temp-${spawn.variable_name || spawn.display_name}`;
           const spawnEdit = updatedEdits.get(spawnId);
           
           // If we have edits for this spawn, merge them
+          if (spawnEdit && spawnEdit.isDirty) {
+            anySpawnEdited = true;
+            return {
+              ...spawn,
+              content: spawnEdit.content,
+              display_name: spawnEdit.displayName,
+              is_conditional_container: spawnEdit.isConditional,
+            };
+          }
+          
+          // Also check if the spawn has unsaved content changes even if not marked dirty
+          // (e.g., temp spawns that were just created)
           if (spawnEdit) {
             return {
               ...spawn,
@@ -274,9 +289,11 @@ export function useEditSession({ project, onSuccess, onCancel }: UseEditSessionO
         });
         
         // Update the parent's conditionalSpawns with the merged data
+        // Also mark parent as dirty if any spawn was edited
         updatedEdits.set(parentId, {
           ...edit,
           conditionalSpawns: updatedSpawns,
+          isDirty: edit.isDirty || anySpawnEdited, // Mark parent dirty if any spawn was edited
         });
       }
     });
@@ -294,6 +311,34 @@ export function useEditSession({ project, onSuccess, onCancel }: UseEditSessionO
       
       // Convert Map to array for iteration
       const editsArray = Array.from(syncedEdits.entries());
+
+      // First, create any pending variables that are referenced in content
+      // These are variables that the user typed as {{variableName}} but don't exist yet
+      if (pendingStringVariables && Object.keys(pendingStringVariables).length > 0) {
+        console.log('Creating pending variables:', Object.keys(pendingStringVariables));
+        for (const [variableName, variableData] of Object.entries(pendingStringVariables)) {
+          try {
+            await apiFetch('/api/strings/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                content: variableData.content || `Content for ${variableName}`,
+                display_name: variableName,
+                is_conditional: variableData.is_conditional || false,
+                is_conditional_container: variableData.is_conditional || false,
+                project: project.id,
+              }),
+            });
+            console.log(`Created pending variable: ${variableName}`);
+          } catch (err: any) {
+            // If variable already exists (unique constraint), that's fine - continue
+            const errorStr = err.message || String(err);
+            if (!errorStr.includes('unique') && !errorStr.includes('already exists')) {
+              console.error(`Failed to create pending variable ${variableName}:`, err);
+            }
+          }
+        }
+      }
 
       // Build a set of spawn IDs that are part of a parent's conditionalSpawns
       // These should NOT be saved independently - they'll be saved with their parent
@@ -388,7 +433,7 @@ export function useEditSession({ project, onSuccess, onCancel }: UseEditSessionO
       }));
       throw error;
     }
-  }, [session.edits, project, onSuccess, syncSpawnEditsToParent]);
+  }, [session.edits, project, pendingStringVariables, onSuccess, syncSpawnEditsToParent]);
 
   // Discard all changes and close session
   const discardAll = useCallback(() => {

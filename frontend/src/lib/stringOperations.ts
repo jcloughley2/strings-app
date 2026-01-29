@@ -238,19 +238,37 @@ async function saveConditionalVariable({
   let dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
   
   if (!dimension) {
-    // Create a new dimension
-    dimension = await apiFetch('/api/dimensions/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: conditionalName,
-        project: projectId,
-      }),
-    });
+    try {
+      // Create a new dimension
+      dimension = await apiFetch('/api/dimensions/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: conditionalName,
+          project: projectId,
+        }),
+      });
+    } catch (dimError: any) {
+      // If dimension already exists (unique constraint), fetch it from the server
+      const errorStr = dimError.message || String(dimError);
+      if (errorStr.includes('unique') || errorStr.includes('already exists') || errorStr.includes('must make a unique set')) {
+        console.log(`Dimension "${conditionalName}" already exists, fetching from server...`);
+        // Fetch the project to get the existing dimension
+        const updatedProject = await apiFetch(`/api/projects/${projectId}/`);
+        dimension = updatedProject?.dimensions?.find((d: any) => d.name === conditionalName);
+        if (!dimension) {
+          throw new Error(`Could not find or create dimension "${conditionalName}"`);
+        }
+      } else {
+        throw dimError;
+      }
+    }
   }
   
-  // 5. Save all spawns and create dimension values to link them
-  const savedSpawns = await Promise.all(conditionalSpawns.map(async (spawn) => {
+  // 5. Save all spawns sequentially to avoid race conditions with unique slug generation
+  // (Using Promise.all would cause multiple spawns to check for the same slug simultaneously)
+  const savedSpawns: any[] = [];
+  for (const spawn of conditionalSpawns) {
     try {
       let savedSpawn;
       
@@ -286,17 +304,17 @@ async function saveConditionalVariable({
         }
       }
       
-      return savedSpawn;
+      savedSpawns.push(savedSpawn);
     } catch (spawnError: any) {
       const errorStr = spawnError.message || JSON.stringify(spawnError) || String(spawnError);
       if (errorStr.includes('unique set') || errorStr.includes('must make a unique set')) {
         console.log(`Spawn with variable name "${spawn.variable_name}" may already exist, continuing...`);
-        return spawn;
+        savedSpawns.push(spawn);
       } else {
         throw spawnError;
       }
     }
-  }));
+  }
   
   // 6. Create dimension values and link spawns to them
   for (const savedSpawn of savedSpawns) {

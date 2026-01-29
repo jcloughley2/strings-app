@@ -19,6 +19,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Copy, MoreHorizontal, Trash2, Plus, Folder, Focus } from "lucide-react";
+import { FEATURES } from "@/lib/featureFlags";
 
 export interface StringTileData {
   id: number;
@@ -63,7 +64,7 @@ export interface StringTileProps {
   /** Tooltip text for add button */
   addButtonTooltip?: string;
   
-  /** Whether we're adding to a conditional (orange) vs string (teal) */
+  /** @deprecated No longer used - add button now uses default styling */
   isAddingToConditional?: boolean;
   
   /** ID of the string currently being edited (to prevent self-embedding) */
@@ -131,7 +132,7 @@ export function StringTile({
       <div className="flex items-start gap-3">
         {/* Checkbox */}
         {showCheckbox && (
-          <div className="pt-1">
+          <div className="pt-1" onClick={(e) => e.stopPropagation()}>
             <input
               type="checkbox"
               checked={isSelected}
@@ -139,6 +140,7 @@ export function StringTile({
                 e.stopPropagation();
                 onSelect?.(e.target.checked);
               }}
+              onClick={(e) => e.stopPropagation()}
               className="rounded border-gray-300"
             />
           </div>
@@ -184,7 +186,7 @@ export function StringTile({
 
             {/* Project Source (for registry) */}
             {showProjectSource && string.project_id && string.project_name && (
-              <div className="mt-3 text-xs text-muted-foreground">
+              <div className="mt-3 text-sm text-muted-foreground">
                 From project:{" "}
                 <Link
                   href={`/projects/${string.project_id}`}
@@ -199,59 +201,8 @@ export function StringTile({
 
           {/* Action Buttons */}
           <div className="flex gap-1 shrink-0">
-            {/* Add Button - for embedding or adding as spawn (hidden if editing self) */}
-            {showAddButton && onAdd && editingStringId !== string.id && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      style={{
-                        backgroundColor: isAddingToConditional 
-                          ? 'var(--conditional-var-color)' 
-                          : 'var(--string-var-color)',
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAdd();
-                      }}
-                    >
-                      <Plus className="h-4 w-4 text-white" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{addButtonTooltip}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-
-            {/* Copy Reference Button */}
-            {showCopyButton && onCopy && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onCopy();
-                      }}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Copy reference</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-
             {/* Actions Menu */}
-            {showActionsMenu && (onDuplicate || onDelete || onFocus) && (
+            {showActionsMenu && (onDuplicate || onDelete || onFocus || onCopy) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -263,7 +214,18 @@ export function StringTile({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {onFocus && (
+                  {onCopy && (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCopy();
+                      }}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy reference
+                    </DropdownMenuItem>
+                  )}
+                  {FEATURES.REGISTRY && onFocus && (
                     <DropdownMenuItem
                       onClick={(e) => {
                         e.stopPropagation();
@@ -274,7 +236,7 @@ export function StringTile({
                       Focus mode
                     </DropdownMenuItem>
                   )}
-                  {onFocus && (onDuplicate || onDelete) && <DropdownMenuSeparator />}
+                  {(onCopy || (FEATURES.REGISTRY && onFocus)) && (onDuplicate || onDelete) && <DropdownMenuSeparator />}
                   {onDuplicate && (
                     <DropdownMenuItem
                       onClick={(e) => {
@@ -301,6 +263,29 @@ export function StringTile({
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
+            )}
+
+            {/* Add Button - for embedding or adding as spawn (hidden if editing self) - placed last (far right) */}
+            {showAddButton && onAdd && editingStringId !== string.id && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAdd();
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{addButtonTooltip}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
           </div>
         </div>

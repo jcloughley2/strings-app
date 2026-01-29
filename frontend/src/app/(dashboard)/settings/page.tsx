@@ -203,7 +203,7 @@ export default function SettingsPage() {
                     disabled
                     className="bg-muted"
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     Your username cannot be changed.
                   </p>
                 </div>
@@ -217,7 +217,7 @@ export default function SettingsPage() {
                     disabled
                     className="bg-muted"
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     Contact support to change your email address.
                   </p>
                 </div>
@@ -232,7 +232,7 @@ export default function SettingsPage() {
               <Button variant="outline" disabled>
                 Change Password
               </Button>
-              <p className="text-xs text-muted-foreground mt-2">
+              <p className="text-sm text-muted-foreground mt-2">
                 Password change coming soon.
               </p>
             </Card>
@@ -280,7 +280,7 @@ export default function SettingsPage() {
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
                       />
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         Get your API key from{" "}
                         <a
                           href="https://platform.openai.com/api-keys"
@@ -385,7 +385,7 @@ export default function SettingsPage() {
                   )}
 
                   {!hasApiKey && (
-                    <p className="text-xs text-muted-foreground mt-2">
+                    <p className="text-sm text-muted-foreground mt-2">
                       Add your API key above to test the connection.
                     </p>
                   )}

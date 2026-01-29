@@ -373,13 +373,13 @@ export default function RegistryStringFocusPage() {
                                 <div className="flex items-start gap-1">
                                   {isControlled && <Lock className="h-3 w-3 flex-shrink-0 mt-0.5" />}
                                   <div className="flex-1 min-w-0">
-                                    <div className="text-xs leading-tight">
+                                    <div className="text-sm text-muted-foreground">
                                       {truncatedContent || <span className="text-muted-foreground italic">No content</span>}
                                     </div>
                                   </div>
                                 </div>
                                 {/* Display name / Hash (secondary) */}
-                                <div className="text-[10px] text-muted-foreground mt-1 leading-tight font-mono">
+                                <div className="text-sm text-muted-foreground mt-1">
                                   {spawnDisplayName}
                                 </div>
                               </div>
@@ -409,13 +409,13 @@ export default function RegistryStringFocusPage() {
                                 <div className="flex items-start gap-1">
                                   {isControlled && <Lock className="h-3 w-3 flex-shrink-0 mt-0.5" />}
                                   <div className="flex-1 min-w-0">
-                                    <div className="text-xs leading-tight">
+                                    <div className="text-sm text-muted-foreground">
                                       {truncatedContent || <span className="text-muted-foreground italic">No content</span>}
                                     </div>
                                   </div>
                                 </div>
                                 {/* Display name / Hash (secondary) */}
-                                <div className="text-[10px] text-muted-foreground mt-1 leading-tight font-mono">
+                                <div className="text-sm text-muted-foreground mt-1">
                                   {spawnDisplayName}
                                 </div>
                               </div>

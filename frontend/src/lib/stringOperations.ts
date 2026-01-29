@@ -19,8 +19,8 @@ export interface SaveStringOptions {
   // Core data
   stringData?: StringData | null; // null for new strings
   content: string;
-  variableName?: string;
-  displayName?: string;
+  variableName?: string; // Deprecated - kept for interface compatibility
+  variableHash?: string; // Editable hash identifier
   isConditional: boolean;
   projectId: string | number;
   
@@ -50,8 +50,7 @@ export async function saveString(options: SaveStringOptions): Promise<any> {
   const {
     stringData,
     content,
-    variableName,
-    displayName,
+    variableHash,
     isConditional,
     projectId,
     conditionalSpawns = [],
@@ -76,8 +75,7 @@ export async function saveString(options: SaveStringOptions): Promise<any> {
     // Conditional containers don't need content, their spawns have content
     let processedContent = content;
     if (!isConditional && !content.trim()) {
-      // Use display name or variable name as default content
-      processedContent = displayName || variableName || 'New string content';
+      processedContent = 'New string content';
     }
     
     // 2. Determine if this is a new string
@@ -91,8 +89,7 @@ export async function saveString(options: SaveStringOptions): Promise<any> {
       return await saveConditionalVariable({
         stringData,
         content: processedContent,
-        variableName,
-        displayName,
+        variableHash,
         projectId,
         conditionalSpawns,
         includeHiddenOption,
@@ -104,8 +101,7 @@ export async function saveString(options: SaveStringOptions): Promise<any> {
       return await saveStringVariable({
         stringData,
         content: processedContent,
-        variableName,
-        displayName,
+        variableHash,
         projectId,
         controlledBySpawnId,
         isPublished,
@@ -124,8 +120,7 @@ export async function saveString(options: SaveStringOptions): Promise<any> {
 async function saveStringVariable({
   stringData,
   content,
-  variableName,
-  displayName,
+  variableHash,
   projectId,
   controlledBySpawnId,
   isPublished,
@@ -133,23 +128,26 @@ async function saveStringVariable({
 }: {
   stringData?: StringData | null;
   content: string;
-  variableName?: string;
-  displayName?: string;
+  variableHash?: string;
   projectId: string | number;
   controlledBySpawnId?: number | null;
   isPublished?: boolean;
   isNewString: boolean;
 }): Promise<any> {
   
-  const payload = {
+  const payload: any = {
     content: content.trim(),
-    display_name: displayName?.trim() || null,
     is_conditional: false,
     is_conditional_container: false,
     controlled_by_spawn_id: controlledBySpawnId || null,
     is_published: isPublished || false,
     project: projectId,
   };
+  
+  // Only include variable_hash if explicitly provided (for editing)
+  if (variableHash?.trim()) {
+    payload.variable_hash = variableHash.trim();
+  }
   
   let response;
   
@@ -181,8 +179,7 @@ async function saveStringVariable({
 async function saveConditionalVariable({
   stringData,
   content,
-  variableName,
-  displayName,
+  variableHash,
   projectId,
   conditionalSpawns,
   isNewString,
@@ -190,8 +187,7 @@ async function saveConditionalVariable({
 }: {
   stringData?: StringData | null;
   content: string;
-  variableName?: string;
-  displayName?: string;
+  variableHash?: string;
   projectId: string | number;
   conditionalSpawns: any[];
   includeHiddenOption: boolean; // kept for interface compatibility but no longer used
@@ -207,13 +203,17 @@ async function saveConditionalVariable({
   }
   
   // 2. Create/update the conditional container
-  const containerPayload = {
+  const containerPayload: any = {
     content: content.trim(),
-    display_name: displayName?.trim() || null,
     is_conditional: true,
     is_conditional_container: true,
     project: projectId,
   };
+  
+  // Only include variable_hash if explicitly provided (for editing)
+  if (variableHash?.trim()) {
+    containerPayload.variable_hash = variableHash.trim();
+  }
   
   let conditionalContainer;
   
@@ -277,13 +277,17 @@ async function saveConditionalVariable({
         console.log(`Using existing variable as spawn: ${spawn.effective_variable_name || spawn.variable_hash}`);
         savedSpawn = spawn;
       } else {
-        const spawnPayload = {
+        const spawnPayload: any = {
           content: spawn.content?.trim() || 'Default spawn content',
-          display_name: spawn.display_name?.trim() || null,
           is_conditional: false,
           is_conditional_container: false,
           project: projectId,
         };
+        
+        // Include variable_hash if spawn has one (for editing existing spawns)
+        if (spawn.variable_hash?.trim()) {
+          spawnPayload.variable_hash = spawn.variable_hash.trim();
+        }
         
         const isNewSpawn = spawn._isTemporary || 
                           String(spawn.id).startsWith('temp-') || 

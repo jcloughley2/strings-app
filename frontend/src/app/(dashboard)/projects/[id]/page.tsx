@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 
 
-import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Settings, EyeOff, Hash, Lock, PanelBottom, Search } from "lucide-react";
+import { Edit2, Trash2, Type, Plus, X, MoreHorizontal, Download, Upload, Copy, Folder, Spool, Signpost, ArrowLeft, Settings, EyeOff, Hash, Lock, PanelBottom, Search, Sparkles } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -41,7 +41,7 @@ export default function ProjectDetailPage() {
   const [isPlaintextMode, setIsPlaintextMode] = useState(false);
   const [showVariableBadges, setShowVariableBadges] = useState(false);
   const [hideEmbeddedStrings, setHideEmbeddedStrings] = useState(false);
-  const [showVariableNames, setShowVariableNames] = useState(true); // Show display names by default
+  // showVariableNames removed - no longer using display names, only hashes
   const [showVariableHashes, setShowVariableHashes] = useState(false); // Hide copiable hashes by default
   const [isStringDrawerOpen, setIsStringDrawerOpen] = useState(false);
   const [isCanvasSettingsOpen, setIsCanvasSettingsOpen] = useState(false);
@@ -484,7 +484,7 @@ export default function ProjectDetailPage() {
       
       for (const pattern of patterns) {
         if (str.content.includes(pattern)) {
-          const parentName = str.display_name || str.effective_variable_name || str.variable_hash;
+          const parentName = str.effective_variable_name || str.variable_hash;
           if (!embeddedIn.includes(parentName)) {
             embeddedIn.push(parentName);
           }
@@ -500,7 +500,7 @@ export default function ProjectDetailPage() {
     if (variable.controlled_by_spawn_id) {
       const controller = project.strings.find((s: any) => s.id === variable.controlled_by_spawn_id);
       if (controller) {
-        const controllerName = controller.display_name || controller.effective_variable_name || controller.variable_hash;
+        const controllerName = controller.effective_variable_name || controller.variable_hash;
         spawnOf.push(`Controlled by: ${controllerName}`);
       }
     }
@@ -518,7 +518,7 @@ export default function ProjectDetailPage() {
           dv.value === variableName || dv.value === variableHash
         );
         if (isSpawn) {
-          const parentName = str.display_name || str.effective_variable_name || str.variable_hash;
+          const parentName = str.effective_variable_name || str.variable_hash;
           if (!spawnOf.some(s => s.includes(parentName))) {
             spawnOf.push(`Spawn of: ${parentName}`);
           }
@@ -1319,11 +1319,9 @@ export default function ProjectDetailPage() {
       const content = (str.content || '').toLowerCase();
       const variableName = (str.effective_variable_name || str.variable_name || '').toLowerCase();
       const variableHash = (str.variable_hash || '').toLowerCase();
-      const displayName = (str.display_name || '').toLowerCase();
       return content.includes(query) || 
              variableName.includes(query) || 
-             variableHash.includes(query) ||
-             displayName.includes(query);
+             variableHash.includes(query);
     });
   }
 
@@ -1764,7 +1762,7 @@ export default function ProjectDetailPage() {
           
           if (stringVariable?.is_conditional_container) {
             // Conditional variable badge with gradient
-            const displayName = stringVariable.display_name || stringVariable.effective_variable_name || stringVariable.variable_hash;
+            const displayName = stringVariable.effective_variable_name || stringVariable.variable_hash;
             return (
               <Badge
                 key={`${keyPrefix}${depth}-${index}-${variableName}`}
@@ -1781,7 +1779,7 @@ export default function ProjectDetailPage() {
             );
           } else if (stringVariable) {
             // String variable badge with gradient
-            const displayName = stringVariable.display_name || stringVariable.effective_variable_name || stringVariable.variable_hash;
+            const displayName = stringVariable.effective_variable_name || stringVariable.variable_hash;
             return (
               <Badge
                 key={`${keyPrefix}${depth}-${index}-${variableName}`}
@@ -2317,12 +2315,10 @@ export default function ProjectDetailPage() {
                 conditionalVariables = conditionalVariables.filter((str: any) => {
                   const conditionalName = (str.effective_variable_name || str.variable_name || '').toLowerCase();
                   const conditionalHash = (str.variable_hash || '').toLowerCase();
-                  const displayName = (str.display_name || '').toLowerCase();
                   
                   // Check if conditional itself matches
                   const conditionalMatches = conditionalName.includes(query) || 
-                                             conditionalHash.includes(query) ||
-                                             displayName.includes(query);
+                                             conditionalHash.includes(query);
                   
                   // Also check if any of its spawns match
                   const dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
@@ -2335,11 +2331,9 @@ export default function ProjectDetailPage() {
                     const spawnContent = (spawn.content || '').toLowerCase();
                     const spawnName = (spawn.effective_variable_name || spawn.variable_name || '').toLowerCase();
                     const spawnHash = (spawn.variable_hash || '').toLowerCase();
-                    const spawnDisplayName = (spawn.display_name || '').toLowerCase();
                     return spawnContent.includes(query) || 
                            spawnName.includes(query) || 
-                           spawnHash.includes(query) ||
-                           spawnDisplayName.includes(query);
+                           spawnHash.includes(query);
                   });
                   
                   return conditionalMatches || spawnMatches;
@@ -2350,7 +2344,7 @@ export default function ProjectDetailPage() {
               <div className="space-y-4">
                   {conditionalVariables.map((conditionalVar: any) => {
                     const conditionalName = conditionalVar.effective_variable_name || conditionalVar.variable_hash;
-                    const conditionalDisplayName = conditionalVar.display_name || conditionalName;
+                    const conditionalDisplayName = conditionalName;
                     
                     // Find spawns for this conditional variable using multiple methods
                     const dimension = project?.dimensions?.find((d: any) => d.name === conditionalName);
@@ -2557,7 +2551,7 @@ export default function ProjectDetailPage() {
                           // Helper to render a spawn card
                           const renderSpawnCard = (spawn: any) => {
                             const spawnHash = spawn.effective_variable_name || spawn.variable_name || spawn.variable_hash;
-                            const spawnDisplayName = spawn.display_name || spawnHash;
+                            const spawnDisplayName = spawnHash;
                             const isSelected = selectedConditionalSpawns[conditionalName] === spawnHash;
                             
                             // Check if this spawn should be disabled due to controlling logic
@@ -2865,13 +2859,11 @@ export default function ProjectDetailPage() {
                   string={{
                     id: str.id,
                     content: str.content,
-                    display_name: str.display_name,
-                    variable_name: str.variable_name,
                     variable_hash: str.variable_hash,
                     effective_variable_name: str.effective_variable_name,
                     is_conditional_container: str.is_conditional_container,
                   }}
-                  showDisplayName={showVariableNames}
+                  showDisplayName={false}
                   showVariableHash={!isPlaintextMode && showVariableHashes}
                   renderContent={(content) => renderStyledContent(content, str.variables || [], str.id)}
                   onClick={() => openEditInCascadingDrawer(str)}
@@ -2959,11 +2951,18 @@ export default function ProjectDetailPage() {
                 let activeData: any = null;
                 let activeName = 'New Variable';
                 let activeIsConditional = mainDrawer.isConditional;
+                let isPendingVariable = false;
                 
                 if (activeId?.startsWith('new-')) {
                   // New variable being created
-                  activeName = activeEdit?.displayName || mainDrawer.displayName || 'New Variable';
+                  activeName = activeEdit?.variableHash || mainDrawer.variableHash || 'New Variable';
                   activeIsConditional = activeEdit?.isConditional ?? mainDrawer.isConditional;
+                } else if (activeId?.startsWith('pending-')) {
+                  // Pending embedded variable - extract name from ID
+                  isPendingVariable = true;
+                  const pendingVarName = activeId.replace('pending-', '');
+                  activeName = activeEdit?.variableHash || pendingVarName;
+                  activeIsConditional = activeEdit?.isConditional ?? false;
                 } else if (activeId?.startsWith('temp-')) {
                   // Temp spawn - find it in parent's spawns
                   const rootId = mainDrawer.stringData?.id ? String(mainDrawer.stringData.id) : 'new';
@@ -2971,37 +2970,61 @@ export default function ProjectDetailPage() {
                   const spawn = rootEdit?.conditionalSpawns?.find((s: any) => String(s.id) === activeId);
                   if (spawn) {
                     activeData = spawn;
-                    activeName = spawn.display_name || spawn.effective_variable_name || spawn.variable_hash || 'Spawn';
+                    activeName = spawn.effective_variable_name || spawn.variable_hash || 'Spawn';
                     activeIsConditional = spawn.is_conditional_container || false;
                   }
                 } else if (activeId) {
                   // Existing variable
                   activeData = project?.strings?.find((s: any) => String(s.id) === activeId);
                   if (activeData) {
-                    activeName = activeEdit?.displayName || activeData.display_name || activeData.effective_variable_name || activeData.variable_hash || 'Variable';
+                    activeName = activeEdit?.variableHash || activeData.effective_variable_name || activeData.variable_hash || 'Variable';
                     activeIsConditional = activeEdit?.isConditional ?? activeData.is_conditional_container ?? false;
                   }
                 }
                 
-                const activeVarName = activeData?.effective_variable_name || activeData?.variable_hash || '';
+                const activeVarName = isPendingVariable ? activeName : (activeData?.effective_variable_name || activeData?.variable_hash || '');
                 
                 // Build parent nodes
                 const parents: {id: string; name: string; type: 'string' | 'conditional'; parentType: 'embeds' | 'spawns'}[] = [];
                 
-                if (activeVarName && project?.strings) {
-                  project.strings.forEach((str: any) => {
-                    if (String(str.id) === activeId) return;
-                    
-                    // Check if this string embeds the active variable
-                    if (str.content?.includes(`{{${activeVarName}}}`)) {
-                      parents.push({
-                        id: String(str.id),
-                        name: str.display_name || str.effective_variable_name || str.variable_hash,
-                        type: str.is_conditional_container ? 'conditional' : 'string',
-                        parentType: 'embeds'
-                      });
-                    }
-                  });
+                if (activeVarName) {
+                  // Check saved project strings for parents
+                  if (project?.strings) {
+                    project.strings.forEach((str: any) => {
+                      if (String(str.id) === activeId) return;
+                      
+                      // Check if this string embeds the active variable
+                      if (str.content?.includes(`{{${activeVarName}}}`)) {
+                        parents.push({
+                          id: String(str.id),
+                          name: str.effective_variable_name || str.variable_hash,
+                          type: str.is_conditional_container ? 'conditional' : 'string',
+                          parentType: 'embeds'
+                        });
+                      }
+                    });
+                  }
+                  
+                  // Also check session edits for parents (for pending variables)
+                  if (mainDrawer.sessionEdits) {
+                    mainDrawer.sessionEdits.forEach((edit: any, editId: string) => {
+                      if (editId === activeId) return;
+                      // Skip if we already found this parent in project strings
+                      if (parents.some(p => p.id === editId)) return;
+                      
+                      // Check if this edit's content embeds the active variable
+                      if (edit.content?.includes(`{{${activeVarName}}}`)) {
+                        // Get the variable data for display
+                        const varData = project?.strings?.find((s: any) => String(s.id) === editId);
+                        parents.push({
+                          id: editId,
+                          name: edit.variableHash || varData?.effective_variable_name || varData?.variable_hash || 'Variable',
+                          type: edit.isConditional ? 'conditional' : 'string',
+                          parentType: 'embeds'
+                        });
+                      }
+                    });
+                  }
                   
                   // Check if active is a spawn of a conditional
                   // Method 1: Check dimension_values (legacy system)
@@ -3017,7 +3040,7 @@ export default function ProjectDetailPage() {
                         if (!parents.some(p => p.id === String(parentConditional.id))) {
                           parents.push({
                             id: String(parentConditional.id),
-                            name: parentConditional.display_name || parentConditional.effective_variable_name || parentConditional.variable_hash,
+                            name: parentConditional.effective_variable_name || parentConditional.variable_hash,
                             type: 'conditional',
                             parentType: 'spawns'
                           });
@@ -3045,7 +3068,7 @@ export default function ProjectDetailPage() {
                       if (isSpawnOfThis && !parents.some(p => p.id === String(conditionalVar.id))) {
                         parents.push({
                           id: String(conditionalVar.id),
-                          name: conditionalVar.display_name || conditionalVar.effective_variable_name || conditionalVar.variable_hash,
+                          name: conditionalVar.effective_variable_name || conditionalVar.variable_hash,
                           type: 'conditional',
                           parentType: 'spawns'
                         });
@@ -3060,7 +3083,7 @@ export default function ProjectDetailPage() {
                   if (!parents.some(p => p.id === String(rootData.id))) {
                     parents.push({
                       id: String(rootData.id),
-                      name: rootData.display_name || rootData.effective_variable_name || rootData.variable_hash,
+                      name: rootData.effective_variable_name || rootData.variable_hash,
                       type: 'conditional',
                       parentType: 'spawns'
                     });
@@ -3078,7 +3101,7 @@ export default function ProjectDetailPage() {
                     if (spawnId !== activeId) {
                       children.push({
                         id: spawnId,
-                        name: spawn.display_name || spawn.effective_variable_name || spawn.variable_hash || `Spawn ${index + 1}`,
+                        name: spawn.effective_variable_name || spawn.variable_hash || `Spawn ${index + 1}`,
                         type: spawn.is_conditional_container ? 'conditional' : 'string'
                       });
                     }
@@ -3102,8 +3125,19 @@ export default function ProjectDetailPage() {
                     if (!children.some(c => c.id === String(embeddedVar.id))) {
                       children.push({
                         id: String(embeddedVar.id),
-                        name: embeddedVar.display_name || embeddedVar.effective_variable_name || embeddedVar.variable_hash,
+                        name: embeddedVar.effective_variable_name || embeddedVar.variable_hash,
                         type: embeddedVar.is_conditional_container ? 'conditional' : 'string'
+                      });
+                    }
+                  } else if (!embeddedVar) {
+                    // Variable doesn't exist yet - it's a pending/new variable
+                    const pendingId = `pending-${varName}`;
+                    // Avoid duplicates
+                    if (!children.some(c => c.id === pendingId)) {
+                      children.push({
+                        id: pendingId,
+                        name: varName,
+                        type: 'string' // Assume string for new variables
                       });
                     }
                   }
@@ -3111,9 +3145,10 @@ export default function ProjectDetailPage() {
                 
                 // Render helper
                 const renderTile = (node: {id: string; name: string; type: 'string' | 'conditional'}, size: number = 28, isActive: boolean = false) => {
-                  const bgColor = node.type === 'conditional' ? 'var(--conditional-var-100)' : 'var(--string-var-100)';
-                  const borderColor = node.type === 'conditional' ? 'var(--conditional-var-color)' : 'var(--string-var-color)';
-                  const activeBg = node.type === 'conditional' ? 'var(--conditional-var-200)' : 'var(--string-var-200)';
+                  const isPending = node.id.startsWith('pending-');
+                  const bgColor = isPending ? 'var(--pending-var-100, #f3e8ff)' : (node.type === 'conditional' ? 'var(--conditional-var-100)' : 'var(--string-var-100)');
+                  const borderColor = isPending ? 'var(--pending-var-color, mediumpurple)' : (node.type === 'conditional' ? 'var(--conditional-var-color)' : 'var(--string-var-color)');
+                  const activeBg = isPending ? 'var(--pending-var-200, #e9d5ff)' : (node.type === 'conditional' ? 'var(--conditional-var-200)' : 'var(--string-var-200)');
                   
                   return (
                     <button
@@ -3126,18 +3161,22 @@ export default function ProjectDetailPage() {
                         backgroundColor: isActive ? activeBg : bgColor,
                         border: `2px solid ${borderColor}`,
                       }}
-                      title={node.name}
+                      title={isPending ? `${node.name} (new - click to edit)` : node.name}
                       disabled={isActive}
                     >
-                      <span 
-                        className="font-semibold"
-                        style={{ 
-                          color: node.type === 'conditional' ? 'var(--conditional-var-700)' : 'var(--string-var-700)',
-                          fontSize: isActive ? '12px' : '10px'
-                        }}
-                      >
-                        {node.name.charAt(0).toUpperCase()}
-                      </span>
+                      {isPending ? (
+                        <Sparkles className="h-3 w-3" style={{ color: 'var(--pending-var-color, mediumpurple)' }} />
+                      ) : (
+                        <span 
+                          className="font-semibold"
+                          style={{ 
+                            color: node.type === 'conditional' ? 'var(--conditional-var-700)' : 'var(--string-var-700)',
+                            fontSize: isActive ? '12px' : '10px'
+                          }}
+                        >
+                          {node.name.charAt(0).toUpperCase()}
+                        </span>
+                      )}
                     </button>
                   );
                 };
@@ -3323,7 +3362,7 @@ export default function ProjectDetailPage() {
                       <div className="space-y-2">
                         {mainDrawer.conditionalSpawns.map((spawn: any, index: number) => {
                           const spawnId = String(spawn.id || `temp-spawn-${index}`);
-                          const spawnName = spawn.display_name || spawn.effective_variable_name || spawn.variable_hash || `Spawn ${index + 1}`;
+                          const spawnName = spawn.effective_variable_name || spawn.variable_hash || `Spawn ${index + 1}`;
                           const contentPreview = spawn.content ? spawn.content.substring(0, 60) + (spawn.content.length > 60 ? '...' : '') : 'No content';
                           const isNew = spawn._isTemporary;
                           
@@ -3387,23 +3426,29 @@ export default function ProjectDetailPage() {
               {mainDrawer.activeTab === 'advanced' && (
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Display Name</Label>
+                    <Label>Variable Hash (Identifier)</Label>
                     <Input
-                      value={mainDrawer.displayName}
-                      onChange={(e) => mainDrawer.updateDisplayName(e.target.value)}
-                      placeholder="Enter a display name..."
+                      value={mainDrawer.variableHash}
+                      onChange={(e) => {
+                        // Remove spaces and validate format
+                        const value = e.target.value.replace(/\s/g, '');
+                        mainDrawer.updateVariableHash(value);
+                      }}
+                      placeholder="Leave empty for auto-generated hash"
+                      className={mainDrawer.variableHash && !/^[A-Za-z0-9][A-Za-z0-9\-]*$/.test(mainDrawer.variableHash) ? 'border-red-500' : ''}
                     />
-                    <p className="text-sm text-muted-foreground">
-                      This will be slugified to create the variable name.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Variable Name</Label>
-                    <Input
-                      value={mainDrawer.variableName || '(auto-generated)'}
-                      disabled
-                      className="bg-muted"
-                    />
+                    {mainDrawer.variableHash && !/^[A-Za-z0-9][A-Za-z0-9\-]*$/.test(mainDrawer.variableHash) ? (
+                      <p className="text-sm text-red-500">
+                        Hash must start with a letter or number and contain only letters, numbers, and hyphens (no spaces).
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {mainDrawer.variableHash ? 
+                          `Reference as: {{${mainDrawer.variableHash}}}` : 
+                          "Leave empty to auto-generate a 6-character hash"
+                        }
+                      </p>
+                    )}
                   </div>
                   
                   {/* Delete Option - only for existing variables */}
@@ -3513,9 +3558,9 @@ export default function ProjectDetailPage() {
         content={mainDrawer.content}
         onContentChange={mainDrawer.updateContent}
         variableName={mainDrawer.variableName}
-        onVariableNameChange={mainDrawer.updateVariableName}
-        displayName={mainDrawer.displayName}
-        onDisplayNameChange={mainDrawer.updateDisplayName}
+        onVariableNameChange={() => {}} // Deprecated - no longer used
+        variableHash={mainDrawer.variableHash}
+        onVariableHashChange={mainDrawer.updateVariableHash}
         isConditional={mainDrawer.isConditional}
         onTypeChange={mainDrawer.updateType}
         conditionalSpawns={mainDrawer.conditionalSpawns}
@@ -5152,7 +5197,7 @@ export default function ProjectDetailPage() {
             Array.from(selectedStringIds).forEach(id => {
               const usage = checkVariableUsage(id);
               const variable = project?.strings?.find((s: any) => s.id === Number(id));
-              const name = variable?.display_name || variable?.effective_variable_name || variable?.variable_hash || id;
+              const name = variable?.effective_variable_name || variable?.variable_hash || id;
               
               if (usage.isInUse) {
                 inUseVariables.push({ id, name, usage });
@@ -5895,21 +5940,6 @@ export default function ProjectDetailPage() {
                   />
                     </div>
 
-                {/* Show Variable Names Toggle */}
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1 flex-1">
-                    <Label htmlFor="show-names">Show Variable Names</Label>
-                <p className="text-sm text-muted-foreground">
-                      Display the variable name (title) on each string card
-                    </p>
-                  </div>
-                  <Switch
-                    id="show-names"
-                    checked={showVariableNames}
-                    onCheckedChange={setShowVariableNames}
-                  />
-            </div>
-            
                 {/* Show Variable Hashes Toggle */}
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1 flex-1">
@@ -6246,7 +6276,7 @@ export default function ProjectDetailPage() {
         <DialogContent className="max-w-md">
           {(() => {
             const usage = deleteStringDialog?.id ? checkVariableUsage(deleteStringDialog.id) : { isInUse: false, usageType: null, embeddedIn: [], spawnOf: [] };
-            const variableName = deleteStringDialog?.display_name || deleteStringDialog?.effective_variable_name || deleteStringDialog?.variable_hash;
+            const variableName = deleteStringDialog?.effective_variable_name || deleteStringDialog?.variable_hash;
             
             return (
               <>

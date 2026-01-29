@@ -41,8 +41,8 @@ export function useSessionDrawer(options: {
     editSession.updateActiveVariable({ content });
   }, [editSession]);
 
-  const updateDisplayName = useCallback((displayName: string) => {
-    editSession.updateActiveVariable({ displayName });
+  const updateVariableHash = useCallback((variableHash: string) => {
+    editSession.updateActiveVariable({ variableHash });
   }, [editSession]);
 
   const updateType = useCallback((isConditional: boolean) => {
@@ -82,7 +82,7 @@ export function useSessionDrawer(options: {
     
     const newSpawn = {
       id: `temp-${Date.now()}`,
-      display_name: '',
+      variable_hash: '',
       content: '',
       is_conditional: false,
       is_conditional_container: false,
@@ -105,7 +105,7 @@ export function useSessionDrawer(options: {
     const spawnId = `temp-${Date.now()}`;
     const newSpawn = {
       id: spawnId,
-      display_name: '',
+      variable_hash: '',
       content: '',
       is_conditional: false,
       is_conditional_container: false,
@@ -178,7 +178,7 @@ export function useSessionDrawer(options: {
     stringData: activeEdit?.originalData || null,
     content: activeEdit?.content || '',
     variableName: activeEdit?.originalData?.effective_variable_name || activeEdit?.originalData?.variable_hash || '',
-    displayName: activeEdit?.displayName || '',
+    variableHash: activeEdit?.variableHash || activeEdit?.originalData?.variable_hash || '',
     isConditional: activeEdit?.isConditional || false,
     conditionalSpawns: activeEdit?.conditionalSpawns || [],
     includeHiddenOption: activeEdit?.includeHiddenOption || false,
@@ -195,7 +195,7 @@ export function useSessionDrawer(options: {
     openEditDrawer,
     closeDrawer,
     updateContent,
-    updateDisplayName,
+    updateVariableHash,
     updateType,
     updateConditionalSpawns,
     updateHiddenOption,

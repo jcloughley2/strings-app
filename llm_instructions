@@ -78,11 +78,10 @@ String: "My favorite color is `{{color-option}}`"
 1. **Project**: Container for all content (name, description, user)
 
 2. **String**: The "file" system - every string is automatically a variable
-   - **Fields**: content, project, display_name, variable_name (auto-generated), variable_hash (auto-fallback), is_conditional, is_conditional_container, controlled_by_spawn
-   - **Display Name**: Human-readable name (e.g., "Welcome Message")
-   - **Variable Name**: Auto-generated slug from display_name (e.g., "welcome-message") or random hash if no display_name
-   - **Variable Hash**: 6-character fallback identifier (e.g., "A7B2K9")
-   - **Effective Variable Name**: Returns variable_name || variable_hash
+   - **Fields**: content, project, variable_hash (editable identifier), is_conditional, is_conditional_container, controlled_by_spawn
+   - **Variable Hash**: Primary identifier - either user-defined (e.g., "welcome-message") or auto-generated 6-character hash (e.g., "A7B2K9")
+   - **Validation**: Hash must be alphanumeric with optional hyphens, no spaces, max 50 characters
+   - **Deprecated**: display_name and variable_name fields still exist in database but are no longer used
    - **Conditional Variables**: Containers that hold multiple spawn variables
    - **Spawn Variables**: Individual variations within a conditional variable
    - **Controlled By Spawn**: Optional ForeignKey to another spawn variable that controls this spawn's selection
@@ -132,7 +131,6 @@ String: "My favorite color is `{{color-option}}`"
 - **Plaintext Mode**: Show resolved content without styling or conditional variables
 - **Show Variables**: Display variable names as badges instead of resolved content  
 - **Hide Embedded Strings** (ON by default): Hide strings used as variables or spawn variables
-- **Show Variable Names** (ON by default): Display the variable name (title/display_name) on each string card
 - **Show Variable Hashes** (OFF by default): Display the copiable variable hash badge on each string card
 
 **Conditions Sidebar Section**:
@@ -195,9 +193,9 @@ String: "My favorite color is `{{color-option}}`"
   - Auto-selection when controller is selected
 
 **Advanced Tab**:
-- Display Name input (triggers slugify)
-- Variable Name (read-only, auto-generated)
-- Variable Hash (read-only, fallback)
+- Variable Hash input (editable identifier, validated for alphanumeric + hyphens, no spaces)
+- Shows reference format preview: `{{variableHash}}`
+- Leave empty for auto-generated 6-character hash
 
 ### Spawn Management
 
@@ -252,14 +250,14 @@ String: "My favorite color is `{{color-option}}`"
 ```json
 {
   "content": "String content here",
-  "display_name": "Welcome Message",  // Optional - generates slug: "welcome-message"
+  "variable_hash": "welcome-message",  // Optional - custom identifier (alphanumeric + hyphens, max 50 chars)
   "is_conditional": false,
   "is_conditional_container": false,
   "controlled_by_spawn_id": null,  // Optional - ID of controlling spawn variable
   "project": 1
 }
-// Note: variable_name is auto-generated (read-only) from display_name
-// If no display_name provided, uses random 6-char hash
+// Note: If variable_hash not provided, a random 6-character hash is auto-generated
+// variable_name is synced with variable_hash for backward compatibility
 ```
 
 ### Dimensions (Removed)
@@ -317,18 +315,16 @@ if (selectedSpawnName && selectedSpawnName !== "Hidden") {
 }
 ```
 
-### Slugify-Based Variable Naming
+### Variable Hash Naming
 ```python
 # Backend: String model save() method
 def save(self, *args, **kwargs):
-    if self.display_name and self.display_name.strip():
-        base_slug = slugify(self.display_name, max_length=50)
-        self.variable_name = self.generate_unique_slug(base_slug)
-    elif not self.variable_name:
-        self.variable_name = self.generate_unique_hash()
-    
+    # Generate variable_hash if not provided (primary identifier)
     if not self.variable_hash:
         self.variable_hash = self.generate_unique_hash()
+    
+    # Keep variable_name in sync with variable_hash for backward compatibility
+    self.variable_name = self.variable_hash
     
     super().save(*args, **kwargs)
 ```
@@ -1123,18 +1119,26 @@ Parent string (no color) >
 
 ### Canvas Display Controls
 - Hide Embedded Strings (OFF by default) - Shows all strings including embedded/spawn
-- Show Variable Names (ON by default)
 - Show Variable Hashes (OFF by default)
 - Plaintext Mode toggle
 - Show Variables toggle
 - Hide Controlled Variables (ON by default) - Hides spawns with controlling conditions from sidebar
 
-### Slugify-Based Variable Naming
-- Display names automatically converted to URL-friendly identifiers
-- Backend uses python-slugify with uniqueness handling
-- Fallback to random 6-char hash if no display name
-- Frontend shows live preview of generated slug
-- Conditions sidebar displays slugified names
+### Simplified Variable Naming (January 2025)
+- **Variable Hash is the sole identifier** - display_name concept removed from UI
+- Hash can be user-defined (e.g., "welcome-message") or auto-generated 6-character hash
+- Validation: alphanumeric + hyphens, no spaces, max 50 characters
+- Backend field `variable_hash` expanded to max_length=50
+- Database columns `display_name` and `variable_name` still exist but are deprecated (not used)
+- `variable_name` is kept in sync with `variable_hash` for backward compatibility
+
+### Pending Variable Editing in Session (January 2025)
+- When user types `{{variableName}}` in content, system detects new/pending variables
+- Pending variables show as purple tiles with sparkle (✨) icon in mini-nav "Embedded variables" section
+- Users can **click pending tiles** to navigate and edit them before saving
+- "Used in" section correctly shows parent when viewing pending variable
+- All pending variables saved together with parent on drawer close
+- Session state managed by `useEditSession` hook which handles `pending-` IDs
 
 ### Dimensions Elimination (Complete)
 - Frontend UI simplified to work directly with conditional/spawn variables

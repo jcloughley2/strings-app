@@ -33,7 +33,7 @@ class String(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='strings')
     # Every string is now automatically a variable with either a hash or custom name
     variable_name = models.CharField(max_length=100, blank=True, null=True)
-    variable_hash = models.CharField(max_length=6, blank=True)
+    variable_hash = models.CharField(max_length=50, blank=True)  # User-editable identifier
     # Human-readable display name (optional, separate from identifier)
     display_name = models.CharField(max_length=200, blank=True, null=True)
     is_conditional = models.BooleanField(default=False)
@@ -51,18 +51,13 @@ class String(models.Model):
         ordering = ['-created_at']  # Newest first by default
 
     def save(self, *args, **kwargs):
-        # Auto-generate variable_name from display_name using slugify
-        if self.display_name and self.display_name.strip():
-            # Generate slug from display_name
-            base_slug = slugify(self.display_name, max_length=50)
-            self.variable_name = self.generate_unique_slug(base_slug)
-        elif not self.variable_name:
-            # No display_name provided, use random hash as variable_name
-            self.variable_name = self.generate_unique_hash()
-        
-        # Always keep variable_hash as a fallback (for backward compatibility)
+        # Generate variable_hash if not provided (primary identifier)
         if not self.variable_hash:
             self.variable_hash = self.generate_unique_hash()
+        
+        # Keep variable_name in sync with variable_hash for backward compatibility
+        # (variable_name is deprecated, but we keep it for existing references)
+        self.variable_name = self.variable_hash
             
         super().save(*args, **kwargs)
 

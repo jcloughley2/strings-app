@@ -175,20 +175,6 @@ export function VariableSearchSelect({
   );
 }
 
-// Simple slugify function for preview
-function slugify(text: string): string {
-  return text
-    .toString()
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '-')        // Replace spaces with -
-    .replace(/[^\w\-]+/g, '')    // Remove all non-word chars
-    .replace(/\-\-+/g, '-')      // Replace multiple - with single -
-    .replace(/^-+/, '')          // Trim - from start of text
-    .replace(/-+$/, '')          // Trim - from end of text
-    .substring(0, 50);           // Limit length
-}
-
 export interface StringEditDrawerProps {
   // Core state
   isOpen: boolean;
@@ -204,8 +190,8 @@ export interface StringEditDrawerProps {
   variableName: string;
   onVariableNameChange: (name: string) => void;
   
-  displayName: string;
-  onDisplayNameChange: (name: string) => void;
+  variableHash: string;
+  onVariableHashChange: (hash: string) => void;
   
   // Type and conditional state
   isConditional: boolean;
@@ -222,8 +208,8 @@ export interface StringEditDrawerProps {
   onControlledBySpawnIdChange: (spawnId: number | null) => void;
   
   // Embedded variable edits (local state)
-  embeddedVariableEdits: {[variableId: string]: {display_name?: string; content?: string}};
-  onEmbeddedVariableEditsChange: (edits: {[variableId: string]: {display_name?: string; content?: string}}) => void;
+  embeddedVariableEdits: {[variableId: string]: {variable_hash?: string; content?: string}};
+  onEmbeddedVariableEditsChange: (edits: {[variableId: string]: {variable_hash?: string; content?: string}}) => void;
   
   // Pending variable content (for new variables detected in content)
   pendingVariableContent: {[variableName: string]: string};
@@ -285,8 +271,8 @@ export function StringEditDrawer({
   onContentChange,
   variableName,
   onVariableNameChange,
-  displayName,
-  onDisplayNameChange,
+  variableHash,
+  onVariableHashChange,
   isConditional,
   onTypeChange,
   conditionalSpawns,
@@ -361,24 +347,22 @@ export function StringEditDrawer({
     return [...new Set(variableNames)];
   };
   
-  // Categorize detected variables as new or existing
+  // Categorize detected variables as truly existing (in project) or pending/new
   const categorizeVariables = (detectedVariables: string[]) => {
     const existingVariables: string[] = [];
-    const newVariables: string[] = [];
+    const newVariables: string[] = []; // These will show as pending in the mini-nav
     
     detectedVariables.forEach(varName => {
-      // Check if variable exists in project strings
+      // Check if variable exists in project strings (actually saved)
       const existsInProject = project?.strings?.some((str: any) => {
         const effectiveName = str.effective_variable_name || str.variable_hash;
         return effectiveName === varName;
       });
       
-      // Check if variable is in pending variables
-      const existsInPending = pendingStringVariables[varName];
-      
-      if (existsInProject || existsInPending) {
+      if (existsInProject) {
         existingVariables.push(varName);
       } else {
+        // Variable doesn't exist yet - it's pending/new
         newVariables.push(varName);
       }
     });
@@ -403,7 +387,7 @@ export function StringEditDrawer({
   const buildNavigationNodes = () => {
     const nodes: any[] = [];
     
-    const currentVarName = stringData?.effective_variable_name || stringData?.variable_hash || displayName || 'new';
+    const currentVarName = stringData?.effective_variable_name || stringData?.variable_hash || variableHash || 'new';
     // Use activeVariableId from session if available, otherwise fall back to stringData.id
     const currentId = activeVariableId || stringData?.id?.toString() || 'new';
     
@@ -443,9 +427,8 @@ export function StringEditDrawer({
             // Create a pseudo-variable object for the parent
             parents.push({
               id: editId,
-              display_name: edit.displayName || '',
-              effective_variable_name: edit.displayName || editId,
-              variable_hash: editId,
+              variable_hash: edit.variableHash || editId,
+              effective_variable_name: edit.variableHash || editId,
               is_conditional_container: edit.isConditional,
               relationship: 'parent-embeds',
               _isPending: true,
@@ -487,10 +470,10 @@ export function StringEditDrawer({
             if (currentId.startsWith('temp-')) {
               return spawn.id === currentId || spawn.id?.toString() === currentId;
             }
-            // For pending spawns, check the display name
+            // For pending spawns, check the variable hash
             if (currentId.startsWith('pending-')) {
               const targetName = currentId.replace('pending-', '');
-              return spawn.display_name === targetName || spawn.variable_name === targetName;
+              return spawn.variable_hash === targetName || spawn.variable_name === targetName;
             }
             // For existing spawns, check the ID
             return spawn.id?.toString() === currentId;
@@ -500,9 +483,8 @@ export function StringEditDrawer({
             // Create a pseudo-variable object for the parent
             parents.push({
               id: editId,
-              display_name: edit.displayName || '',
-              effective_variable_name: edit.displayName || editId,
-              variable_hash: editId,
+              variable_hash: edit.variableHash || editId,
+              effective_variable_name: edit.variableHash || editId,
               is_conditional_container: true,
               relationship: 'parent-spawns',
               _isPending: true,
@@ -521,7 +503,7 @@ export function StringEditDrawer({
       
       nodes.push({
         id: parentId,
-        name: parent.display_name || '',
+        name: '', // No longer using display names
         hash: parent.effective_variable_name || parent.variable_hash,
         type: parent.is_conditional_container ? 'conditional' : 'string',
         isActive: false,
@@ -531,15 +513,11 @@ export function StringEditDrawer({
     
     // Current variable (in the middle)
     // Use currentId (which includes activeVariableId) for consistency with deduplication
-    // For the name, try multiple sources: display_name, then effective_variable_name/hash
-    // This handles spawns that have no display_name but do have a variable hash
-    const currentNodeName = stringData?.display_name || displayName || 
-                            stringData?.effective_variable_name || stringData?.variable_hash || 
-                            'New Variable';
+    const currentHash = stringData?.variable_hash || variableHash || 'new';
     nodes.push({
       id: currentId,
-      name: currentNodeName,
-      hash: stringData?.effective_variable_name || stringData?.variable_hash || 'new',
+      name: '', // No longer using display names
+      hash: currentHash,
       type: stringData?.is_conditional_container || isConditional ? 'conditional' : 'string',
       isActive: true,
     });
@@ -550,18 +528,16 @@ export function StringEditDrawer({
     // Add spawn children (if this is a conditional)
     if ((stringData?.is_conditional_container || isConditional) && conditionalSpawns.length > 0) {
       conditionalSpawns.forEach((spawn: any) => {
-        const spawnId = spawn.id ? spawn.id.toString() : `temp-${spawn.variable_name || spawn.display_name}`;
+        const spawnId = spawn.id ? spawn.id.toString() : `temp-${spawn.variable_hash || spawn.variable_name}`;
         
         // Check if there's an edit state for this spawn in the session
-        let spawnDisplayName = spawn.display_name || '';
-        let spawnVariableName = spawn.variable_name || spawn.effective_variable_name || spawn.variable_hash || 'new';
+        let spawnHash = spawn.variable_hash || spawn.variable_name || spawn.effective_variable_name || 'new';
         
         if (sessionEdits) {
           const spawnEdit = sessionEdits.get(spawnId);
           if (spawnEdit) {
             // Use the edited values from the session
-            spawnDisplayName = spawnEdit.displayName || spawnDisplayName;
-            // For new spawns, variable_name hasn't been generated yet, so keep using display_name
+            spawnHash = spawnEdit.variableHash || spawnHash;
           }
         }
         
@@ -569,8 +545,8 @@ export function StringEditDrawer({
         if (!existingNodeIds.has(spawnId)) {
           nodes.push({
             id: spawnId,
-            name: spawnDisplayName,
-            hash: spawnVariableName,
+            name: '', // No longer using display names
+            hash: spawnHash,
             type: spawn.is_conditional_container ? 'conditional' : 'string',
             isActive: false,
             relationship: 'spawn',
@@ -588,7 +564,7 @@ export function StringEditDrawer({
         if (!existingNodeIds.has(embeddedId)) {
           nodes.push({
             id: embeddedId,
-            name: embeddedVar.display_name || '',
+            name: '', // No longer using display names
             hash: embeddedVar.effective_variable_name || embeddedVar.variable_hash,
             type: embeddedVar.is_conditional_container ? 'conditional' : 'string',
             isActive: false,
@@ -912,7 +888,7 @@ export function StringEditDrawer({
                     if (!str.is_conditional_container) return;
                     
                     const conditionalName = str.effective_variable_name || str.variable_hash;
-                    const conditionalDisplayName = str.display_name || conditionalName;
+                    const conditionalDisplayName = conditionalName; // Using hash as identifier
                     const dimension = project.dimensions?.find((d: any) => d.name === conditionalName);
                     
                     if (!dimension) return;
@@ -1095,7 +1071,7 @@ export function StringEditDrawer({
                       </h3>
                       <div className="space-y-2">
                         {parentConditionals.map((conditional: any) => {
-                          const conditionalDisplayName = conditional.display_name || conditional.effective_variable_name || conditional.variable_hash;
+                          const conditionalDisplayName = conditional.effective_variable_name || conditional.variable_hash;
                           const conditionalHash = conditional.effective_variable_name || conditional.variable_hash;
                           
                           return (
@@ -1127,47 +1103,31 @@ export function StringEditDrawer({
             <TabsContent value="advanced" className="space-y-4">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="displayName">Variable Name</Label>
+                  <Label htmlFor="variableHash">Variable Hash (Identifier)</Label>
                   <Input
-                    id="displayName"
-                    value={displayName}
-                    onChange={(e) => onDisplayNameChange(e.target.value)}
-                    placeholder="Enter a descriptive name (e.g., Welcome Message)"
+                    id="variableHash"
+                    value={variableHash}
+                    onChange={(e) => {
+                      // Remove spaces and validate format
+                      const value = e.target.value.replace(/\s/g, '');
+                      onVariableHashChange(value);
+                    }}
+                    placeholder="Leave empty for auto-generated hash"
+                    className={variableHash && !/^[A-Za-z0-9][A-Za-z0-9\-]*$/.test(variableHash) ? 'border-red-500' : ''}
                   />
-                  <p className="text-sm text-muted-foreground">
-                    {displayName ? 
-                      `Will create hash: {{${slugify(displayName)}}}` : 
-                      "Leave empty to use random hash"
-                    }
-                  </p>
+                  {variableHash && !/^[A-Za-z0-9][A-Za-z0-9\-]*$/.test(variableHash) ? (
+                    <p className="text-sm text-red-500">
+                      Hash must start with a letter or number and contain only letters, numbers, and hyphens (no spaces).
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      {variableHash ? 
+                        `Reference as: {{${variableHash}}}` : 
+                        "Leave empty to auto-generate a 6-character hash"
+                      }
+                    </p>
+                  )}
                 </div>
-                
-                {stringData && (
-                  <>
-                  <div className="space-y-2">
-                      <Label>Variable Hash (Identifier)</Label>
-                      <div>
-                        <VariableHashBadge 
-                          hash={stringData.effective_variable_name || stringData.variable_hash} 
-                          type={stringData.is_conditional_container ? 'conditional' : 'string'}
-                        />
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Use this identifier to reference this variable in other strings
-                      </p>
-                    </div>
-                    
-                  <div className="space-y-2">
-                      <Label>Fallback Hash</Label>
-                    <div className="text-sm text-muted-foreground font-mono">
-                      {stringData.variable_hash}
-                    </div>
-                      <p className="text-sm text-muted-foreground">
-                        Auto-generated 6-character backup identifier
-                      </p>
-                  </div>
-                  </>
-                )}
               </div>
             </TabsContent>
 

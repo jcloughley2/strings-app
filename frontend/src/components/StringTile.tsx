@@ -24,8 +24,6 @@ import { FEATURES } from "@/lib/featureFlags";
 export interface StringTileData {
   id: number;
   content: string;
-  display_name?: string | null;
-  variable_name?: string | null;
   variable_hash: string;
   effective_variable_name: string;
   is_conditional_container?: boolean;
@@ -37,7 +35,7 @@ export interface StringTileProps {
   /** The string data to display */
   string: StringTileData;
   
-  /** Whether to show the display name above the content */
+  /** @deprecated No longer used - display names removed */
   showDisplayName?: boolean;
   
   /** Whether to show the variable hash badge */
@@ -149,13 +147,6 @@ export function StringTile({
         {/* Main Content Area */}
         <div className="flex items-start justify-between gap-2 flex-1">
           <div className="flex-1 min-w-0">
-            {/* Display Name */}
-            {showDisplayName && string.display_name && (
-              <div className="text-sm font-semibold text-foreground mb-2">
-                {string.display_name}
-              </div>
-            )}
-
             {/* Content */}
             <div className="font-medium text-base leading-relaxed">
               {isConditional ? (

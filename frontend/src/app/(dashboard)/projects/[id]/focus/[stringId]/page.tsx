@@ -28,7 +28,6 @@ export default function StringFocusPage() {
 
   // Canvas settings
   const [isCanvasSettingsOpen, setIsCanvasSettingsOpen] = useState(false);
-  const [showVariableNames, setShowVariableNames] = useState(true);
   const [showVariableHashes, setShowVariableHashes] = useState(false);
   const [hideControlledVariables, setHideControlledVariables] = useState(true);
 
@@ -452,13 +451,6 @@ export default function StringFocusPage() {
           <div className="flex-1 overflow-y-auto p-6">
             <div className="max-w-3xl mx-auto">
               <Card className="p-6">
-                {/* Display Name */}
-                {showVariableNames && focusedString.display_name && (
-                  <div className="text-lg font-semibold text-foreground mb-3">
-                    {focusedString.display_name}
-                  </div>
-                )}
-
                 {/* Content - resolved based on selected conditions */}
                 <div className="text-base leading-relaxed whitespace-pre-wrap">
                   {resolvedContent || (
@@ -500,20 +492,6 @@ export default function StringFocusPage() {
               <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
                 Display Mode
               </h3>
-
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1 flex-1">
-                  <Label htmlFor="show-names">Show Variable Names</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Display the variable name (title) on the string card
-                  </p>
-                </div>
-                <Switch
-                  id="show-names"
-                  checked={showVariableNames}
-                  onCheckedChange={setShowVariableNames}
-                />
-              </div>
 
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1 flex-1">

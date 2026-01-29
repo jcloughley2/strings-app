@@ -9,12 +9,12 @@ export interface VariableEditState {
   
   // Current edited values
   content: string;
-  displayName: string;
+  variableHash: string; // Editable hash identifier
   isConditional: boolean;
   conditionalSpawns: any[];
   includeHiddenOption: boolean;
   controlledBySpawnId: number | null;
-  embeddedVariableEdits: {[variableId: string]: {display_name?: string}};
+  embeddedVariableEdits: {[variableId: string]: {variable_hash?: string}};
   isPublished: boolean;
   
   // Metadata
@@ -58,7 +58,7 @@ export function useEditSession({ project, pendingStringVariables = {}, onSuccess
       return {
         originalData: null,
         content: '',
-        displayName: '',
+        variableHash: '',
         isConditional: false,
         conditionalSpawns: [],
         includeHiddenOption: false,
@@ -94,7 +94,7 @@ export function useEditSession({ project, pendingStringVariables = {}, onSuccess
     return {
       originalData: variableData,
       content: variableData?.content || '',
-      displayName: variableData?.display_name || '',
+      variableHash: variableData?.variable_hash || '',
       isConditional: variableData?.is_conditional_container || false,
       conditionalSpawns: spawns,
       includeHiddenOption: hasHiddenOption,
@@ -150,7 +150,7 @@ export function useEditSession({ project, pendingStringVariables = {}, onSuccess
           
           // Create a new pending variable
           const pendingVariable = createEditState(null, true);
-          pendingVariable.displayName = varName;
+          pendingVariable.variableHash = varName;
           
           newEdits.set(variableId, pendingVariable);
         } 
@@ -176,7 +176,7 @@ export function useEditSession({ project, pendingStringVariables = {}, onSuccess
             // Create an edit state for this spawn
             const spawnEdit = createEditState(null, true);
             spawnEdit.content = spawnData.content || '';
-            spawnEdit.displayName = spawnData.display_name || '';
+            spawnEdit.variableHash = spawnData.variable_hash || '';
             spawnEdit.isConditional = spawnData.is_conditional_container || false;
             
             newEdits.set(variableId, spawnEdit);
@@ -260,7 +260,7 @@ export function useEditSession({ project, pendingStringVariables = {}, onSuccess
         
         // For each spawn, check if there's a separate edit for it
         const updatedSpawns = edit.conditionalSpawns.map((spawn: any) => {
-          const spawnId = spawn.id ? spawn.id.toString() : `temp-${spawn.variable_name || spawn.display_name}`;
+          const spawnId = spawn.id ? spawn.id.toString() : `temp-${spawn.variable_hash || spawn.variable_name}`;
           const spawnEdit = updatedEdits.get(spawnId);
           
           // If we have edits for this spawn, merge them
@@ -269,7 +269,7 @@ export function useEditSession({ project, pendingStringVariables = {}, onSuccess
             return {
               ...spawn,
               content: spawnEdit.content,
-              display_name: spawnEdit.displayName,
+              variable_hash: spawnEdit.variableHash,
               is_conditional_container: spawnEdit.isConditional,
             };
           }
@@ -280,7 +280,7 @@ export function useEditSession({ project, pendingStringVariables = {}, onSuccess
             return {
               ...spawn,
               content: spawnEdit.content,
-              display_name: spawnEdit.displayName,
+              variable_hash: spawnEdit.variableHash,
               is_conditional_container: spawnEdit.isConditional,
             };
           }
@@ -323,7 +323,7 @@ export function useEditSession({ project, pendingStringVariables = {}, onSuccess
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 content: variableData.content || `Content for ${variableName}`,
-                display_name: variableName,
+                variable_hash: variableName, // Use the typed name as the hash
                 is_conditional: variableData.is_conditional || false,
                 is_conditional_container: variableData.is_conditional || false,
                 project: project.id,
@@ -346,7 +346,7 @@ export function useEditSession({ project, pendingStringVariables = {}, onSuccess
       editsArray.forEach(([id, edit]) => {
         if (edit.conditionalSpawns && edit.conditionalSpawns.length > 0) {
           edit.conditionalSpawns.forEach((spawn: any) => {
-            const spawnId = spawn.id ? spawn.id.toString() : `temp-${spawn.variable_name || spawn.display_name}`;
+            const spawnId = spawn.id ? spawn.id.toString() : `temp-${spawn.variable_hash || spawn.variable_name}`;
             spawnIdsInParents.add(spawnId);
           });
         }
@@ -367,14 +367,14 @@ export function useEditSession({ project, pendingStringVariables = {}, onSuccess
         // Ensure all spawns have content (provide default if empty)
         const spawnsWithContent = edit.conditionalSpawns.map((spawn: any) => ({
           ...spawn,
-          content: spawn.content?.trim() || `Content for ${spawn.display_name || spawn.variable_name || 'spawn'}`,
+          content: spawn.content?.trim() || `Content for ${spawn.variable_hash || 'spawn'}`,
         }));
         
         const saveOptions = {
           projectId: project.id,
           stringId: undefined,
-          content: edit.content || `Content for ${edit.displayName || 'new variable'}`,
-          displayName: edit.displayName,
+          content: edit.content || 'New variable content',
+          variableHash: edit.variableHash,
           isConditional: edit.isConditional,
           isConditionalContainer: edit.isConditional,
           conditionalSpawns: spawnsWithContent,
@@ -393,14 +393,14 @@ export function useEditSession({ project, pendingStringVariables = {}, onSuccess
         // Ensure all spawns have content (provide default if empty)
         const spawnsWithContent = edit.conditionalSpawns.map((spawn: any) => ({
           ...spawn,
-          content: spawn.content?.trim() || `Content for ${spawn.display_name || spawn.variable_name || 'spawn'}`,
+          content: spawn.content?.trim() || `Content for ${spawn.variable_hash || 'spawn'}`,
         }));
         
         const saveOptions = {
           projectId: project.id,
           stringData: edit.originalData, // Pass the full original data object
           content: edit.content,
-          displayName: edit.displayName,
+          variableHash: edit.variableHash,
           isConditional: edit.isConditional,
           isConditionalContainer: edit.isConditional,
           conditionalSpawns: spawnsWithContent,

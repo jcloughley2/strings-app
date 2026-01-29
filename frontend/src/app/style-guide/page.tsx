@@ -127,36 +127,29 @@ export default function StyleGuidePage() {
           </div>
         </section>
 
-        {/* Display Names & Identifiers */}
+        {/* Variable Identifiers */}
         <section className="space-y-6">
-          <h2 className="text-2xl font-semibold border-b pb-2">Display Names & Identifiers</h2>
+          <h2 className="text-2xl font-semibold border-b pb-2">Variable Identifiers</h2>
           
           <div className="space-y-4">
             <StyleExample
-              name="String Display Name"
-              className="text-sm font-semibold text-foreground"
-              example="Welcome Message"
-              code="text-sm font-semibold text-foreground"
-            />
-            
-            <StyleExample
-              name="Variable Hash/ID"
+              name="Variable Hash"
               className="text-sm text-muted-foreground"
               example="JGRRDC"
               code="text-sm text-muted-foreground"
             />
             
             <StyleExample
-              name="Spawn Display Name"
+              name="Custom Variable Hash"
               className="text-sm text-muted-foreground"
-              example="spawn-variable-1"
+              example="welcome-message"
               code="text-sm text-muted-foreground"
             />
             
             <StyleExample
               name="Badge Text (Variable Reference)"
               className="text-xs"
-              example="{{variableName}}"
+              example="{{variableHash}}"
               code="text-xs"
             />
           </div>
